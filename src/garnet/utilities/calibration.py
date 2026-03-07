@@ -94,7 +94,7 @@ class Calibration:
             InputWorkspace="peaks",
             OutputWorkspace="peaks",
             FilterVariable="Signal/Noise",
-            FilterValue=5,
+            FilterValue=10,
             Operator=">",
         )
 
@@ -106,7 +106,7 @@ class Calibration:
 
         for peak in mtd["peaks"]:
             peak.setIntensity(0)
-            peak.setSigmaIntensity(uc.d(*peak.getIntHKL()))
+            peak.setSigmaIntensity(uc.d(*peak.getIntHKL()))  #
             peak.setBinCount(0)
             run = peak.getRunNumber()
             R = peak.getGoniometerMatrix().copy()
@@ -772,7 +772,7 @@ class Calibration:
         return diff
 
     def fix_offsets(self, x):
-        return *x, 0, 0
+        return *x, 0
 
     def refine_offsets(self, x):
         return x

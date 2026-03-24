@@ -3,7 +3,7 @@ import sys
 import traceback
 
 import numpy as np
-import scipy.linalg
+import itertools
 
 os.environ["QT_API"] = "pyqt5"
 
@@ -2648,9 +2648,23 @@ class FormModel:
 
         return UB
 
-    def autoproj(self, UB):
-        v = np.linalg.inv(UB) @ [0, 1, 0]
-        v = v / np.linalg.norm(v)
+    def _unit_vector(self, v, tol=1e-12):
+        v = np.asarray(v, dtype=float)
+        n = np.linalg.norm(v)
+        if n < tol:
+            raise ValueError("Cannot normalize near-zero vector.")
+        return v / n
+
+    def autoproj(self, UB, target_axis=(0, 1, 0)):
+        """
+        Choose the projection whose plane normal is most aligned with target_axis
+        in Cartesian/lab reciprocal space.
+
+        Returns:
+            [u, v, n] where u and v span the plane and n is the plane normal in hkl.
+        """
+        UB = np.asarray(UB, dtype=float)
+        target_axis = self._unit_vector(target_axis)
 
         projections = {
             "hk0": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -2660,28 +2674,46 @@ class FormModel:
             "-hhl": [[-1, 1, 0], [0, 0, 1], [1, 1, 0]],
         }
 
-        proj = "hk0"
-        similarity = 0
-        for key in projections.keys():
-            vec = np.array(projections[key][2]).astype(float)
-            vec /= np.linalg.norm(vec)
-            test = np.abs(np.dot(vec, v))
-            if test > similarity:
-                proj = key
-                similarity = test
+        best_key = None
+        best_similarity = -np.inf
 
-        return projections[proj]
+        for key, basis in projections.items():
+            n_hkl = self._unit_vector(basis[2])
 
-    def autolim(self, UB, W, d_min):
-        s_max = 1 / d_min / np.sqrt(3)
+            n_cart = UB @ n_hkl
+            n_cart = self._unit_vector(n_cart)
 
+            similarity = abs(np.dot(n_cart, target_axis))
+            if similarity > best_similarity:
+                best_key = key
+                best_similarity = similarity
+
+        return projections[best_key]
+
+    def autolim(self, UB, W, d_min, n=401):
+        """
+        Robust limits for the transformed cube q in [-s_max, s_max]^3.
+        """
+        UB = np.asarray(UB, dtype=float)
+        W = np.asarray(W, dtype=float)
+
+        s_max = 1.0 / float(d_min) / np.sqrt(3.0)
         T = np.linalg.inv(UB @ W)
 
-        X_max = np.abs(np.floor(T @ [s_max, 0, 0])).max()
-        Y_max = np.abs(np.floor(T @ [0, s_max, 0])).max()
-        Z_max = np.abs(np.floor(T @ [0, 0, s_max / 2])).max()
+        corners = np.array(
+            list(
+                itertools.product(
+                    [-s_max, s_max], [-s_max, s_max], [-s_max, s_max]
+                )
+            )
+        )
 
-        return X_max, Y_max, Z_max, 501, 501, 101
+        hkl_corners = (T @ corners.T).T
+        limits = np.ceil(np.max(np.abs(hkl_corners), axis=0)).astype(int)
+
+        h_max, k_max, l_max = np.maximum(limits, 1)
+
+        return h_max, k_max, l_max, n
 
 
 class Garnet(QMainWindow):

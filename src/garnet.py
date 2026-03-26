@@ -2711,9 +2711,9 @@ class FormModel:
         hkl_corners = (T @ corners.T).T
         limits = np.ceil(np.max(np.abs(hkl_corners), axis=0)).astype(int)
 
-        h_max, k_max, l_max = np.maximum(limits, 1)
+        x_max, y_max, z_max = np.maximum(limits, 1)
 
-        return h_max, k_max, l_max, n, n, n
+        return x_max, y_max, z_max, n, n, n
 
 
 class Garnet(QMainWindow):

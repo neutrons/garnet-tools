@@ -337,8 +337,8 @@ class Calibration:
             VerboseOutput=True,
             SearchRadiusSamplePos=0.01,
             TuneSamplePosition=True,
-            CalibrateSize=True,
-            SearchRadiusSize=0.2,
+            CalibrateSize=False,
+            SearchRadiusSize=0.0,
             FixAspectRatio=True,
             MaxFitIterations=100000,
         )

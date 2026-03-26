@@ -1576,8 +1576,8 @@ class LaueData(BaseDataModel):
                 OutputWorkspace="mask",
             )
 
-        # if mtd.doesExist("sa"):
-        #    MaskDetectors(Workspace=event_name, MaskedWorkspace="sa_mask")
+        if mtd.doesExist("sa"):
+            MaskDetectors(Workspace=event_name, MaskedWorkspace="sa_mask")
 
         if mtd.doesExist("mask"):
             MaskDetectors(Workspace=event_name, MaskedWorkspace="mask")

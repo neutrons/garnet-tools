@@ -34,7 +34,6 @@ from garnet.reduction.data import DataModel
 from garnet.reduction.plan import SubPlan
 from garnet.reduction.parallel import ParallelProcessor
 
-
 INTEGRATION = os.path.abspath(__file__)
 directory = os.path.dirname(INTEGRATION)
 
@@ -261,9 +260,9 @@ class Integration(SubPlan):
 
                 peaks.find_peaks("md", "peaks", max_d)
 
-                peaks.integrate_peaks("md", "peaks", self.params["Radius"] / 3)
+                peaks.integrate_peaks("md", "peaks", self.params["Radius"] / 2)
 
-                peaks.remove_weak_peaks("peaks", 20)
+                peaks.remove_weak_peaks("peaks", 5)
 
                 ub = UBModel("peaks")
                 ub.determine_UB_with_lattice_parameters(*const)

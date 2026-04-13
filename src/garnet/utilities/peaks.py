@@ -10,6 +10,10 @@ sys.path.append(directory)
 import yaml
 
 import numpy as np
+import scipy.optimize
+import scipy.interpolate
+
+import multiprocessing
 
 from mantid.simpleapi import (
     Load,
@@ -24,10 +28,10 @@ from mantid.simpleapi import (
     CropWorkspace,
     SetGoniometer,
     CreateSingleValuedWorkspace,
-    CopyInstrumentParameters,
     SetUB,
     SaveIsawUB,
     ReorientUnitCell,
+    TransformHKL,
     FindUBUsingLatticeParameters,
     OptimizeLatticeForCellType,
     ConvertToMD,
@@ -42,7 +46,197 @@ from mantid.simpleapi import (
     CombinePeaksWorkspaces,
     mtd,
 )
-import multiprocessing
+
+from mantid.geometry import UnitCell
+
+from calculate import CalculateUB
+
+
+class Laue:
+    def __init__(self, ws):
+        self.ws = ws
+
+        self.centering_reflection = {
+            "P": "Primitive",
+            "I": "Body centred",
+            "F": "All-face centred",
+            "R": "Primitive",  # rhomb axes
+            "R(obv)": "Rhombohderally centred, obverse",  # hex axes
+            "R(rev)": "Rhombohderally centred, reverse",  # hex axes
+            "A": "A-face centred",
+            "B": "B-face centred",
+            "C": "C-face centred",
+        }
+
+        self.centering_matrices = {
+            "P": np.eye(3),
+            "A": np.array([[2, 0, 0], [0, 1, 1], [0, 1, -1]]) / 2,
+            "B": np.array([[1, 0, 1], [0, 2, 0], [1, 0, -1]]) / 2,
+            "C": np.array([[1, 1, 0], [1, -1, 0], [0, 0, 2]]) / 2,
+            "I": np.array([[-1, 1, 1], [1, -1, 1], [1, 1, -1]]) / 2,
+            "F": np.array([[0, 1, 1], [1, 0, 1], [1, 1, 0]]) / 2,
+            "R": np.array([[2, -1, -1], [1, 1, -2], [1, 1, 1]]) / 3,
+        }
+
+        self.lattice_group = {
+            "Triclinic": "-1",
+            "Monoclinic": "2/m",
+            "Orthorhombic": "mmm",
+            "Tetragonal": "4/mmm",
+            "Rhombohedral": "-3m",
+            "Hexagonal": "6/mmm",
+            "Cubic": "m-3m",
+        }
+
+        t = np.linspace(0, np.pi, 1024)
+        cdf = (t - np.sin(t)) / np.pi
+
+        self._angle = scipy.interpolate.interp1d(cdf, t, kind="linear")
+
+    def uncertainty_line_segements(self):
+        """
+        The scattering vector scaled with the (unknown) wavelength.
+
+        Returns
+        -------
+        kf_ki_dir : list
+            Difference between scattering and incident beam directions.
+
+        """
+
+        kf_ki_dir = []
+        for peak in mtd[self.ws]:
+            kf_ki_dir.append(
+                peak.getDetectorDirectionSampleFrame()
+                + peak.getSourceDirectionSampleFrame()
+            )
+
+        return np.array(kf_ki_dir)
+
+    def wavelengths(self):
+        """
+        The Laue resolved wavelength.
+
+        Returns
+        -------
+        Wavelength : list
+            Peak wavelength.
+
+        """
+
+        wavelength = []
+        for peak in mtd[self.ws]:
+            wavelength.append(peak.getWavelength())
+
+        return np.array(wavelength)
+
+    def find_UB(self, a, b, c, alpha, beta, gamma, centering="P", n_proc=1):
+        """
+        Fit the orientation and other parameters.
+
+        Parameters
+        ----------
+        a, b, c : float
+            Lattice lengths.
+        alpha, beta, gamma : float
+            Lattice angles.
+        centering : str
+            Lattice centering.
+        n_proc : int, optional
+            Number of processes to use. The default is -1.
+
+        """
+
+        kf_ki_dir = self.uncertainty_line_segements()
+        lamda = self.wavelengths()
+
+        params = self.convert_conventional_to_primitive(
+            a, b, c, alpha, beta, gamma, centering
+        )
+
+        opt = CalculateUB(*params)
+
+        UB, hkls, lamdas = opt.minimize(kf_ki_dir, lamda, n_proc)
+
+        SetUB(Workspace=self.ws, UB=UB)
+
+        IndexPeaks(PeaksWorkspace=self.ws)
+
+        transform = self.calculate_transform(centering)
+
+        self.transform_lattice(self.ws, transform)
+
+        self.opt = opt
+
+    def convert_conventional_to_primitive(
+        self,
+        a,
+        b,
+        c,
+        alpha,
+        beta,
+        gamma,
+        centering,
+    ):
+        uc = UnitCell(a, b, c, alpha, beta, gamma)
+
+        G = uc.getG()
+
+        P = self.centering_matrices[centering]
+
+        Gp = P.T @ G @ P
+
+        uc.recalculateFromGstar(np.linalg.inv(Gp))
+
+        return uc.a(), uc.b(), uc.c(), uc.alpha(), uc.beta(), uc.gamma()
+
+    def calculate_transform(self, centering):
+        P = self.centering_matrices[centering]
+
+        return np.linalg.inv(P).T
+
+    def transform_lattice(self, peaks, transform, tol=0.2):
+        """
+        Apply a cell transformation to the lattice.
+
+        Parameters
+        ----------
+        transform : 3x3 array-like
+            Transform to apply to hkl values.
+        tol : float, optional
+            Indexing tolerance. The default is 0.1.
+
+        """
+
+        hkl_trans = ",".join(["{},{},{}".format(*row) for row in transform])
+
+        TransformHKL(
+            PeaksWorkspace=peaks,
+            Tolerance=tol,
+            HKLTransform=hkl_trans,
+            FindError=False,
+        )
+
+    def refine_UB(self, cell, wavelength):
+        kf_ki_dir = self.uncertainty_line_segements()
+
+        UB, hkls, lamdas, uncertainties = self.opt.refine(
+            kf_ki_dir, wavelength, cell
+        )
+
+        SetUB(Workspace=self.ws, UB=UB)
+
+        for lamda, hkl, peak in zip(
+            lamdas.tolist(), hkls.tolist(), mtd[self.ws]
+        ):
+            peak.setWavelength(lamda)
+            peak.setHKL(*hkl)
+
+        ol = mtd[self.ws].sample().getOrientedLattice()
+
+        ol.setError(*uncertainties)
+
+        IndexPeaks(PeaksWorkspace=self.ws)
 
 
 def _process_run(config, ipts, run, idx, tol):
@@ -150,9 +344,9 @@ def _process_run(config, ipts, run, idx, tol):
         beta=beta,
         gamma=gamma,
         Tolerance=tol,
-        Iterations=3,
-        NumInitial=100,
         FixParameters=True,
+        NumInitial=100,
+        Iterations=1,
     )
 
     IndexPeaks(PeaksWorkspace=strong_ws, Tolerance=tol, RoundHKLs=True)
@@ -248,7 +442,7 @@ class Peaks:
         self.lattice_system = defaults.get("LatticeSystem")
 
         if self.crystal_system != "Trigonal":
-            self.lattice_system = None
+            self.lattice_system = "Rhombohedral"
 
         self.max_peaks = defaults.get("MaxPeaks")
         self.strong_threshold = defaults.get("PeakThreshold")
@@ -365,13 +559,13 @@ class Peaks:
 
         return runs
 
-    def load_convert_runs(self, ipts, run_nos, tol=0.1, n_proc=10):
+    def load_convert_runs(self, ipts, run_nos, tol=0.2, n_proc=10):
         if not isinstance(run_nos, list):
             run_nos = self._runs_string_to_list(run_nos)
 
         cell_type = (
             self.crystal_system
-            if self.lattice_system is None
+            if self.lattice_system != "Trigonal"
             else self.lattice_system
         )
         config = {
@@ -410,7 +604,7 @@ class Peaks:
         with multiprocessing.Pool(processes=n_proc) as pool:
             pool.starmap(_process_run, args_list)
 
-    def finalize_and_save(self, tol=0.1):
+    def finalize_and_save(self, tol=0.2):
         md_files = [
             os.path.join(self.output_folder, f)
             for f in os.listdir(self.output_folder)

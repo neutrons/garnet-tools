@@ -849,6 +849,15 @@ class PeakPlot(BasePlot):
         self.int.relim()
         self.int.autoscale_view()
 
+    def add_filter(self, result):
+        I, sig, A, b = result
+
+        line = "$I = {:}$ | $I/\sigma={:.1f}$"
+
+        I_sig = I / sig if sig > 0 else np.nan
+
+        self.int.set_ylabel(line.format(self._sci_notation(I), I_sig))
+
     def add_profile_fit(self, xye_fit):
         x, y_fit, y, e = xye_fit[0]
 

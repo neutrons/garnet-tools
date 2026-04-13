@@ -226,8 +226,6 @@ class Integration(SubPlan):
 
             data.apply_mask("data", self.plan.get("MaskFile"))
 
-            data.group_pixels("data")
-
             # data.load_background(self.plan.get("BackgroundFile"), "data")
 
             data.load_clear_UB(self.plan["UBFile"], "data", run)
@@ -254,7 +252,7 @@ class Integration(SubPlan):
                 const = ub.convert_conventional_to_primitive(*const, centering)
 
                 # md_file = self.get_diagnostic_file("run#{}_data".format(run))
-                #  md_file = os.path.splitext(md_file)[0] + ".nxs"
+                # md_file = os.path.splitext(md_file)[0] + ".nxs"
 
                 # data.save_histograms(md_file, "md")
 
@@ -772,6 +770,7 @@ class Integration(SubPlan):
             sigma = ellipsoid.sigma
             peak_background_mask = ellipsoid.peak_background_mask
             integral = ellipsoid.integral
+            matched_filter = ellipsoid.filter
 
         if self.make_plot and params is not None:
             self.peak_plot.add_ellipsoid_fit(best_fit)
@@ -793,6 +792,8 @@ class Integration(SubPlan):
             self.peak_plot.add_data_norm_fit(*data_norm_fit)
 
             self.peak_plot.add_integral_fit(integral)
+
+            self.peak_plot.add_filter(matched_filter)
 
             try:
                 self.peak_plot.save_plot(peak_file)
@@ -888,6 +889,7 @@ class Integration(SubPlan):
             sigma = ellipsoid.sigma
             peak_background_mask = ellipsoid.peak_background_mask
             integral = ellipsoid.integral
+            matched_filter = ellipsoid.filter
 
         if self.make_plot and params is not None:
             self.peak_plot.add_ellipsoid_fit(best_fit)
@@ -909,6 +911,8 @@ class Integration(SubPlan):
             self.peak_plot.add_data_norm_fit(*data_norm_fit)
 
             self.peak_plot.add_integral_fit(integral)
+
+            self.peak_plot.add_filter(matched_filter)
 
             try:
                 self.peak_plot.save_plot(peak_file)
@@ -1024,7 +1028,7 @@ class Integration(SubPlan):
 
             bank_name = peak.get_bank_name(i)
 
-            bin_params = UB, hkl, lamda, R, two_theta, az_phi, r_cut, dQ, fit
+            bin_params = UB, hkl, lamda, R, two_theta, az_phi, r_cut, dQ
 
             bin_extent = self.bin_extent(*bin_params)
 
@@ -1288,8 +1292,22 @@ class Integration(SubPlan):
 
         return np.einsum("ij,j...->i...", W, [Q0, Q1, Q2])
 
-    def bin_extent(self, UB, hkl, lamda, R, two_theta, az_phi, r_cut, dQ, fit):
-        dQ, bins = 3 * [r_cut], 3 * [21]
+    def bin_extent(
+        self,
+        UB,
+        hkl,
+        lamda,
+        R,
+        two_theta,
+        az_phi,
+        r_cut,
+        dQ,
+        bin_min=11,
+        bin_max=41,
+    ):
+        bins = np.clip(1 + np.floor(r_cut / dQ).astype(int), bin_min, bin_max)
+
+        dQ = 3 * [r_cut]
 
         n, u, v = self.bin_axes(R, two_theta, az_phi)
 
@@ -3456,11 +3474,11 @@ class PeakEllipsoid:
         n_pk = n[pk].copy()
         n_bkg = n[bkg].copy()
 
-        k_pk = kernel[pk]
-        k_bkg = kernel[bkg]
+        # k_pk = kernel[pk]
+        # k_bkg = kernel[bkg]
 
         bkg_cnts = np.nansum(d_bkg)
-        bkg_norm = np.nansum(n_bkg * k_bkg)
+        bkg_norm = np.nansum(n_bkg)
 
         if bkg_cnts == 0.0:
             bkg_cnts = float("nan")
@@ -3476,7 +3494,7 @@ class PeakEllipsoid:
             b_err = 0
 
         pk_cnts = np.nansum(d_pk)
-        pk_norm = np.nansum(n_pk * k_pk)
+        pk_norm = np.nansum(n_pk)
 
         if pk_cnts == 0.0:
             pk_cnts = float("nan")
@@ -3486,7 +3504,7 @@ class PeakEllipsoid:
         vol_pk = float(core.sum())
         vol_bkg = float(shell.sum())
 
-        vol = k_pk.sum()
+        vol = vol_pk
 
         ratio = vol_pk / vol_bkg if vol_bkg > 0 else 0
 
@@ -3509,8 +3527,36 @@ class PeakEllipsoid:
 
         return intens, sig, b, b_err, vol, *data_norm
 
-    def fitted_profile(self, x0, x1, x2, d, n, kernel, c, S, p=0.997):
-        scale = scipy.stats.chi2.ppf(p, df=1)
+    def matched_filter(self, d, n, pk, bkg, kernel):
+        mask = (pk | bkg) & (n > 0)
+        p = kernel.copy()
+        p[~mask] = np.nan
+
+        e = np.sqrt(d)
+        e[np.isclose(d, 0)] = 1
+
+        q = n * p
+        w = 1 / e**2
+
+        Sqq = np.nansum(w * q**2)
+        Sqn = np.nansum(w * q * n)
+        Snn = np.nansum(w * n**2)
+
+        Tq = np.nansum(w * q * d)
+        Tn = np.nansum(w * n * d)
+
+        den = Sqq * Snn - Sqn**2
+
+        I = (Snn * Tq - Sqn * Tn) / den
+        b = (Sqq * Tn - Sqn * Tq) / den
+        sig = np.sqrt(Snn / den)
+
+        A = I * np.nanmax(p)
+
+        return I, sig, A, b
+
+    def fitted_profile(self, x0, x1, x2, d, n, c, S, p=0.997):
+        scale = np.sqrt(scipy.stats.chi2.ppf(p, df=1))
 
         c0, c1, c2 = c
 
@@ -3519,7 +3565,8 @@ class PeakEllipsoid:
         x = np.array([x0 - c0, x1 - c1, x2 - c2])
 
         C = S.copy()
-        C *= np.cbrt(2) ** 2
+
+        sigma = np.sqrt(C[0, 0]) / scale
 
         S_inv = np.linalg.inv(C)
 
@@ -3528,145 +3575,33 @@ class PeakEllipsoid:
         structure = np.ones((3, 1, 1), dtype=bool)
 
         mask = ellipsoid <= 1
-
         for i in range(3):
             mask = scipy.ndimage.binary_dilation(mask, structure=structure)
 
         d_int = d.copy()
         n_int = n.copy()
-        k_int = kernel.copy()
-
-        # n_int[n == 0] = np.nan
 
         d_int[~mask] = np.nan
         n_int[~mask] = np.nan
-        k_int[~mask] = np.nan
-
-        norm = dx1 * dx2 * np.nansum(k_int, axis=(1, 2))
 
         d_int = np.nansum(d_int, axis=(1, 2))
-        n_int = np.nansum(n_int * k_int, axis=(1, 2)) / norm
+        n_int = np.nanmean(n_int / dx1 / dx2, axis=(1, 2))
+
+        y = d_int / n_int
+        e = np.sqrt(d_int) / n_int
 
         x = x0[:, 0, 0] - c0
-        y = d_int / n_int
-        e = np.sqrt(d_int + 1) / n_int
 
-        y[~np.isfinite(y)] = np.nan
-        e[~np.isfinite(e)] = np.nan
+        kernel = np.exp(-0.5 * (x / sigma) ** 2) / np.sqrt(2 * np.pi) / sigma
 
-        fit_mask = np.isfinite(y) & np.isfinite(e) & (e > 0)
+        pk = np.abs(x) < scale * sigma
+        bkg = np.abs(x) >= scale * sigma
 
-        if np.count_nonzero(fit_mask) < 4:
-            b = np.nanmin(y)
-            I = np.nansum(y) * dx0
+        I, I_err, A, b = self.matched_filter(d_int, n_int, pk, bkg, kernel)
 
-            if not np.isfinite(b) or b <= 0:
-                b = 0.0
-            if not np.isfinite(I):
-                I = 0.0
+        y_fit = I * kernel + b
 
-            I_err = np.nan
-            b_err = np.nan
-            y_fit = self.profile_function([I, b, 0.0, 1.0], x)
-            return I, I_err, b, b_err, x, y_fit, y, e
-
-        x_data = x[fit_mask]
-        y_data = y[fit_mask]
-        e_data = e[fit_mask]
-
-        b = np.nanmin(y_data)
-        I = np.nansum(y_data) * dx0
-        A = np.nanmax(y_data)
-
-        if not np.isfinite(A) or A <= 0:
-            A = 1.0
-        if not np.isfinite(I) or I <= 0:
-            I = A * dx0 if np.isfinite(dx0) and dx0 > 0 else 1.0
-        if (not np.isfinite(b)) or (b >= A) or (b <= 0):
-            b = 0.5 * A
-
-        mu = 0.0
-        sigma2 = S[0, 0] / scale
-        if not np.isfinite(sigma2) or sigma2 <= 0:
-            sigma = 1.0
-        else:
-            sigma = np.sqrt(sigma2)
-
-        I_min, I_max = 0.0, 2.0 * I
-        b_min, b_max = 0.0, A
-        mu_min, mu_max = mu - sigma, mu + sigma
-        sigma_min, sigma_max = 0.5 * sigma, 2.0 * sigma
-
-        bounds_low = np.array([I_min, b_min, mu_min, sigma_min], dtype=float)
-        bounds_high = np.array([I_max, b_max, mu_max, sigma_max], dtype=float)
-
-        for j in range(4):
-            if (
-                not np.isfinite(bounds_low[j])
-                or not np.isfinite(bounds_high[j])
-                or bounds_high[j] <= bounds_low[j]
-            ):
-                bounds_low[j] = -1e16
-                bounds_high[j] = +1e16
-
-        x_init = np.array([I, b, mu, sigma], dtype=float)
-        for j in range(4):
-            if not np.isfinite(x_init[j]):
-                x_init[j] = 0.0
-
-        for j in range(4):
-            low, high = bounds_low[j], bounds_high[j]
-            if low >= high:
-                continue
-            eps = 1e-8 * max(1.0, abs(low), abs(high))
-            if x_init[j] <= low:
-                x_init[j] = low + eps
-            if x_init[j] >= high:
-                x_init[j] = high - eps
-
-        bounds = (bounds_low, bounds_high)
-
-        try:
-            sol = scipy.optimize.least_squares(
-                self.profile_cost,
-                x0=x_init,
-                bounds=bounds,
-                args=(x_data, y_data, e_data),
-                loss="soft_l1",
-                max_nfev=20,
-            )
-            I, b, mu, sigma = sol.x
-
-            J = sol.jac
-            inv_cov = J.T.dot(J)
-            cov = np.linalg.pinv(inv_cov)
-
-            dof = max(sol.fun.size - sol.x.size, 1)
-            chi2dof = np.sum(sol.fun**2) / dof
-            cov *= chi2dof
-
-            I_err, b_err, mu_err, sigma_err = np.sqrt(np.diagonal(cov))
-        except Exception:
-            # If the optimizer fails for any reason, fall back to
-            # the initial estimates without raising.
-            I, b, mu, sigma = x_init
-            I_err = np.nan
-            b_err = np.nan
-
-        y_fit = self.profile_function([I, b, mu, sigma], x)
-
-        return I, I_err, b, b_err, x, y_fit, y, e
-
-    def profile_function(self, params, x):
-        I, b, mu, sigma = params
-        d2 = (x - mu) ** 2 / sigma**2
-        norm = np.sqrt(2 * np.pi) * sigma
-        return I * np.exp(-0.5 * d2) / norm + b
-
-    def profile_cost(self, params, x, y, e, lamda=0.01):
-        y_fit = self.profile_function(params, x)
-        wr = (y_fit - y) / e
-        return np.concatenate([wr[np.isfinite(wr)], lamda * np.array(params)])
+        return I, I_err, b, x, y_fit, y, e
 
     def integrate(self, x0, x1, x2, d, n, val_mask, det_mask, c, S):
         dx0, dx1, dx2 = self.voxels(x0, x1, x2)
@@ -3714,13 +3649,19 @@ class PeakEllipsoid:
 
         self.peak_background_mask = x0, x1, x2, pk, bkg
 
-        result = self.fitted_profile(x0, x1, x2, d, n, kernel, c, S)
+        result = self.fitted_profile(x0, x1, x2, d, n, c, S)
 
-        I, I_err, b, b_err, x, y_fit, y, e = result
+        I, I_err, b, x, y_fit, y, e = result
 
         self.integral = x, y_fit, y, e
+
+        result = self.matched_filter(d, n, pk, bkg, kernel)
+
+        I_filt, sig_filt, A_filt, b_filt = result
+
+        self.filter = result
 
         self.intensity.append(I)
         self.sigma.append(I_err)
 
-        return intens, sig
+        return intens, sig if I_filt > 3 * sig_filt else intens

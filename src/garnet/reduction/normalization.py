@@ -146,7 +146,6 @@ class Normalization(SubPlan):
                 "data",
                 self.plan["IPTS"],
                 run,
-                self.plan.get("Grouping"),
                 self.plan.get("TimeCut"),
             )
 
@@ -173,8 +172,6 @@ class Normalization(SubPlan):
                 self.plan.get("DetectorCalibration"),
                 self.plan.get("TubeCalibration"),
             )
-
-            data.group_pixels("data")
 
             data.load_clear_UB(self.plan["UBFile"], "data", run)
 

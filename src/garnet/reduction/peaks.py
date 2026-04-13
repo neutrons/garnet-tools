@@ -1287,7 +1287,12 @@ class PeaksModel:
             CopyShape=False,
         )
 
-        ol = mtd[ws].sample().getOrientedLattice()
+        if hasattr(mtd[ws], "sample"):
+            ol = mtd[ws].sample().getOrientedLattice()
+        else:
+            for i in range(mtd[ws].getNumExperimentInfo()):
+                ol = mtd[ws].getExperimentInfo(i).sample().getOrientedLattice()
+
         mod_vec_1 = V3D(*ol.getModVec(0))
         mod_vec_2 = V3D(*ol.getModVec(1))
         mod_vec_3 = V3D(*ol.getModVec(2))

@@ -3,17 +3,13 @@ import matplotlib.pyplot as plt
 
 from matplotlib.transforms import Affine2D
 
-# from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
-
 import scipy.linalg
 
 from garnet.plots.base import BasePlot
 
 
 class SlicePlot(BasePlot):
-
     def __init__(self, UB, W):
-
         self.fig, self.ax = plt.subplots(1, 1)
 
         G = np.dot(UB.T, UB)
@@ -26,7 +22,6 @@ class SlicePlot(BasePlot):
         self.V = np.dot(R.T, R)
 
     def calculate_transforms(self, axes, labels, normal):
-
         ind = np.array(normal) != 1
 
         axes_ind = np.arange(3)[ind]
@@ -75,7 +70,6 @@ class SlicePlot(BasePlot):
         # self.cb.formatter.set_useMathText(True)
 
     def make_slice(self, signal, value):
-
         i = np.argmin(np.abs(self.z - value))
 
         if self.slice_ind == 0:

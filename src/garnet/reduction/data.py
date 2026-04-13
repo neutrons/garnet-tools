@@ -12,14 +12,18 @@ from mantid.simpleapi import (
     LoadNexusLogs,
     CreateSampleWorkspace,
     Rebin,
+    RebinToWorkspace,
     ApplyCalibration,
     Multiply,
     Divide,
+    Plus,
     PreprocessDetectorsToMD,
     ExtractMonitors,
     LoadMask,
     ExtractMask,
     MaskDetectors,
+    MaskDetectorsIf,
+    ClearMaskFlag,
     SetGoniometer,
     LoadSampleShape,
     SetSample,
@@ -29,6 +33,7 @@ from mantid.simpleapi import (
     CorelliCrossCorrelate,
     NormaliseByCurrent,
     GroupDetectors,
+    CompressEvents,
     CreateGroupingWorkspace,
     LoadEmptyInstrument,
     SolidAngle,
@@ -57,12 +62,14 @@ from mantid.simpleapi import (
     CreateSingleValuedWorkspace,
     AddSampleLog,
     RemoveLogs,
-    CompressEvents,
+    ConvertToHistogram,
+    ConvertToEventWorkspace,
     GenerateEventsFilter,
     FilterEvents,
     CopySample,
     DeleteWorkspace,
     DeleteWorkspaces,
+    RenameWorkspace,
     MergeMD,
     MergeMDFiles,
     mtd,
@@ -166,6 +173,7 @@ class BaseDataModel:
 
         self.elastic = None
         self.time_offset = None
+        self.grouping = None
 
         IPTS = plan["IPTS"]
 
@@ -186,6 +194,14 @@ class BaseDataModel:
                 raw_path = raw_path.replace("nexus", "shared/autoreduce")
                 raw_file = raw_file.replace(".nxs.h5", "_elastic.nxs")
 
+        if plan.get("Grouping") is not None:
+            grouping = plan["Grouping"]
+            self.grouping = grouping if grouping != "1x1" else None
+
+        if self.grouping is not None:
+            raw_path = raw_path.replace("nexus", "shared/autoreduce")
+            raw_file = raw_file.replace(".nxs", ".lite.nxs")
+
         self.raw_file_path = os.path.join(raw_path, raw_file)
 
         files = self.get_file_name_list(IPTS, plan["Runs"])
@@ -196,16 +212,31 @@ class BaseDataModel:
             self.raw_file_path = os.path.join(raw_path, raw_file)
             files = self.get_file_name_list(IPTS, plan["Runs"])
 
+        assert np.all([os.path.exists(file) for file in files])
+
         if instrument != "DEMAND":
-            if not self.elastic and not self.custom_path:
+            if (
+                not self.elastic
+                and not self.custom_path
+                and self.grouping is None
+            ):
                 LoadEventNexus(
                     Filename=files[0],
                     OutputWorkspace=self.instrument,
-                    MetaDataOnly=True,
                     LoadLogs=False,
                 )
             else:
                 LoadNexus(Filename=files[0], OutputWorkspace=self.instrument)
+
+            Rebin(
+                InputWorkspace=self.instrument,
+                OutputWorkspace=self.instrument + "_workspace",
+                Params="0,16660,16660",
+                PreserveEvents=False,
+            )
+
+            mtd[self.instrument + "_workspace"] *= 0
+
         else:
             LoadEmptyInstrument(
                 InstrumentName=self.ref_inst, OutputWorkspace=self.instrument
@@ -776,20 +807,25 @@ class BaseDataModel:
 
         Returns
         -------
-        dQ : float
+        dQ : array
             Q-resolution.
 
         """
 
         dl = 1e-3 * lamda
+        da = 2 * self.dt
 
         theta = 0.5 * np.deg2rad(two_theta)
 
-        Q = 4 * np.pi / lamda * np.sin(theta)
+        k = 2 * np.pi / lamda
 
-        dQ = Q * np.sqrt((dl / lamda) ** 2 + (self.dt / np.tan(theta)) ** 2)
+        eta = dl / lamda / da
 
-        return dQ
+        dQ0 = k * np.sqrt(np.cos(theta) ** 2 + (2 * eta * np.sin(theta)) ** 2)
+        dQ1 = 2 * k * np.cos(theta) * np.sin(theta)
+        dQ2 = k * np.sin(theta)
+
+        return np.array([dQ0, dQ1, dQ2]) * da
 
     def clear_norm(self, md):
         if mtd.doesExist(md + "_data"):
@@ -1015,7 +1051,7 @@ class MonochromaticData(BaseDataModel):
 
         self.laue = False
 
-    def load_data(self, histo_name, IPTS, runs, grouping=None):
+    def load_data(self, histo_name, IPTS, runs):
         """
         Load raw data into detector counts vs rotation index.
 
@@ -1034,8 +1070,6 @@ class MonochromaticData(BaseDataModel):
 
         filenames = self.file_names(IPTS, runs)
 
-        self.grouping = "None" if grouping is None else grouping
-
         if self.instrument == "DEMAND":
             HB3AAdjustSampleNorm(
                 Filename=filenames,
@@ -1050,7 +1084,7 @@ class MonochromaticData(BaseDataModel):
         else:
             LoadWANDSCD(
                 Filename=filenames,
-                Grouping=grouping,
+                Grouping=self.grouping,
                 OutputWorkspace=histo_name,
             )
             run = mtd[histo_name].getExperimentInfo(0).run()
@@ -1283,7 +1317,7 @@ class LaueData(BaseDataModel):
         self.sa_cal = False
         self.flux_cal = False
 
-    def load_data(self, event_name, IPTS, runs, grouping=None, time_cut=None):
+    def load_data(self, event_name, IPTS, runs, time_cut=None):
         """
         Load raw data into time-of-flight vs counts.
 
@@ -1302,7 +1336,11 @@ class LaueData(BaseDataModel):
 
         filenames = self.file_names(IPTS, runs)
 
-        if self.elastic and self.time_offset is None:
+        preprocessed = (
+            self.elastic and self.time_offset is None
+        ) or self.grouping is not None
+
+        if preprocessed:
             LoadNexus(Filename=filenames, OutputWorkspace=event_name)
             x = mtd[event_name].extractX()[0]
             Rebin(
@@ -1319,10 +1357,6 @@ class LaueData(BaseDataModel):
                 FilterByTofMin=None,
                 FilterByTofMax=None,
             )
-
-            # FilterBadPulses(
-            #     InputWorkspace=event_name, OutputWorkspace=event_name,
-            # )
 
         if type(runs) is list and mtd[event_name].isGroup():
             for run, ws in zip(runs, mtd[event_name].getNames()):
@@ -1345,10 +1379,41 @@ class LaueData(BaseDataModel):
 
         self.set_goniometer(event_name)
 
-        if self.grouping is None and grouping is not None:
-            self.preprocess_detectors(event_name)
-            self.create_grouping(grouping)
-            self.delete_workspace("detectors")
+    def grouping_list(self, ws, cols, rows, lite_c, lite_r, group_c, group_r):
+        det_map = np.asarray(mtd[ws].column(5)).reshape(
+            -1, cols // lite_c, rows // lite_r
+        )
+
+        nb, nc, nr = det_map.shape
+
+        gc = (np.arange(nc) // group_c).astype(np.int32)
+        gr = (np.arange(nr) // group_r).astype(np.int32)
+
+        ngc = (nc + lite_c - 1) // lite_c
+        ngr = (nr + lite_r - 1) // lite_r
+
+        group_id = (
+            (np.arange(nb, dtype=np.int32)[:, None, None] * (ngc * ngr))
+            + (gc[None, :, None] * ngr)
+            + gr[None, None, :]
+        ).ravel()
+
+        det_ids = det_map.ravel()
+
+        order = np.argsort(group_id, kind="stable")
+        g_sorted = group_id[order]
+        d_sorted = det_ids[order]
+
+        starts = np.flatnonzero(np.r_[True, g_sorted[1:] != g_sorted[:-1]])
+        ends = np.r_[starts[1:], g_sorted.size]
+
+        parts = []
+        for s, e in zip(starts, ends):
+            parts.append("+".join(map(str, d_sorted[s:e])))
+
+        detector_list = ",".join(parts)
+
+        return detector_list
 
     def get_counting_rate(self, event_name):
         """
@@ -1568,6 +1633,12 @@ class LaueData(BaseDataModel):
 
         """
 
+        grouping = self.grouping if self.grouping is not None else "1x1"
+
+        c, r = list(map(int, grouping.split("x")))
+
+        cols, rows = self.instrument_config["BankPixels"]
+
         if detector_mask is not None and not mtd.doesExist("mask"):
             LoadMask(
                 Instrument=self.ref_inst,
@@ -1576,73 +1647,31 @@ class LaueData(BaseDataModel):
                 OutputWorkspace="mask",
             )
 
+            CloneWorkspace(
+                InputWorkspace=self.instrument + "_workspace",
+                OutputWorkspace="ma_lite",
+            )
+
+            pattern = self.grouping_list("_detectors", cols, rows, 1, 1, c, r)
+
+            GroupDetectors(
+                InputWorkspace="mask_lite",
+                GroupingPattern=pattern,
+                OutputWorkspace="mask_lite",
+            )
+
+            ys = mtd["sa_van"].extractY()
+            mtd["mask_lite"] *= 0
+            for i, y in enumerate(ys):
+                mtd["mask_lite"].setY(i, y)
+
+            RenameWorkspace(InputWorkspace="ma_lite", OutputWorkspace="mask")
+
         if mtd.doesExist("sa"):
-            MaskDetectors(Workspace=event_name, MaskedWorkspace="sa_mask")
+            MaskDetectors(Workspace=event_name, MaskedWorkspace="sa")
 
         if mtd.doesExist("mask"):
             MaskDetectors(Workspace=event_name, MaskedWorkspace="mask")
-
-    def create_grouping(self, grouping):
-        """
-        Generate grouping pattern.
-
-        Parameters
-        ----------
-        gropuing : str
-            Grouping pattern (rows)x(cols).
-
-        """
-
-        if grouping is None or grouping == "1x1":
-            return
-
-        c, r = [int(val) for val in grouping.split("x")]
-
-        cols, rows = self.instrument_config["BankPixels"]
-
-        det_map = np.array(mtd["detectors"].column(5)).reshape(-1, cols, rows)
-
-        shape = det_map.shape
-        i, j, k = np.meshgrid(
-            np.arange(shape[0]),
-            np.arange(shape[1]),
-            np.arange(shape[2]),
-            indexing="ij",
-        )
-        keys = np.stack((i, j // c, k // r), axis=-1)
-        keys_flat = keys.reshape(-1, keys.shape[-1])
-        det_map_flat = det_map.ravel().astype(str)
-        grouped_ids = defaultdict(list)
-        for key, detector_id in zip(map(tuple, keys_flat), det_map_flat):
-            grouped_ids[key].append(detector_id)
-        self.grouping = ",".join(
-            "+".join(group) for group in grouped_ids.values()
-        )
-
-    def group_pixels(self, ws):
-        """
-        Group pixels with grouping pattern.
-
-        Parameters
-        ----------
-        ws : str
-            Workspace name.
-
-        """
-
-        if self.grouping is not None:
-            GroupDetectors(
-                InputWorkspace=ws,
-                GroupingPattern=self.grouping,
-                OutputWorkspace=ws,
-            )
-
-        if type(mtd[ws]) is EventWorkspace:
-            CompressEvents(
-                InputWorkspace=ws,
-                OutputWorkspace=ws,
-                Tolerance=1e-3,
-            )
 
     def convert_to_Q_sample(
         self, event_name, md_name, lorentz_corr=False, preproc_dets=None
@@ -1799,24 +1828,111 @@ class LaueData(BaseDataModel):
 
         """
 
+        grouping = self.grouping if self.grouping is not None else "1x1"
+
+        c, r = list(map(int, grouping.split("x")))
+
+        cols, rows = self.instrument_config["BankPixels"]
+
         if not mtd.doesExist("sa"):
-            LoadNexus(Filename=vanadium_file, OutputWorkspace="sa")
+            LoadNexus(Filename=vanadium_file, OutputWorkspace="sa_van")
 
-            # if self.grouping is not None:
-            #     self.group_pixels("sa")
-
-            RemoveLogs(Workspace="sa")
+            RemoveLogs(Workspace="sa_van")
 
             ExtractMask(
-                InputWorkspace="sa",
+                InputWorkspace="sa_van",
                 UngroupDetectors=True,
                 OutputWorkspace="sa_mask",
             )
 
-        if not mtd.doesExist("flux"):
-            LoadNexus(Filename=flux_file, OutputWorkspace="flux")
+            ratio = (
+                mtd[self.instrument + "_workspace"].getNumberHistograms()
+                / mtd["sa_van"].getNumberHistograms()
+            )
 
-            RemoveLogs(Workspace="flux")
+            ConvertUnits(
+                InputWorkspace=self.instrument + "_workspace",
+                Target="Momentum",
+                OutputWorkspace="sa",
+            )
+
+            RebinToWorkspace(
+                WorkspaceToRebin="sa",
+                WorkspaceToMatch="sa_van",
+                OutputWorkspace="sa",
+                PreserveEvents=False,
+            )
+
+            PreprocessDetectorsToMD(
+                InputWorkspace="sa", OutputWorkspace="_detectors"
+            )
+
+            cc = c // int(np.sqrt(ratio))
+            rr = r // int(np.sqrt(ratio))
+
+            pattern = self.grouping_list(
+                "_detectors", cols, rows, c, r, cc, rr
+            )
+
+            GroupDetectors(
+                InputWorkspace="sa",
+                GroupingPattern=pattern,
+                OutputWorkspace="sa",
+            )
+
+            ys = mtd["sa_van"].extractY()
+            mtd["sa"] *= 0
+            for i, y in enumerate(ys):
+                mtd["sa"].setY(i, y)
+
+            DeleteWorkspace(Workspace="sa_van")
+
+        if not mtd.doesExist("flux"):
+            LoadNexus(Filename=flux_file, OutputWorkspace="flux_van")
+
+            RemoveLogs(Workspace="flux_van")
+
+            ConvertToHistogram(
+                InputWorkspace=self.instrument + "_workspace",
+                OutputWorkspace="flux",
+            )
+
+            ConvertToHistogram(
+                InputWorkspace="flux_van",
+                OutputWorkspace="flux_van",
+            )
+
+            CreateGroupingWorkspace(
+                InputWorkspace=self.instrument + "_workspace",
+                GroupDetectorsBy="bank",
+                OutputWorkspace="banks",
+            )
+
+            GroupDetectors(
+                InputWorkspace="flux",
+                OutputWorkspace="flux",
+                PreserveEvents=False,
+                CopyGroupingFromWorkspace="banks",
+            )
+
+            ConvertUnits(
+                InputWorkspace="flux",
+                Target="Momentum",
+                OutputWorkspace="flux",
+            )
+
+            RebinToWorkspace(
+                WorkspaceToRebin="flux",
+                WorkspaceToMatch="flux_van",
+                OutputWorkspace="flux",
+                PreserveEvents=False,
+            )
+
+            ys = mtd["flux_van"].extractY()
+            for i, y in enumerate(ys):
+                mtd["flux"].setY(i, y)
+
+            DeleteWorkspace(Workspace="flux_van")
 
             self.k_min = mtd["flux"].getXDimension().getMinimum()
             self.k_max = mtd["flux"].getXDimension().getMaximum()
@@ -1915,9 +2031,62 @@ class LaueData(BaseDataModel):
 
         """
 
+        grouping = self.grouping if self.grouping is not None else "1x1"
+
+        c, r = list(map(int, grouping.split("x")))
+
+        cols, rows = self.instrument_config["BankPixels"]
+
         if not mtd.doesExist("bkg_md") and filename is not None:
             if not mtd.doesExist("bkg"):
                 Load(Filename=filename, OutputWorkspace="bkg")
+
+                ConvertUnits(
+                    InputWorkspace=self.instrument + "_workspace",
+                    Target=mtd["bkg"].getAxis(0).getUnit().name(),
+                    OutputWorkspace="bkg_lite",
+                )
+
+                RebinToWorkspace(
+                    WorkspaceToRebin="bkg_lite",
+                    WorkspaceToMatch="bkg",
+                    OutputWorkspace="bkg_lite",
+                    PreserveEvents=True,
+                )
+
+                PreprocessDetectorsToMD(
+                    InputWorkspace="bkg_lite", OutputWorkspace="_detectors"
+                )
+
+                ratio = (
+                    mtd[self.instrument + "_workspace"].getNumberHistograms()
+                    / mtd["bkg_lite"].getNumberHistograms()
+                )
+
+                cc = c // int(np.sqrt(ratio))
+                rr = r // int(np.sqrt(ratio))
+
+                pattern = self.grouping_list(
+                    "_detectors", cols, rows, c, r, cc, rr
+                )
+
+                GroupDetectors(
+                    InputWorkspace="bkg_lite",
+                    GroupingPattern=pattern,
+                    OutputWorkspace="bkg_lite",
+                )
+
+                ConvertToEventWorkspace(
+                    InputWorkspace="bkg_lite", OutputWorkspace="bkg_lite"
+                )
+
+                Plus(
+                    LHSWorkspace="bkg_lite",
+                    RHSWorkspace="bkg",
+                    OutputWorkspace="bkg",
+                )
+
+                DeleteWorkspace(Workspace="bkg_lite")
 
                 ConvertUnits(
                     InputWorkspace="bkg",
@@ -1947,9 +2116,6 @@ class LaueData(BaseDataModel):
                     XMax=self.k_max,
                     OutputWorkspace="bkg",
                 )
-
-                if self.grouping is not None:
-                    self.group_pixels("bkg")
 
                 Rebin(
                     InputWorkspace="bkg",

@@ -180,8 +180,6 @@ class Parametrization(SubPlan):
                         self.plan.get("BackgroundFile"), workspace
                     )
 
-                    data.group_pixels(workspace)
-
                     data.load_clear_UB(self.plan["UBFile"], workspace, run)
 
                     data.convert_to_Q_sample(

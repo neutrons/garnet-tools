@@ -924,8 +924,8 @@ class Peaks:
                 y.append(norm)
                 z.append(ratio)
 
-                if norm > 1.1 or norm < 0.9 or ratio > 2 or ratio < 0.125:
-                    peak.setSigmaIntensity(peak.getIntensity())
+                # if norm > 1.1 or norm < 0.9 or ratio > 2 or ratio < 0.125:
+                #    peak.setSigmaIntensity(peak.getIntensity())
 
         x = np.array(x)
         y = np.array(y)

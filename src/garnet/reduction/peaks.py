@@ -264,7 +264,7 @@ class PeaksModel:
             FixQAxis=True,
             FixMajorAxisLength=False,
             UseCentroid=centroid,
-            MaxIterations=5,
+            MaxIterations=1,
             ReplaceIntensity=True,
             IntegrateIfOnEdge=True,
             AdaptiveQBackground=adaptive,

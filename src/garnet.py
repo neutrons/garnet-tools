@@ -2708,8 +2708,8 @@ class FormModel:
             )
         )
 
-        hkl_corners = (T @ corners.T).T
-        limits = np.ceil(np.max(np.abs(hkl_corners), axis=0)).astype(int)
+        proj_coords = (T @ corners.T).T
+        limits = np.ceil(np.max(np.abs(proj_coords), axis=0)).astype(int)
 
         x_max, y_max, z_max = np.maximum(limits, 1)
 

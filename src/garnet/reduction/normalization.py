@@ -179,6 +179,8 @@ class Normalization(SubPlan):
 
             data.convert_to_Q_sample("data", "md", lorentz_corr=False)
 
+            data.delete_workspace("data")
+
             data.normalize_to_hkl(
                 "md",
                 self.params["Projections"],
@@ -187,8 +189,7 @@ class Normalization(SubPlan):
                 symmetry=self.params.get("Symmetry"),
             )
 
-        UB_file = output_file.replace(".nxs", ".mat")
-        data.save_UB(UB_file, "md")
+            data.delete_workspace("md")
 
         data_file = self.get_file(output_file, "data")
         norm_file = self.get_file(output_file, "norm")
@@ -421,10 +422,12 @@ class Normalization(SubPlan):
 
         data.divide_histograms("result", "data", "norm")
 
-        UB_file = file.replace(".nxs", ".mat")
+        UB_file = self.plan["UBFile"]
 
         for ws in ["data", "norm", "result"]:
-            data.add_UBW(ws, UB_file, self.params["Projections"])
+            data.add_UBW(
+                ws, UB_file, self.params["Projections"], self.plan["Runs"][0]
+            )
 
         for ind, file in enumerate(files):
             UB_file = file.replace(".nxs", ".mat")

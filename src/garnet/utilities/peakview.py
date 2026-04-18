@@ -1,5 +1,12 @@
-import sys
 import os
+import sys
+
+directory = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(directory)
+
+directory = os.path.abspath(os.path.join(directory, "../.."))
+sys.path.append(directory)
+
 import traceback
 import glob
 
@@ -38,10 +45,13 @@ try:
     from qdarkstyle.light.palette import LightPalette
     import qdarkstyle
 
-    style = True
+    theme = True
 except:
     qdarkstyle = None
-    style = False
+    theme = False
+
+from garnet.reduction.plan import ReductionPlan
+from garnet.reduction.integration import Integration
 
 
 class View(QWidget):
@@ -209,7 +219,7 @@ class Presenter:
     def init_nxs(self, path):
         self.integrate_path = path.rstrip("yaml").rstrip(".") + "_integration/"
         pattern = os.path.join(self.integrate_path, "**", "*(max)=????.nxs")
-        nexus_paths = glob.glob(pattern, recursive=True)
+        nexus_paths = glob.iglob(pattern, recursive=False)
         nexus_paths = [os.path.basename(i) for i in nexus_paths]
 
         if len(nexus_paths) > 0:
@@ -310,7 +320,7 @@ class Model:
             "*({},{},{})_({},{},{})".format(*hklmnp),
             "*.png",
         )
-        plots_path = glob.glob(pattern, recursive=True)
+        plots_path = glob.iglob(pattern, recursive=True)
 
         if len(plots_path) == 0:
             return -1

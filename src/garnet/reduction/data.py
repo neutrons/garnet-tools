@@ -6,6 +6,7 @@ import numpy as np
 from mantid.simpleapi import (
     Load,
     LoadNexus,
+    SaveNexus,
     LoadEventNexus,
     LoadParameterFile,
     LoadIsawDetCal,
@@ -135,6 +136,12 @@ class BaseDataModel:
 
         self.dt = np.deg2rad(instrument_config["DeltaTheta"])
 
+        grouping = self.grouping if self.grouping is not None else "1x1"
+
+        scale = int(grouping.split("x")[0])
+
+        self.dt *= scale
+
         CreateSingleValuedWorkspace(
             OutputWorkspace="unity", DataValue=1, ErrorValue=1
         )
@@ -228,14 +235,16 @@ class BaseDataModel:
             else:
                 LoadNexus(Filename=files[0], OutputWorkspace=self.instrument)
 
+            RemoveLogs(Workspace=self.instrument)
+
             Rebin(
                 InputWorkspace=self.instrument,
-                OutputWorkspace=self.instrument + "_workspace",
+                OutputWorkspace=self.instrument,
                 Params="0,16660,16660",
                 PreserveEvents=False,
             )
 
-            mtd[self.instrument + "_workspace"] *= 0
+            mtd[self.instrument] *= 0
 
         else:
             LoadEmptyInstrument(
@@ -728,7 +737,7 @@ class BaseDataModel:
 
         DeleteWorkspaces(WorkspaceList=combine)
 
-    def add_UBW(self, ws, ub_file, projections):
+    def add_UBW(self, ws, ub_file, projections, run_number=None):
         """
         Attach sample UB and projection matrix to workspace
 
@@ -749,7 +758,10 @@ class BaseDataModel:
 
         W_MATRIX = ",".join(9 * ["{}"]).format(*W.flatten())
 
-        LoadIsawUB(InputWorkspace="ubw", Filename=ub_file)
+        LoadIsawUB(
+            InputWorkspace="ubw",
+            Filename=ub_file.replace("*", str(run_number)),
+        )
 
         if mtd.doesExist(ws):
             AddSampleLog(
@@ -812,7 +824,7 @@ class BaseDataModel:
 
         """
 
-        dl = 1e-3 * lamda
+        dl = 0 * lamda
         da = 2 * self.dt
 
         theta = 0.5 * np.deg2rad(two_theta)
@@ -1648,7 +1660,7 @@ class LaueData(BaseDataModel):
             )
 
             CloneWorkspace(
-                InputWorkspace=self.instrument + "_workspace",
+                InputWorkspace=self.instrument,
                 OutputWorkspace="ma_lite",
             )
 
@@ -1660,7 +1672,7 @@ class LaueData(BaseDataModel):
                 OutputWorkspace="mask_lite",
             )
 
-            ys = mtd["sa_van"].extractY()
+            ys = mtd["mask"].extractY()
             mtd["mask_lite"] *= 0
             for i, y in enumerate(ys):
                 mtd["mask_lite"].setY(i, y)
@@ -1839,19 +1851,22 @@ class LaueData(BaseDataModel):
 
             RemoveLogs(Workspace="sa_van")
 
-            ExtractMask(
-                InputWorkspace="sa_van",
-                UngroupDetectors=True,
-                OutputWorkspace="sa_mask",
-            )
+            # ExtractMask(
+            #     InputWorkspace="sa_van",
+            #     UngroupDetectors=True,
+            #     OutputWorkspace="sa_mask",
+            # )
 
             ratio = (
-                mtd[self.instrument + "_workspace"].getNumberHistograms()
+                mtd[self.instrument].getNumberHistograms()
                 / mtd["sa_van"].getNumberHistograms()
             )
 
+            if ratio < 1:
+                ratio = 1
+
             ConvertUnits(
-                InputWorkspace=self.instrument + "_workspace",
+                InputWorkspace=self.instrument,
                 Target="Momentum",
                 OutputWorkspace="sa",
             )
@@ -1867,8 +1882,8 @@ class LaueData(BaseDataModel):
                 InputWorkspace="sa", OutputWorkspace="_detectors"
             )
 
-            cc = c // int(np.sqrt(ratio))
-            rr = r // int(np.sqrt(ratio))
+            cc = int(np.sqrt(ratio))
+            rr = int(np.sqrt(ratio))
 
             pattern = self.grouping_list(
                 "_detectors", cols, rows, c, r, cc, rr
@@ -1887,13 +1902,15 @@ class LaueData(BaseDataModel):
 
             DeleteWorkspace(Workspace="sa_van")
 
+            MaskDetectorsIf(InputWorkspace="sa")
+
         if not mtd.doesExist("flux"):
             LoadNexus(Filename=flux_file, OutputWorkspace="flux_van")
 
             RemoveLogs(Workspace="flux_van")
 
             ConvertToHistogram(
-                InputWorkspace=self.instrument + "_workspace",
+                InputWorkspace=self.instrument,
                 OutputWorkspace="flux",
             )
 
@@ -1903,7 +1920,7 @@ class LaueData(BaseDataModel):
             )
 
             CreateGroupingWorkspace(
-                InputWorkspace=self.instrument + "_workspace",
+                InputWorkspace=self.instrument,
                 GroupDetectorsBy="bank",
                 OutputWorkspace="banks",
             )
@@ -1914,6 +1931,8 @@ class LaueData(BaseDataModel):
                 PreserveEvents=False,
                 CopyGroupingFromWorkspace="banks",
             )
+
+            DeleteWorkspace(Workspace="banks")
 
             ConvertUnits(
                 InputWorkspace="flux",
@@ -2012,6 +2031,19 @@ class LaueData(BaseDataModel):
                 OutputWorkspace=event_name,
             )
 
+            Rebin(
+                InputWorkspace=event_name,
+                Params=[self.k_min, self.k_max, self.k_max],
+                OutputWorkspace=event_name,
+                PreserveEvents=True,
+            )
+
+            CompressEvents(
+                InputWorkspace=event_name,
+                OutputWorkspace=event_name,
+                Tolerance=1e-2,
+            )
+
     def load_background(
         self,
         filename,
@@ -2037,96 +2069,89 @@ class LaueData(BaseDataModel):
 
         cols, rows = self.instrument_config["BankPixels"]
 
-        if not mtd.doesExist("bkg_md") and filename is not None:
-            if not mtd.doesExist("bkg"):
-                Load(Filename=filename, OutputWorkspace="bkg")
+        if (
+            not mtd.doesExist("bkg_md")
+            and not mtd.doesExist("bkg")
+            and filename is not None
+        ):
+            Load(Filename=filename, OutputWorkspace="bkg")
 
-                ConvertUnits(
-                    InputWorkspace=self.instrument + "_workspace",
-                    Target=mtd["bkg"].getAxis(0).getUnit().name(),
-                    OutputWorkspace="bkg_lite",
-                )
+            Rebin(
+                InputWorkspace="bkg",
+                Params=[self.k_min, self.k_max, self.k_max],
+                OutputWorkspace="bkg",
+            )
 
-                RebinToWorkspace(
-                    WorkspaceToRebin="bkg_lite",
-                    WorkspaceToMatch="bkg",
-                    OutputWorkspace="bkg_lite",
-                    PreserveEvents=True,
-                )
+            ConvertUnits(
+                InputWorkspace=self.instrument,
+                Target=mtd["bkg"].getAxis(0).getUnit().name(),
+                OutputWorkspace="bkg_lite",
+            )
 
-                PreprocessDetectorsToMD(
-                    InputWorkspace="bkg_lite", OutputWorkspace="_detectors"
-                )
+            RebinToWorkspace(
+                WorkspaceToRebin="bkg_lite",
+                WorkspaceToMatch="bkg",
+                OutputWorkspace="bkg_lite",
+                PreserveEvents=True,
+            )
 
-                ratio = (
-                    mtd[self.instrument + "_workspace"].getNumberHistograms()
-                    / mtd["bkg_lite"].getNumberHistograms()
-                )
+            PreprocessDetectorsToMD(
+                InputWorkspace="bkg_lite", OutputWorkspace="_detectors"
+            )
 
-                cc = c // int(np.sqrt(ratio))
-                rr = r // int(np.sqrt(ratio))
+            ratio = (
+                mtd[self.instrument].getNumberHistograms()
+                / mtd["bkg"].getNumberHistograms()
+            )
 
-                pattern = self.grouping_list(
-                    "_detectors", cols, rows, c, r, cc, rr
-                )
+            if ratio < 1:
+                ratio = 1
 
-                GroupDetectors(
-                    InputWorkspace="bkg_lite",
-                    GroupingPattern=pattern,
-                    OutputWorkspace="bkg_lite",
-                )
+            cc = int(np.sqrt(ratio))
+            rr = int(np.sqrt(ratio))
 
-                ConvertToEventWorkspace(
-                    InputWorkspace="bkg_lite", OutputWorkspace="bkg_lite"
-                )
+            pattern = self.grouping_list(
+                "_detectors", cols, rows, c, r, cc, rr
+            )
 
-                Plus(
-                    LHSWorkspace="bkg_lite",
-                    RHSWorkspace="bkg",
-                    OutputWorkspace="bkg",
-                )
+            GroupDetectors(
+                InputWorkspace="bkg_lite",
+                GroupingPattern=pattern,
+                OutputWorkspace="bkg_lite",
+            )
 
-                DeleteWorkspace(Workspace="bkg_lite")
+            ConvertToEventWorkspace(
+                InputWorkspace="bkg_lite", OutputWorkspace="bkg_lite"
+            )
 
-                ConvertUnits(
-                    InputWorkspace="bkg",
-                    OutputWorkspace="bkg",
-                    Target="TOF",
-                )
+            Plus(
+                LHSWorkspace="bkg_lite",
+                RHSWorkspace="bkg",
+                OutputWorkspace="bkg",
+            )
 
-                self.apply_calibration(
-                    "bkg", detector_calibration, tube_calibration
-                )
+            DeleteWorkspace(Workspace="bkg_lite")
 
-                if mtd.doesExist("sa"):
-                    MaskDetectors(Workspace="bkg", MaskedWorkspace="sa")
+            ConvertUnits(
+                InputWorkspace="bkg",
+                OutputWorkspace="bkg",
+                Target="TOF",
+            )
 
-                if mtd.doesExist("mask"):
-                    MaskDetectors(Workspace="bkg", MaskedWorkspace="mask")
+            self.apply_calibration(
+                "bkg", detector_calibration, tube_calibration
+            )
 
-                ConvertUnits(
-                    InputWorkspace="bkg",
-                    OutputWorkspace="bkg",
-                    Target="Momentum",
-                )
+            if mtd.doesExist("sa"):
+                MaskDetectors(Workspace="bkg", MaskedWorkspace="sa")
 
-                CropWorkspaceForMDNorm(
-                    InputWorkspace="bkg",
-                    XMin=self.k_min,
-                    XMax=self.k_max,
-                    OutputWorkspace="bkg",
-                )
+            if mtd.doesExist("mask"):
+                MaskDetectors(Workspace="bkg", MaskedWorkspace="mask")
 
-                Rebin(
-                    InputWorkspace="bkg",
-                    Params=[self.k_min, self.k_max, self.k_max],
-                    OutputWorkspace="bkg",
-                )
+            self.crop_for_normalization("bkg")
 
-                if not mtd["bkg"].run().hasProperty("NormalizationFactor"):
-                    NormaliseByCurrent(
-                        InputWorkspace="bkg", OutputWorkspace="bkg"
-                    )
+            if not mtd["bkg"].run().hasProperty("NormalizationFactor"):
+                NormaliseByCurrent(InputWorkspace="bkg", OutputWorkspace="bkg")
 
             pc_bkg = mtd["bkg"].run().getProperty("gd_prtn_chrg").value
             # pc_sig = mtd[event_name].run().getProperty("gd_prtn_chrg").value

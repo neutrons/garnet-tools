@@ -49,6 +49,7 @@ from mantid.simpleapi import (
     GenerateGoniometerIndependentBackground,
     SaveDetectorsGrouping,
     FilterBadPulses,
+    CloneWorkspace,
     mtd,
 )
 
@@ -197,12 +198,15 @@ class Vanadium:
 
         InvertMask(InputWorkspace="mask", OutputWorkspace="active")
 
-        SmoothNeighbours(
-            InputWorkspace="active",
-            OutputWorkspace="pixels",
-            SumPixelsX=self.x_bins,
-            SumPixelsY=self.y_bins,
-        )
+        if self.x_bins > 1 or self.y_bins > 1:
+            SmoothNeighbours(
+                InputWorkspace="active",
+                OutputWorkspace="pixels",
+                SumPixelsX=self.x_bins,
+                SumPixelsY=self.y_bins,
+            )
+        else:
+            CloneWorkspace(InputWorkspace="active", OutputWorkspace="pixels")
 
         MaskDetectors(Workspace="pixels", MaskedWorkspace="mask")
 
@@ -361,12 +365,13 @@ class Vanadium:
                     NumberType="Double",
                 )
 
-        SmoothNeighbours(
-            InputWorkspace=workspace,
-            OutputWorkspace=workspace,
-            SumPixelsX=self.x_bins,
-            SumPixelsY=self.y_bins,
-        )
+        if self.x_bins > 1 or self.y_bins > 1:
+            SmoothNeighbours(
+                InputWorkspace=workspace,
+                OutputWorkspace=workspace,
+                SumPixelsX=self.x_bins,
+                SumPixelsY=self.y_bins,
+            )
 
         MaskDetectors(Workspace=workspace, MaskedWorkspace="mask")
 

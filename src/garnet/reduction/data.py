@@ -1697,6 +1697,12 @@ class LaueData(BaseDataModel):
                 OutputWorkspace="mask",
             )
 
+            ExtractMask(
+                InputWorkspace="mask",
+                UngroupDetectors=True,
+                OutputWorkspace="mask",
+            )
+
         if mtd.doesExist("sa_mask"):
             print("mask data sa")
             MaskDetectors(Workspace=event_name, MaskedWorkspace="sa_mask")

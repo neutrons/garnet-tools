@@ -1,7 +1,7 @@
 import os
+import gc
 import subprocess
 import traceback
-import itertools
 import time
 import numpy as np
 
@@ -318,6 +318,8 @@ class Integration(SubPlan):
                 self.update_peak_info("peaks", results)
 
                 del results
+
+                gc.collect()
 
             peaks.update_scale_factor("peaks", data.monitor)
 
@@ -753,40 +755,32 @@ class Integration(SubPlan):
 
             bins, extents, projections, transform = bin_extent
 
-            if norm:
-                slice_extents = data.slice_extents(Q_vec, self.r_cut)
+            slice_extents = data.slice_extents(Q_vec, UB, hkl)
 
-                data.slice_roi(bank_name, slice_extents)
+            data.slice_roi(bank_name, slice_extents)
 
-                md = bank_name + "_slice"
+            md = bank_name + "_slice"
 
-                data.normalize_to_hkl(md, transform, extents, bins)
+            data.normalize_to_hkl(md, transform, extents, bins)
 
-                d, _, Q0, Q1, Q2 = data.extract_bin_info(md + "_data")
-                n, _, Q0, Q1, Q2 = data.extract_bin_info(md + "_norm")
+            d, _, Q0, Q1, Q2 = data.extract_bin_info(md + "_data")
+            n, _, Q0, Q1, Q2 = data.extract_bin_info(md + "_norm")
 
-                data.check_volume_preservation(md + "_result")
+            data.check_volume_preservation(md + "_result")
 
-                peak_file = self.get_diagnostic_file(peak_name)
+            peak_file = self.get_diagnostic_file(peak_name)
 
-                directory = os.path.dirname(peak_file)
+            directory = os.path.dirname(peak_file)
 
-                os.makedirs(directory, exist_ok=True)
+            os.makedirs(directory, exist_ok=True)
 
-                data_file = self.get_diagnostic_file(peak_name + "_data")
-                norm_file = self.get_diagnostic_file(peak_name + "_norm")
+            data_file = self.get_diagnostic_file(peak_name + "_data")
+            norm_file = self.get_diagnostic_file(peak_name + "_norm")
 
-                data.save_histograms(data_file, md + "_data")
-                data.save_histograms(norm_file, md + "_norm")
+            data.save_histograms(data_file, md + "_data")
+            data.save_histograms(norm_file, md + "_norm")
 
-                data.clear_norm(md)
-
-            else:
-                result = data.bin_in_Q("md", extents, bins, projections)
-
-                d, _, Q0, Q1, Q2 = result
-
-                n = d > 0
+            data.clear_norm(md)
 
             data_info = (Q0, Q1, Q2, d, n, dQ, Q, projections)
 
@@ -914,24 +908,6 @@ class Integration(SubPlan):
         h, k, l = hkl
 
         Q0, Q1, Q2 = A @ np.array([h, k, l])
-
-        # corners = np.array(
-        #     list(
-        #         itertools.product(
-        #             [-max_offset, max_offset],
-        #             [-max_offset, max_offset],
-        #             [-max_offset, max_offset],
-        #         )
-        #     )
-        # )
-
-        # dq_corners = corners @ A.T
-
-        # mins = dq_corners.min(axis=0)
-        # maxs = dq_corners.max(axis=0)
-
-        # mins[mins < -r_cut] = -r_cut
-        # maxs[maxs > +r_cut] = +r_cut
 
         extents = np.array(
             [

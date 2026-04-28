@@ -1,4 +1,5 @@
 import os
+import itertools
 from collections import defaultdict
 
 import numpy as np
@@ -209,6 +210,8 @@ class BaseDataModel:
         if self.grouping is not None:
             raw_path = raw_path.replace("nexus", "shared/autoreduce")
             raw_file = raw_file.replace(".nxs", ".lite.nxs")
+            if self.elastic == True and self.time_offset is None:
+                raw_file = raw_file.replace(".nxs", ".nxs.h5")
 
         self.raw_file_path = os.path.join(raw_path, raw_file)
 
@@ -893,12 +896,22 @@ class BaseDataModel:
 
             return y, e, x0, x1, x2
 
-    def slice_extents(self, c, r):
-        return [x for v in c for x in [v - 6 * r, v + 6 * r]]
+    def slice_extents(self, UB, hkl):
+        UB = np.asarray(UB, dtype=float)
+        hkl = np.asarray(hkl, dtype=float)
 
-    def slice_roi(self, md, extents):
-        extents = np.array(extents).flatten().tolist()
+        offsets = np.array(list(itertools.product([-0.5, 0.5], repeat=3)))
+        corners_hkl = hkl[None, :] + offsets
 
+        corners_Q = (2 * np.pi * UB @ corners_hkl.T).T  # shape (8,3)
+
+        Qxmin, Qymin, Qzmin = corners_Q.min(axis=0)
+        Qxmax, Qymax, Qzmax = corners_Q.max(axis=0)
+
+        return Qxmin, Qxmax, Qymin, Qymax, Qzmin, Qzmax
+
+    def slice_roi(self, md, UB, hkl):
+        extents = self.slice_extents(UB, hkl)
         SliceMD(
             InputWorkspace=md,
             AxisAligned=False,

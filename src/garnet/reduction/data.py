@@ -222,6 +222,8 @@ class BaseDataModel:
 
         assert np.all([os.path.exists(file) for file in files])
 
+        print(files[0])
+
         if instrument != "DEMAND":
             if (
                 not self.elastic
@@ -231,7 +233,8 @@ class BaseDataModel:
                 LoadEventNexus(
                     Filename=files[0],
                     OutputWorkspace=self.instrument,
-                    LoadLogs=False,
+                    LoadNexusInstrumentXML=False,
+                    # LoadLogs=False,
                 )
             else:
                 LoadNexus(Filename=files[0], OutputWorkspace=self.instrument)
@@ -1369,6 +1372,7 @@ class LaueData(BaseDataModel):
                 FilterByTimeStop=time_cut,
                 FilterByTofMin=None,
                 FilterByTofMax=None,
+                LoadNexusInstrumentXML=False,
             )
 
         if type(runs) is list and mtd[event_name].isGroup():
@@ -2095,7 +2099,11 @@ class LaueData(BaseDataModel):
             and not mtd.doesExist("bkg")
             and filename is not None
         ):
-            Load(Filename=filename, OutputWorkspace="bkg")
+            Load(
+                Filename=filename,
+                OutputWorkspace="bkg",
+                LoadNexusInstrumentXML=False,
+            )
 
             pc_bkg = mtd["bkg"].run().getProperty("gd_prtn_chrg").value
 

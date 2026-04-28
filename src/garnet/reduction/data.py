@@ -1693,9 +1693,9 @@ class LaueData(BaseDataModel):
                 OutputWorkspace="mask",
             )
 
-        if mtd.doesExist("sa"):
+        if mtd.doesExist("sa_mask"):
             print("mask data sa")
-            MaskDetectors(Workspace=event_name, MaskedWorkspace="sa")
+            MaskDetectors(Workspace=event_name, MaskedWorkspace="sa_mask")
 
         if mtd.doesExist("mask"):
             print("mask data mask")
@@ -1918,6 +1918,12 @@ class LaueData(BaseDataModel):
             DeleteWorkspace(Workspace="sa_van")
 
             MaskDetectorsIf(InputWorkspace="sa")
+
+            ExtractMask(
+                InputWorkspace="sa",
+                UngroupDetectors=True,
+                OutputWorkspace="sa_mask",
+            )
 
         if not mtd.doesExist("flux"):
             LoadNexus(Filename=flux_file, OutputWorkspace="flux_van")
@@ -2153,9 +2159,9 @@ class LaueData(BaseDataModel):
                 "bkg", detector_calibration, tube_calibration
             )
 
-            if mtd.doesExist("sa"):
+            if mtd.doesExist("sa_mask"):
                 print("mask bkg sa")
-                MaskDetectors(Workspace="bkg", MaskedWorkspace="sa")
+                MaskDetectors(Workspace="bkg", MaskedWorkspace="sa_mask")
 
             if mtd.doesExist("mask"):
                 print("mask bkg mask")

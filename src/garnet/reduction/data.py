@@ -222,8 +222,6 @@ class BaseDataModel:
 
         assert np.all([os.path.exists(file) for file in files])
 
-        print(files[0])
-
         if instrument != "DEMAND":
             if (
                 not self.elastic
@@ -249,6 +247,8 @@ class BaseDataModel:
             )
 
             mtd[self.instrument] *= 0
+
+            assert mtd[self.instrument].run().hasProperty("gd_prtn_chrg")
 
         else:
             LoadEmptyInstrument(

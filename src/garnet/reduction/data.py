@@ -1694,9 +1694,11 @@ class LaueData(BaseDataModel):
             )
 
         if mtd.doesExist("sa"):
+            print("mask data sa")
             MaskDetectors(Workspace=event_name, MaskedWorkspace="sa")
 
         if mtd.doesExist("mask"):
+            print("mask data mask")
             MaskDetectors(Workspace=event_name, MaskedWorkspace="mask")
 
     def convert_to_Q_sample(
@@ -1869,12 +1871,6 @@ class LaueData(BaseDataModel):
             LoadNexus(Filename=vanadium_file, OutputWorkspace="sa_van")
 
             RemoveLogs(Workspace="sa_van")
-
-            # ExtractMask(
-            #     InputWorkspace="sa_van",
-            #     UngroupDetectors=True,
-            #     OutputWorkspace="sa_mask",
-            # )
 
             ratio = (
                 mtd[self.instrument].getNumberHistograms()
@@ -2158,9 +2154,11 @@ class LaueData(BaseDataModel):
             )
 
             if mtd.doesExist("sa"):
+                print("mask bkg sa")
                 MaskDetectors(Workspace="bkg", MaskedWorkspace="sa")
 
             if mtd.doesExist("mask"):
+                print("mask bkg mask")
                 MaskDetectors(Workspace="bkg", MaskedWorkspace="mask")
 
             self.crop_for_normalization("bkg")

@@ -1906,7 +1906,7 @@ class FormPresenter:
         self.view.set_symmetry(symmetry)
         self.view.set_symmetry_options(symmetries)
         if option is not None:
-            self.view.set_symmetry(option)
+            self.view.set_symmetry_option(option)
 
     def update_norm_step_1(self):
         limits = self.view.get_norm_limits_1()

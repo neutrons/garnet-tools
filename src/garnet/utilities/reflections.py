@@ -12,6 +12,7 @@ from mantid.simpleapi import (
     SortPeaksWorkspace,
     CombinePeaksWorkspaces,
     StatisticsOfPeaksWorkspace,
+    CountReflections,
     SaveHKL,
     SaveReflections,
     SaveIsawUB,
@@ -977,8 +978,8 @@ class Peaks:
             InputWorkspace=self.peaks,
             OutputWorkspace=self.peaks,
             FilterVariable="Signal/Noise",
-            FilterValue=3,
-            Operator=">",
+            FilterValue=1,
+            Operator=">=",
         )
 
         self.remove_off_centered()
@@ -987,8 +988,8 @@ class Peaks:
             InputWorkspace=self.peaks,
             OutputWorkspace=self.peaks,
             FilterVariable="Signal/Noise",
-            FilterValue=3,
-            Operator=">",
+            FilterValue=1,
+            Operator=">=",
         )
 
         x, y = [], []
@@ -1072,7 +1073,7 @@ class Peaks:
             OutputWorkspace=self.peaks,
             FilterVariable="Signal/Noise",
             FilterValue=-1,
-            Operator=">",
+            Operator=">=",
         )
 
         SortPeaksWorkspace(
@@ -1475,8 +1476,8 @@ class Peaks:
             InputWorkspace=name,
             OutputWorkspace=name + "_stats",
             FilterVariable="Signal/Noise",
-            FilterValue=3,
-            Operator=">",
+            FilterValue=1,
+            Operator=">=",
         )
 
         point_groups, R_merge = [], []
@@ -1531,6 +1532,52 @@ class Peaks:
         table = "\n".join(cols)
 
         with open(filename, "w") as f:
+            f.write("{}\n".format(point_group))
+            f.write(table)
+
+        # ---
+
+        ol = mtd[name].sample().getOrientedLattice()
+        d_max = np.max([ol.d(1, 0, 0), ol.d(0, 1, 0), ol.d(0, 0, 1)])
+        d_min = np.min(mtd[name].column("DSpacing"))
+
+        d = 1 / np.sqrt(np.linspace(1 / d_max**2, 1 / d_min**2, 5))
+
+        column_names = "Resolution", "Completeness", "Redundancy", "Unique"
+        col_widths = [max(len(str(name)), 12) for name in column_names]
+
+        cols = [
+            " ".join(
+                name.ljust(col_widths[i])
+                for i, name in enumerate(column_names)
+            )
+        ]
+
+        for i in range(len(d) - 1):
+            unique, completeness, redundancy, _ = CountReflections(
+                InputWorkspace=name,
+                PointGroup=point_group,
+                LatticeCentering="P",
+                MinDSpacing=d[i + 1],
+                MaxDSpacing=d[i],
+                MissingReflectionsWorkspace="",
+            )
+
+            shell = "{:.2f}-{:.2f}".format(d[i], d[i + 1])
+            values = [shell, 100 * completeness, redundancy, unique]
+
+            for i in range(len(values)):
+                row_values = []
+                for j, val in enumerate(values):
+                    if isinstance(val, float):
+                        val = "{:.2f}".format(val)
+                    row_values.append(str(val).ljust(col_widths[j]))
+
+                cols.append(" ".join(row_values))
+
+        table = "\n".join(cols)
+
+        with open(filename.replace("_symm.txt", "_stats.txt"), "w") as f:
             f.write("{}\n".format(point_group))
             f.write(table)
 

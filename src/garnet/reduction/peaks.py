@@ -1458,6 +1458,26 @@ class PeakModel:
 
         return peak.getQSampleFrame()
 
+    def get_signal_to_noise(self, no):
+        """
+        Intensity to uncertainty ratio.
+
+        Parameters
+        ----------
+        no : int
+            Peak index number.
+
+        Returns
+        -------
+        I_sig : float
+            Signal-noise ratio.
+
+        """
+
+        peak = mtd[self.peaks].getPeak(no)
+
+        return peak.getIntensityOverSigma()
+
     def get_angles(self, no):
         """
         Scattering and azimuthal angle of the peak.

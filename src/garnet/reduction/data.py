@@ -24,6 +24,7 @@ from mantid.simpleapi import (
     ExtractMask,
     MaskDetectors,
     MaskDetectorsIf,
+    MaskBTP,
     ClearMaskFlag,
     SetGoniometer,
     LoadSampleShape,
@@ -235,7 +236,7 @@ class BaseDataModel:
             else:
                 LoadNexus(Filename=files[0], OutputWorkspace=self.instrument)
 
-            RemoveLogs(Workspace=self.instrument)
+            # RemoveLogs(Workspace=self.instrument)
 
             Rebin(
                 InputWorkspace=self.instrument,
@@ -1632,6 +1633,12 @@ class LaueData(BaseDataModel):
             ComponentNames=bank_name,
         )
 
+        MaskBTP(
+            Workspace=event_name,
+            Instrument=self.instrument,
+            Bank=bank_name.replace("bank", ""),
+        )
+
     def apply_mask(self, event_name, detector_mask):
         """
         Apply detector mask.
@@ -1661,15 +1668,15 @@ class LaueData(BaseDataModel):
 
             CloneWorkspace(
                 InputWorkspace=self.instrument,
-                OutputWorkspace="ma_lite",
+                OutputWorkspace="mask_lite",
             )
 
-            pattern = self.grouping_list("_detectors", cols, rows, 1, 1, c, r)
+            pattern = self.grouping_list("_detectors", cols, rows, c, r, 1, 1)
 
             GroupDetectors(
-                InputWorkspace="mask_lite",
+                InputWorkspace="mask",
                 GroupingPattern=pattern,
-                OutputWorkspace="mask_lite",
+                OutputWorkspace="mask",
             )
 
             ys = mtd["mask"].extractY()
@@ -1677,7 +1684,14 @@ class LaueData(BaseDataModel):
             for i, y in enumerate(ys):
                 mtd["mask_lite"].setY(i, y)
 
-            RenameWorkspace(InputWorkspace="ma_lite", OutputWorkspace="mask")
+            RenameWorkspace(InputWorkspace="mask_lite", OutputWorkspace="mask")
+
+            MaskDetectorsIf(
+                InputWorkspace="mask",
+                Operator="Greater",
+                Value=0,
+                OutputWorkspace="mask",
+            )
 
         if mtd.doesExist("sa"):
             MaskDetectors(Workspace=event_name, MaskedWorkspace="sa")
@@ -1723,7 +1737,7 @@ class LaueData(BaseDataModel):
                 MinValues=Q_min_vals,
                 MaxValues=Q_max_vals,
                 OutputWorkspace=md_name,
-                PreprocDetectorsWS="-",  # preproc_dets,
+                PreprocDetectorsWS=preproc_dets,
                 SplitInto=2,
                 MaxRecursionDepth=10,
             )
@@ -1732,7 +1746,9 @@ class LaueData(BaseDataModel):
                 InputWorkspace=md_name, OutputWorkspace=md_name
             )
 
-    def convert_to_Q_lab(self, event_name, md_name, lorentz_corr=False):
+    def convert_to_Q_lab(
+        self, event_name, md_name, lorentz_corr=False, preproc_dets=None
+    ):
         """
         Convert raw data to Q-lab.
 
@@ -1754,6 +1770,9 @@ class LaueData(BaseDataModel):
         if mtd.doesExist(event_name):
             Q_min_vals, Q_max_vals = self.get_min_max_values()
 
+            if preproc_dets is None:
+                preproc_dets = "detectors"
+
             ConvertToMD(
                 InputWorkspace=event_name,
                 QDimensions="Q3D",
@@ -1763,7 +1782,7 @@ class LaueData(BaseDataModel):
                 MinValues=Q_min_vals,
                 MaxValues=Q_max_vals,
                 OutputWorkspace=md_name,
-                PreprocDetectorsWS="-",  # "detectors",
+                PreprocDetectorsWS=preproc_dets,  # "detectors",
                 SplitInto=2,
                 MaxRecursionDepth=10,
             )
@@ -2076,11 +2095,7 @@ class LaueData(BaseDataModel):
         ):
             Load(Filename=filename, OutputWorkspace="bkg")
 
-            Rebin(
-                InputWorkspace="bkg",
-                Params=[self.k_min, self.k_max, self.k_max],
-                OutputWorkspace="bkg",
-            )
+            pc_bkg = mtd["bkg"].run().getProperty("gd_prtn_chrg").value
 
             ConvertUnits(
                 InputWorkspace=self.instrument,
@@ -2092,7 +2107,7 @@ class LaueData(BaseDataModel):
                 WorkspaceToRebin="bkg_lite",
                 WorkspaceToMatch="bkg",
                 OutputWorkspace="bkg_lite",
-                PreserveEvents=True,
+                PreserveEvents=False,
             )
 
             PreprocessDetectorsToMD(
@@ -2153,7 +2168,6 @@ class LaueData(BaseDataModel):
             if not mtd["bkg"].run().hasProperty("NormalizationFactor"):
                 NormaliseByCurrent(InputWorkspace="bkg", OutputWorkspace="bkg")
 
-            pc_bkg = mtd["bkg"].run().getProperty("gd_prtn_chrg").value
             # pc_sig = mtd[event_name].run().getProperty("gd_prtn_chrg").value
 
             CreateSingleValuedWorkspace(

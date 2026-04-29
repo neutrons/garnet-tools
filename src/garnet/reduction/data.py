@@ -1419,8 +1419,8 @@ class LaueData(BaseDataModel):
         gc = (np.arange(nc) // group_c).astype(np.int32)
         gr = (np.arange(nr) // group_r).astype(np.int32)
 
-        ngc = (nc + lite_c - 1) // lite_c
-        ngr = (nr + lite_r - 1) // lite_r
+        ngc = (nc + group_c - 1) // group_c
+        ngr = (nr + group_r - 1) // group_r
 
         group_id = (
             (np.arange(nb, dtype=np.int32)[:, None, None] * (ngc * ngr))
@@ -1908,7 +1908,7 @@ class LaueData(BaseDataModel):
                 )
 
                 pattern = self.grouping_list(
-                    "_detectors", cols, rows, c, r, 1, 1
+                    "_detectors", cols, rows, 1, 1, c, r
                 )
 
                 GroupDetectors(
@@ -1950,7 +1950,6 @@ class LaueData(BaseDataModel):
             )
 
             ys = mtd["sa_van"].extractY()
-            print(ys.shape, np.shape(mtd["sa"].extractY()))
             mtd["sa"] *= 0
             for i, y in enumerate(ys):
                 mtd["sa"].setY(i, y)
@@ -2167,7 +2166,7 @@ class LaueData(BaseDataModel):
                 )
 
                 pattern = self.grouping_list(
-                    "_detectors", cols, rows, c, r, 1, 1
+                    "_detectors", cols, rows, 1, 1, c, r
                 )
 
                 GroupDetectors(

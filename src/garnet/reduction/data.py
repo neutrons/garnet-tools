@@ -1499,7 +1499,7 @@ class LaueData(BaseDataModel):
 
         """
 
-        if tube_calibration is not None:
+        if tube_calibration is not None and self.grouping is None:
             if not mtd.doesExist("tube_table"):
                 LoadNexus(
                     Filename=tube_calibration, OutputWorkspace="tube_table"

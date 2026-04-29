@@ -1679,7 +1679,6 @@ class LaueData(BaseDataModel):
             LoadMask(
                 Instrument=self.ref_inst,
                 InputFile=detector_mask,
-                RefWorkspace=event_name,
                 OutputWorkspace="mask",
             )
 
@@ -1692,7 +1691,7 @@ class LaueData(BaseDataModel):
                 InputWorkspace="mask", OutputWorkspace="_detectors"
             )
 
-            pattern = self.grouping_list("_detectors", cols, rows, c, r, 1, 1)
+            pattern = self.grouping_list("_detectors", cols, rows, 1, 1, c, r)
 
             GroupDetectors(
                 InputWorkspace="mask",

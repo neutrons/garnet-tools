@@ -55,4 +55,10 @@ echo $INPUT
 source "${CONDA}" $CONDA_ENV
 echo python $WORKFLOW $INPUT $REDUCTION $PROCESSES
 
-python $WORKFLOW $INPUT $REDUCTION $PROCESSES
+START=$(date +%s)
+
+/usr/bin/time -v python $WORKFLOW $INPUT $REDUCTION $PROCESSES
+
+END=$(date +%s)
+ELAPSED=$((END - START))
+printf "Elapsed time: %02d:%02d:%02d\n" $((ELAPSED/3600)) $((ELAPSED%3600/60)) $((ELAPSED%60))

@@ -911,14 +911,13 @@ class BaseDataModel:
         return Qxmin, Qxmax, Qymin, Qymax, Qzmin, Qzmax
 
     def slice_roi(self, md, UB, hkl):
-        extents = self.slice_extents(UB, hkl)
         SliceMD(
             InputWorkspace=md,
             AxisAligned=False,
             BasisVector0="Q_sample_x,Angstrom^-1,1,0,0",
             BasisVector1="Q_sample_y,Angstrom^-1,0,1,0",
             BasisVector2="Q_sample_z,Angstrom^-1,0,0,1",
-            OutputExtents=extents,
+            OutputExtents=self.slice_extents(UB, hkl),
             OutputBins="1,1,1",
             OutputWorkspace=md + "_slice",
         )

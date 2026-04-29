@@ -174,9 +174,7 @@ class Integration(SubPlan):
 
             self.status = "{}: {:}/{:}".format(self.proc, self.run, len(runs))
 
-            data.load_data(
-                "data", self.plan["IPTS"], run, self.plan.get("Grouping")
-            )
+            data.load_data("data", self.plan["IPTS"], run)
 
             data.load_generate_normalization(
                 self.plan["VanadiumFile"], self.plan.get("FluxFile")
@@ -496,7 +494,7 @@ class Integration(SubPlan):
 
             _, hkl, *_ = peak_info
 
-            # harm = self.unit_key(hkl)
+            harm = self.unit_key(hkl)
 
             items = harmonics.get(key)
             if items is None:

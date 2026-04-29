@@ -755,9 +755,7 @@ class Integration(SubPlan):
 
             bins, extents, projections, transform = bin_extent
 
-            slice_extents = data.slice_extents(Q_vec, UB, hkl)
-
-            data.slice_roi(bank_name, slice_extents)
+            data.slice_roi(bank_name, UB, hkl)
 
             md = bank_name + "_slice"
 

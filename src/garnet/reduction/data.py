@@ -1901,6 +1901,20 @@ class LaueData(BaseDataModel):
             )
 
             if ratio < 1:
+                PreprocessDetectorsToMD(
+                    InputWorkspace="sa_van", OutputWorkspace="_detectors"
+                )
+
+                pattern = self.grouping_list(
+                    "_detectors", cols, rows, c, r, 1, 1
+                )
+
+                GroupDetectors(
+                    InputWorkspace="sa_van",
+                    GroupingPattern=pattern,
+                    OutputWorkspace="sa_van",
+                )
+
                 ratio = 1
 
             ConvertUnits(
@@ -2149,6 +2163,20 @@ class LaueData(BaseDataModel):
             )
 
             if ratio < 1:
+                PreprocessDetectorsToMD(
+                    InputWorkspace="bkg", OutputWorkspace="_detectors"
+                )
+
+                pattern = self.grouping_list(
+                    "_detectors", cols, rows, c, r, 1, 1
+                )
+
+                GroupDetectors(
+                    InputWorkspace="bkg",
+                    GroupingPattern=pattern,
+                    OutputWorkspace="bkg",
+                )
+
                 ratio = 1
 
             cc = int(np.sqrt(ratio))

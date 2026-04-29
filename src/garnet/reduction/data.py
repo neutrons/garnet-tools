@@ -1688,6 +1688,10 @@ class LaueData(BaseDataModel):
                 OutputWorkspace="mask_lite",
             )
 
+            PreprocessDetectorsToMD(
+                InputWorkspace="mask", OutputWorkspace="_detectors"
+            )
+
             pattern = self.grouping_list("_detectors", cols, rows, c, r, 1, 1)
 
             GroupDetectors(
@@ -1717,11 +1721,9 @@ class LaueData(BaseDataModel):
             )
 
         if mtd.doesExist("sa_mask"):
-            print("mask data sa")
             MaskDetectors(Workspace=event_name, MaskedWorkspace="sa_mask")
 
         if mtd.doesExist("mask"):
-            print("mask data mask")
             MaskDetectors(Workspace=event_name, MaskedWorkspace="mask")
 
     def convert_to_Q_sample(
@@ -2153,10 +2155,6 @@ class LaueData(BaseDataModel):
                 PreserveEvents=False,
             )
 
-            PreprocessDetectorsToMD(
-                InputWorkspace="bkg_lite", OutputWorkspace="_detectors"
-            )
-
             ratio = (
                 mtd[self.instrument].getNumberHistograms()
                 / mtd["bkg"].getNumberHistograms()
@@ -2178,6 +2176,10 @@ class LaueData(BaseDataModel):
                 )
 
                 ratio = 1
+
+            PreprocessDetectorsToMD(
+                InputWorkspace="bkg_lite", OutputWorkspace="_detectors"
+            )
 
             cc = int(np.sqrt(ratio))
             rr = int(np.sqrt(ratio))
@@ -2215,11 +2217,9 @@ class LaueData(BaseDataModel):
             )
 
             if mtd.doesExist("sa_mask"):
-                print("mask bkg sa")
                 MaskDetectors(Workspace="bkg", MaskedWorkspace="sa_mask")
 
             if mtd.doesExist("mask"):
-                print("mask bkg mask")
                 MaskDetectors(Workspace="bkg", MaskedWorkspace="mask")
 
             self.crop_for_normalization("bkg")

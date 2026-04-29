@@ -1950,6 +1950,7 @@ class LaueData(BaseDataModel):
             )
 
             ys = mtd["sa_van"].extractY()
+            print(ys.shape, np.shape(mtd["sa"].extractY()))
             mtd["sa"] *= 0
             for i, y in enumerate(ys):
                 mtd["sa"].setY(i, y)

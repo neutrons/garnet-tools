@@ -900,10 +900,10 @@ class BaseDataModel:
         UB = np.asarray(UB, dtype=float)
         hkl = np.asarray(hkl, dtype=float)
 
-        offsets = np.array(list(itertools.product([-0.5, 0.5], repeat=3)))
+        offsets = np.array(list(itertools.product([-1.0, 1.0], repeat=3)))
         corners_hkl = hkl[None, :] + offsets
 
-        corners_Q = (2 * np.pi * UB @ corners_hkl.T).T  # shape (8,3)
+        corners_Q = (2 * np.pi * UB @ corners_hkl.T).T
 
         Qxmin, Qymin, Qzmin = corners_Q.min(axis=0)
         Qxmax, Qymax, Qzmax = corners_Q.max(axis=0)

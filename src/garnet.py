@@ -86,19 +86,25 @@ class FormView(QWidget):
 
         name_label = QLabel("Config File:")
 
-        self.load_button = QPushButton("Load Config", self)
-        self.save_button = QPushButton("Save Config", self)
+        self.load_button = QPushButton("Load", self)
+        self.save_button = QPushButton("Save", self)
+        self.save_as_button = QPushButton("Save As", self)
         self.stop_button = QPushButton("Stop Process", self)
         self.stop_button.setIcon(qta.icon("fa6s.stop"))
 
         self.load_button.setIcon(qta.icon("fa6s.folder-open"))
         self.save_button.setIcon(qta.icon("fa6s.floppy-disk"))
+        self.save_as_button.setIcon(qta.icon("fa6s.file-export"))
+
+        self.dev_box = QCheckBox("vDev", self)
 
         load_save_layout.addWidget(name_label)
         load_save_layout.addWidget(self.output_line)
         load_save_layout.addWidget(self.load_button)
         load_save_layout.addWidget(self.save_button)
+        load_save_layout.addWidget(self.save_as_button)
         load_save_layout.addWidget(self.cpu_line)
+        load_save_layout.addWidget(self.dev_box)
         load_save_layout.addWidget(self.stop_button)
 
         layout.addLayout(load_save_layout)
@@ -1386,6 +1392,9 @@ class FormView(QWidget):
     def connect_save_config(self, save_config):
         self.save_button.clicked.connect(save_config)
 
+    def connect_save_as_config(self, save_as_config):
+        self.save_as_button.clicked.connect(save_as_config)
+
     def connect_switch_instrument(self, switch_instrument):
         self.instrument_combo.activated.connect(switch_instrument)
 
@@ -1688,6 +1697,8 @@ class FormView(QWidget):
         for grouping in groupings:
             self.grouping_combo.addItem(grouping)
 
+        self.auto_scale_dropdown(self.grouping_combo)
+
     def set_grouping(self, grouping):
         index = self.grouping_combo.findText(grouping)
         if index != -1:
@@ -1743,6 +1754,9 @@ class FormView(QWidget):
     def set_processes(self, cpu):
         self.cpu_line.setText(str(cpu))
 
+    def get_development(self):
+        return self.dev_box.isChecked()
+
 
 class FormPresenter:
     def __init__(self, view, model):
@@ -1761,6 +1775,7 @@ class FormPresenter:
         self.view.connect_load_flux(self.load_flux)
         self.view.connect_load_config(self.load_config)
         self.view.connect_save_config(self.save_config)
+        self.view.connect_save_as_config(self.save_config_as)
 
         self.view.connect_int_run_button(self.run_integration)
         self.view.connect_param_run_button(self.run_parametrization)
@@ -1819,7 +1834,9 @@ class FormPresenter:
         filename = self.view.get_config()
         proc = self.view.get_processes()
         if proc is not None and filename is not None:
-            command = self.model.command.format(arg, filename, proc)
+            dev = self.view.get_development()
+            dev_flag = "-d " if dev else ""
+            command = self.model.command.format(dev_flag, arg, filename, proc)
             self.view.run_command(command)
 
     def clear_satellite(self):
@@ -2158,6 +2175,17 @@ class FormPresenter:
 
             self.model.save_config(filename)
 
+    def save_config_as(self):
+        ipts = self.view.get_IPTS()
+        path = self.model.get_shared_file_path(ipts)
+        filename = self.view.save_config_file_dialog(path)
+
+        valid = self.model.validate_file(filename)
+
+        if filename and valid:
+            self.view.set_config(filename)
+            self.save_config()
+
     def load_int(self):
         params = self.model.get_int()
         if params is not None:
@@ -2278,7 +2306,7 @@ class FormPresenter:
 
 class FormModel:
     def __init__(self):
-        self.command = "/SNS/software/scd/reduce.sh -{} {} {}"
+        self.command = "/SNS/software/scd/reduce.sh {}-{} {} {}"
         self.reduction = ReductionPlan()
 
     def validate_file(self, filename, ext=".yaml"):

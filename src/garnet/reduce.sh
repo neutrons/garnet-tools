@@ -5,12 +5,14 @@ WORKFLOW="/SNS/software/scd/garnet_reduction/src/garnet/workflow.py"
 echo $WORKFLOW
 
 REDUCTION="norm"
+CONDA_ENV="scd-reduction-tools"
 
-while getopts htni FLAG; do
+while getopts htnifd FLAG; do
     case $FLAG in
         h)
             echo "/SNS/software/scd/reduce.sh -i[n] reduction.yaml processes"
             echo "/SNS/software/scd/reduce.sh -t reduction.yaml instrument"
+            echo "/SNS/software/scd/reduce.sh -d  use development version"
             exit 1
             ;;
         t)
@@ -21,6 +23,12 @@ while getopts htni FLAG; do
             ;;
         i)
             REDUCTION="int"
+            ;;
+        f)
+            REDUCTION="fit"
+            ;;
+        d)
+            CONDA_ENV="scd-reduction-tools-dev"
             ;;
     esac
 done
@@ -44,7 +52,7 @@ rm -rf ~/.cache/fontconfig
 
 echo $CONDA
 echo $INPUT
-source "${CONDA}" scd-reduction-tools-dev
+source "${CONDA}" $CONDA_ENV
 echo python $WORKFLOW $INPUT $REDUCTION $PROCESSES
 
 python $WORKFLOW $INPUT $REDUCTION $PROCESSES

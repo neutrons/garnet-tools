@@ -554,7 +554,7 @@ class Optimization:
 
         ub_inv = np.linalg.inv(self.get_UB()) / (2 * np.pi)
 
-        Qs, hkls = [], []
+        Qs, hkls, Isig = [], [], []
 
         for pk in mtd[peaks]:
             hkl = np.array(pk.getHKL())
@@ -566,10 +566,16 @@ class Optimization:
                 diff_hkl = np.abs(hkl - np.dot(ub_inv, Q))
 
                 if (diff_hkl < tol).all():
+                    intensity = pk.getIntensity()
+                    sigma = pk.getSigmaIntensity()
+                    intens_over_sig = intensity / sigma if sigma > 0 else 0.0
                     hkls.append(hkl)
                     Qs.append(Q)
+                    Isig.append(intens_over_sig)
 
-        self.Q, self.hkl = np.array(Qs), np.array(hkls)
+        self.Q = np.array(Qs)
+        self.hkl = np.array(hkls)
+        self.Isig = np.array(Isig)
 
         self.min_req = True if len(self.hkl) > 3 else False
 
@@ -708,7 +714,7 @@ class Optimization:
 
         return (a, b, c, alpha, beta, gamma, *params)
 
-    def residual(self, x, hkl, Q, fun, W=np.eye(3)):
+    def residual(self, x, hkl, Q, fun, W=np.eye(3), weights=None):
         """
         Optimization residual function.
 
@@ -723,7 +729,9 @@ class Optimization:
         fun : function
             Lattice constraint function.
         W: 3x3-array
-            Weight matrix
+            Weight matrix.
+        weights : 1d-array, optional
+            Per-peak scalar weights (e.g. I/σ). The default is None (uniform).
 
         Returns
         -------
@@ -741,6 +749,9 @@ class Optimization:
 
         wr = (np.einsum("ij,lj->li", UB, hkl) * 2 * np.pi - Q) @ W.T
 
+        if weights is not None:
+            wr *= weights[:, None]
+
         return wr.flatten()
 
     def whiten_weight_matrix(self, Q):
@@ -749,14 +760,24 @@ class Optimization:
         W = np.linalg.inv(L)
         return W
 
-    def optimize_lattice(self, cell):
+    def optimize_lattice(self, cell, n_cycles=5, sigma_cut=3.0):
         """
         Refine the orientation and lattice parameters under constraints.
+
+        Iterates least-squares refinement with I/σ weighting and σ-clipping
+        outlier rejection. After each cycle peaks whose unweighted residual
+        norm exceeds ``sigma_cut`` times the median are removed, and the next
+        cycle starts from the previous solution.
 
         Parameters
         ----------
         cell : str
-            Lattice centering to constrain paramters.
+            Lattice centering to constrain parameters.
+        n_cycles : int, optional
+            Maximum number of sigma-clipping cycles. The default is 5.
+        sigma_cut : float, optional
+            Outlier rejection threshold in units of the median residual norm.
+            The default is 3.0.
 
         """
 
@@ -793,9 +814,40 @@ class Optimization:
             W = self.whiten_weight_matrix(self.Q)
 
             x0 += (phi, theta, omega)
-            args = (self.hkl, self.Q, fun, W)
 
-            sol = scipy.optimize.least_squares(self.residual, x0=x0, args=args)
+            hkl = self.hkl.copy()
+            Q = self.Q.copy()
+            Isig = self.Isig.copy()
+
+            sol = None
+            for _ in range(n_cycles):
+                if len(hkl) <= len(x0):
+                    break
+
+                w_mean = Isig.mean()
+                weights = Isig / w_mean if w_mean > 0 else None
+
+                args = (hkl, Q, fun, W, weights)
+                sol = scipy.optimize.least_squares(
+                    self.residual, x0=x0, args=args
+                )
+
+                raw_res = self.residual(sol.x, hkl, Q, fun, W).reshape(-1, 3)
+                norms = np.sqrt((raw_res**2).sum(axis=1))
+
+                cutoff = sigma_cut * np.median(norms)
+                keep = norms <= cutoff
+
+                if keep.all():
+                    break
+
+                hkl = hkl[keep]
+                Q = Q[keep]
+                Isig = Isig[keep]
+                x0 = sol.x  # warm-start next cycle
+
+            if sol is None:
+                return
 
             a, b, c, alpha, beta, gamma, phi, theta, omega = fun(sol.x)
 
@@ -810,7 +862,7 @@ class Optimization:
             cov = (
                 np.linalg.inv(inv_cov)
                 if np.linalg.det(inv_cov) > 0
-                else np.zeros((3, 3))
+                else np.zeros((len(sol.x), len(sol.x)))
             )
 
             chi2dof = np.sum(sol.fun**2) / (sol.fun.size - sol.x.size)

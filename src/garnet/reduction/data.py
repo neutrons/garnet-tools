@@ -1878,7 +1878,9 @@ class LaueData(BaseDataModel):
                 OutputWorkspace=event_name,
             )
 
-    def load_generate_normalization(self, vanadium_file, flux_file):
+    def load_generate_normalization(
+        self, vanadium_file, flux_file, save=False
+    ):
         """
         Load a vanadium file and generate normalization data.
 
@@ -1964,7 +1966,10 @@ class LaueData(BaseDataModel):
             ys = mtd["sa_van"].extractY()
             nos = mtd["sa"].getSpectrumNumbers()
 
-            index_map = {spec: i for i, spec in enumerate(nos)}
+            if ratio > 1:
+                index_map = {i: i for i, spec in enumerate(nos)}
+            else:
+                index_map = {spec: i for i, spec in enumerate(nos)}
 
             nos = mtd["sa_van"].getSpectrumNumbers()
             for spec, y in zip(nos, ys):
@@ -1983,7 +1988,8 @@ class LaueData(BaseDataModel):
                 OutputWorkspace="sa",
             )
 
-            SaveNexus(Filename="/tmp/sa.nxs", InputWorkspace="sa")
+            if save:
+                SaveNexus(Filename="/tmp/sa.nxs", InputWorkspace="sa")
 
             ExtractMask(
                 InputWorkspace="sa",
@@ -2063,7 +2069,8 @@ class LaueData(BaseDataModel):
                 OutputWorkspace="flux",
             )
 
-            SaveNexus(Filename="/tmp/flux.nxs", InputWorkspace="flux")
+            if save:
+                SaveNexus(Filename="/tmp/flux.nxs", InputWorkspace="flux")
 
             self.k_min = mtd["flux"].getXDimension().getMinimum()
             self.k_max = mtd["flux"].getXDimension().getMaximum()

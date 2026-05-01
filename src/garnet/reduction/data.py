@@ -242,6 +242,13 @@ class BaseDataModel:
 
             # RemoveLogs(Workspace=self.instrument)
 
+            MaskDetectorsIf(
+                InputWorkspace=self.instrument,
+                Mode="DeselectIf",
+                Operator="NotFinite",
+                OutputWorkspace=self.instrument,
+            )
+
             Rebin(
                 InputWorkspace=self.instrument,
                 OutputWorkspace=self.instrument,
@@ -249,7 +256,7 @@ class BaseDataModel:
                 PreserveEvents=False,
             )
 
-            mtd[self.instrument] *= 0
+            mtd[self.instrument] *= np.inf
 
             assert mtd[self.instrument].run().hasProperty("gd_prtn_chrg")
 
@@ -1895,12 +1902,19 @@ class LaueData(BaseDataModel):
 
             RemoveLogs(Workspace="sa_van")
 
+            MaskDetectorsIf(
+                InputWorkspace="sa_van",
+                Mode="DeselectIf",
+                Operator="NotFinite",
+                OutputWorkspace="sa_van",
+            )
+
             ratio = (
                 mtd[self.instrument].getNumberHistograms()
                 / mtd["sa_van"].getNumberHistograms()
             )
 
-            if ratio < 1:
+            if ratio <= 1:
                 PreprocessDetectorsToMD(
                     InputWorkspace="sa_van", OutputWorkspace="_detectors"
                 )
@@ -1948,13 +1962,28 @@ class LaueData(BaseDataModel):
             )
 
             ys = mtd["sa_van"].extractY()
-            mtd["sa"] *= 0
-            for i, y in enumerate(ys):
-                mtd["sa"].setY(i, y)
+            nos = mtd["sa"].getSpectrumNumbers()
+
+            index_map = {spec: i for i, spec in enumerate(nos)}
+
+            nos = mtd["sa_van"].getSpectrumNumbers()
+            for spec, y in zip(nos, ys):
+                mtd["sa"].setY(index_map[spec], y)
+
+            for i, y in enumerate(mtd["sa"].extractY()):
+                if np.isclose(np.sum(y), 0):
+                    mtd["sa"].setY(i, y * np.inf)
 
             DeleteWorkspace(Workspace="sa_van")
 
-            MaskDetectorsIf(InputWorkspace="sa")
+            MaskDetectorsIf(
+                InputWorkspace="sa",
+                Mode="SelectIf",
+                Operator="NotFinite",
+                OutputWorkspace="sa",
+            )
+
+            SaveNexus(Filename="/tmp/sa.nxs", InputWorkspace="sa")
 
             ExtractMask(
                 InputWorkspace="sa",
@@ -1966,6 +1995,13 @@ class LaueData(BaseDataModel):
             LoadNexus(Filename=flux_file, OutputWorkspace="flux_van")
 
             RemoveLogs(Workspace="flux_van")
+
+            MaskDetectorsIf(
+                InputWorkspace="flux_van",
+                Mode="DeselectIf",
+                Operator="NotFinite",
+                OutputWorkspace="flux_van",
+            )
 
             ConvertToHistogram(
                 InputWorkspace=self.instrument,
@@ -2006,10 +2042,28 @@ class LaueData(BaseDataModel):
             )
 
             ys = mtd["flux_van"].extractY()
-            for i, y in enumerate(ys):
-                mtd["flux"].setY(i, y)
+            nos = mtd["flux"].getSpectrumNumbers()
+
+            index_map = {spec: i for i, spec in enumerate(nos)}
+
+            nos = mtd["flux_van"].getSpectrumNumbers()
+            for spec, y in zip(nos, ys):
+                mtd["flux"].setY(index_map[spec], y)
+
+            for i, y in enumerate(mtd["flux"].extractY()):
+                if np.isclose(np.sum(y), 0):
+                    mtd["flux"].setY(i, y * np.inf)
 
             DeleteWorkspace(Workspace="flux_van")
+
+            MaskDetectorsIf(
+                InputWorkspace="flux",
+                Mode="SelectIf",
+                Operator="NotFinite",
+                OutputWorkspace="flux",
+            )
+
+            SaveNexus(Filename="/tmp/flux.nxs", InputWorkspace="flux")
 
             self.k_min = mtd["flux"].getXDimension().getMinimum()
             self.k_max = mtd["flux"].getXDimension().getMaximum()
@@ -2158,7 +2212,7 @@ class LaueData(BaseDataModel):
                 / mtd["bkg"].getNumberHistograms()
             )
 
-            if ratio < 1:
+            if ratio <= 1:
                 PreprocessDetectorsToMD(
                     InputWorkspace="bkg", OutputWorkspace="_detectors"
                 )

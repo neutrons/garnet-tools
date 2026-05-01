@@ -34,7 +34,7 @@ from qtpy.QtGui import (
     QPixmap,
     QPainter,
 )
-from qtpy.QtCore import Qt, QProcess
+from qtpy.QtCore import Qt, QProcess, QElapsedTimer
 
 from qdarkstyle.light.palette import LightPalette
 import qdarkstyle
@@ -1360,6 +1360,8 @@ class FormView(QWidget):
         self.output.appendPlainText("Running shell command...\n")
         script, *args = command.split(" ")
         if self.process.state() == QProcess.NotRunning:
+            self._elapsed_timer = QElapsedTimer()
+            self._elapsed_timer.start()
             self.process.start(script, args)
         else:
             print("Process already running!")
@@ -1375,7 +1377,16 @@ class FormView(QWidget):
         self.output.appendPlainText(f"[stderr] {text}")
 
     def process_finished(self):
-        self.output.appendPlainText("Command finished.\n")
+        if hasattr(self, "_elapsed_timer"):
+            ms = self._elapsed_timer.elapsed()
+            h = ms // 3_600_000
+            m = (ms % 3_600_000) // 60_000
+            s = (ms % 60_000) // 1_000
+            self.output.appendPlainText(
+                f"Command finished. Elapsed time: {h:02d}:{m:02d}:{s:02d}\n"
+            )
+        else:
+            self.output.appendPlainText("Command finished.\n")
 
     def connect_int_run_button(self, run):
         self.int_run_button.clicked.connect(run)

@@ -1662,7 +1662,7 @@ class LaueData(BaseDataModel):
             Bank=bank_name.replace("bank", ""),
         )
 
-    def apply_mask(self, event_name, detector_mask):
+    def apply_mask(self, event_name, detector_mask, save=True):
         """
         Apply detector mask.
 
@@ -1705,17 +1705,29 @@ class LaueData(BaseDataModel):
                 OutputWorkspace="mask",
             )
 
-            ys = mtd["mask"].extractY()
             mtd["mask_lite"] *= 0
-            for i, y in enumerate(ys):
-                mtd["mask_lite"].setY(i, y)
+
+            ys = mtd["mask"].extractY()
+            # nos = mtd["mask_lite"].getSpectrumNumbers()
+
+            # index_map = {spec: i for i, spec in enumerate(nos)}
+
+            # nos = mtd["mask"].getSpectrumNumbers()
+            # index_map = {i: i for i, spec in enumerate(ys)}
+
+            for spec, y in enumerate(ys):
+                mtd["mask_lite"].setY(spec, y)
+
+            for i, y in enumerate(mtd["mask_lite"].extractY()):
+                if np.sum(y) > 0:
+                    mtd["mask_lite"].setY(i, y * np.inf)
 
             RenameWorkspace(InputWorkspace="mask_lite", OutputWorkspace="mask")
 
             MaskDetectorsIf(
                 InputWorkspace="mask",
-                Operator="Greater",
-                Value=0,
+                Mode="SelectIf",
+                Operator="NotFinite",
                 OutputWorkspace="mask",
             )
 
@@ -1724,6 +1736,9 @@ class LaueData(BaseDataModel):
                 UngroupDetectors=True,
                 OutputWorkspace="mask",
             )
+
+            if save:
+                SaveNexus(Filename="/tmp/mask.nxs", InputWorkspace="mask")
 
         if mtd.doesExist("sa_mask"):
             MaskDetectors(Workspace=event_name, MaskedWorkspace="sa_mask")
@@ -2169,6 +2184,7 @@ class LaueData(BaseDataModel):
         event_name,
         detector_calibration=None,
         tube_calibration=None,
+        save=True,
     ):
         """
         Load a background file and scale to data.
@@ -2188,11 +2204,7 @@ class LaueData(BaseDataModel):
 
         cols, rows = self.instrument_config["BankPixels"]
 
-        if (
-            not mtd.doesExist("bkg_md")
-            and not mtd.doesExist("bkg")
-            and filename is not None
-        ):
+        if not mtd.doesExist("bkg_md") and filename is not None:
             Load(
                 Filename=filename,
                 OutputWorkspace="bkg",
@@ -2298,7 +2310,13 @@ class LaueData(BaseDataModel):
                 OutputWorkspace="bkg",
             )
 
+            mtd["bkg"].run()["NormalizationFactor"] = pc_bkg
+            mtd["bkg"].run()["gd_prtn_chrg"] = pc_bkg
+
             self.convert_to_Q_lab("bkg", "bkg_md")
+
+            if save:
+                SaveNexus(Filename="/tmp/bkg.nxs", InputWorkspace="bkg")
 
             DeleteWorkspace(Workspace="bkg")
 

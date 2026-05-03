@@ -36,6 +36,7 @@ from mantid import config
 config["Q.convention"] = "Crystallography"
 
 import numpy as np
+from scipy.optimize import nnls
 
 centering_reflection = {
     "P": "Primitive",

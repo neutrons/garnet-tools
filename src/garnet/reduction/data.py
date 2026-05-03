@@ -240,6 +240,11 @@ class BaseDataModel:
             else:
                 LoadNexus(Filename=files[0], OutputWorkspace=self.instrument)
 
+            ExtractMonitors(
+                InputWorkspace=self.instrument,
+                DetectorWorkspace=self.instrument,
+            )
+
             # RemoveLogs(Workspace=self.instrument)
 
             MaskDetectorsIf(
@@ -1416,9 +1421,15 @@ class LaueData(BaseDataModel):
         self.set_goniometer(event_name)
 
     def grouping_list(self, ws, cols, rows, lite_c, lite_r, group_c, group_r):
-        det_map = np.asarray(mtd[ws].column(5)).reshape(
-            -1, cols // lite_c, rows // lite_r
-        )
+        det_ids_flat = np.asarray(mtd[ws].column(5))
+        n_per_bank = (cols // lite_c) * (rows // lite_r)
+        if len(det_ids_flat) % n_per_bank != 0:
+            raise ValueError(
+                f"grouping_list: detector count {len(det_ids_flat)} is not "
+                f"divisible by pixels-per-bank {n_per_bank} "
+                f"(cols={cols}, rows={rows}, lite_c={lite_c}, lite_r={lite_r})"
+            )
+        det_map = det_ids_flat.reshape(-1, cols // lite_c, rows // lite_r)
 
         nb, nc, nr = det_map.shape
 
@@ -1662,7 +1673,7 @@ class LaueData(BaseDataModel):
             Bank=bank_name.replace("bank", ""),
         )
 
-    def apply_mask(self, event_name, detector_mask, save=True):
+    def apply_mask(self, event_name, detector_mask, save=False):
         """
         Apply detector mask.
 
@@ -1708,15 +1719,9 @@ class LaueData(BaseDataModel):
             mtd["mask_lite"] *= 0
 
             ys = mtd["mask"].extractY()
-            # nos = mtd["mask_lite"].getSpectrumNumbers()
 
-            # index_map = {spec: i for i, spec in enumerate(nos)}
-
-            # nos = mtd["mask"].getSpectrumNumbers()
-            # index_map = {i: i for i, spec in enumerate(ys)}
-
-            for spec, y in enumerate(ys):
-                mtd["mask_lite"].setY(spec, y)
+            for i, y in enumerate(ys):
+                mtd["mask_lite"].setY(i, y)
 
             for i, y in enumerate(mtd["mask_lite"].extractY()):
                 if np.sum(y) > 0:
@@ -1793,9 +1798,7 @@ class LaueData(BaseDataModel):
                 InputWorkspace=md_name, OutputWorkspace=md_name
             )
 
-    def convert_to_Q_lab(
-        self, event_name, md_name, lorentz_corr=False, preproc_dets=None
-    ):
+    def convert_to_Q_lab(self, event_name, md_name, lorentz_corr=False):
         """
         Convert raw data to Q-lab.
 
@@ -1810,15 +1813,15 @@ class LaueData(BaseDataModel):
 
         """
 
-        self.preprocess_detectors(event_name)
+        # self.preprocess_detectors(event_name)
 
-        self.calculate_maximum_Q()
+        # self.calculate_maximum_Q()
 
         if mtd.doesExist(event_name):
             Q_min_vals, Q_max_vals = self.get_min_max_values()
 
-            if preproc_dets is None:
-                preproc_dets = "detectors"
+            # if preproc_dets is None:
+            #     preproc_dets = "detectors"
 
             ConvertToMD(
                 InputWorkspace=event_name,
@@ -1829,7 +1832,7 @@ class LaueData(BaseDataModel):
                 MinValues=Q_min_vals,
                 MaxValues=Q_max_vals,
                 OutputWorkspace=md_name,
-                PreprocDetectorsWS=preproc_dets,  # "detectors",
+                PreprocDetectorsWS="-",  # "detectors",
                 SplitInto=2,
                 MaxRecursionDepth=10,
             )
@@ -1914,6 +1917,14 @@ class LaueData(BaseDataModel):
 
         cols, rows = self.instrument_config["BankPixels"]
 
+        inst = mtd[self.instrument].getInstrument()
+
+        n_det_inst = inst.getNumberDetectors()
+        n_histo_inst = mtd[self.instrument].getNumberHistograms()
+
+        n_det_inst //= cols // c * rows // r
+        n_det_inst *= cols // c * rows // r
+
         if not mtd.doesExist("sa"):
             LoadNexus(Filename=vanadium_file, OutputWorkspace="sa_van")
 
@@ -1926,12 +1937,17 @@ class LaueData(BaseDataModel):
                 OutputWorkspace="sa_van",
             )
 
-            ratio = (
-                mtd[self.instrument].getNumberHistograms()
-                / mtd["sa_van"].getNumberHistograms()
-            )
+            inst = mtd["sa_van"].getInstrument()
 
-            if ratio <= 1:
+            n_det_van = inst.getNumberDetectors()
+            n_hist_van = mtd["sa_van"].getNumberHistograms()
+
+            n_det_van //= cols // c * rows // r
+            n_det_van *= cols // c * rows // r
+
+            lite_mode = n_det_van > n_det_inst
+
+            if lite_mode and n_hist_van == n_det_van:
                 PreprocessDetectorsToMD(
                     InputWorkspace="sa_van", OutputWorkspace="_detectors"
                 )
@@ -1947,6 +1963,11 @@ class LaueData(BaseDataModel):
                 )
 
                 ratio = 1
+            else:
+                ratio = max([n_histo_inst // n_hist_van, 1])
+
+            cc = int(np.sqrt(ratio))
+            rr = int(np.sqrt(ratio))
 
             ConvertUnits(
                 InputWorkspace=self.instrument,
@@ -1965,9 +1986,6 @@ class LaueData(BaseDataModel):
                 InputWorkspace="sa", OutputWorkspace="_detectors"
             )
 
-            cc = int(np.sqrt(ratio))
-            rr = int(np.sqrt(ratio))
-
             pattern = self.grouping_list(
                 "_detectors", cols, rows, c, r, cc, rr
             )
@@ -1979,16 +1997,9 @@ class LaueData(BaseDataModel):
             )
 
             ys = mtd["sa_van"].extractY()
-            nos = mtd["sa"].getSpectrumNumbers()
 
-            if ratio > 1:
-                index_map = {i: i for i, spec in enumerate(nos)}
-            else:
-                index_map = {spec: i for i, spec in enumerate(nos)}
-
-            nos = mtd["sa_van"].getSpectrumNumbers()
-            for spec, y in zip(nos, ys):
-                mtd["sa"].setY(index_map[spec], y)
+            for i, y in enumerate(ys):
+                mtd["sa"].setY(i, y)
 
             for i, y in enumerate(mtd["sa"].extractY()):
                 if np.isclose(np.sum(y), 0):
@@ -2003,14 +2014,19 @@ class LaueData(BaseDataModel):
                 OutputWorkspace="sa",
             )
 
-            if save:
-                SaveNexus(Filename="/tmp/sa.nxs", InputWorkspace="sa")
-
             ExtractMask(
                 InputWorkspace="sa",
                 UngroupDetectors=True,
                 OutputWorkspace="sa_mask",
             )
+
+            if save:
+                SaveNexus(Filename="/tmp/sa.nxs", InputWorkspace="sa")
+                SaveNexus(
+                    Filename="/tmp/sa_mask.nxs", InputWorkspace="sa_mask"
+                )
+
+            DeleteWorkspace(Workspace="_detectors")
 
         if not mtd.doesExist("flux"):
             LoadNexus(Filename=flux_file, OutputWorkspace="flux_van")
@@ -2184,7 +2200,7 @@ class LaueData(BaseDataModel):
         event_name,
         detector_calibration=None,
         tube_calibration=None,
-        save=True,
+        save=False,
     ):
         """
         Load a background file and scale to data.
@@ -2203,6 +2219,14 @@ class LaueData(BaseDataModel):
         c, r = list(map(int, grouping.split("x")))
 
         cols, rows = self.instrument_config["BankPixels"]
+
+        inst = mtd[self.instrument].getInstrument()
+
+        n_det_inst = inst.getNumberDetectors()
+        n_histo_inst = mtd[self.instrument].getNumberHistograms()
+
+        n_det_inst //= cols // c * rows // r
+        n_det_inst *= cols // c * rows // r
 
         if not mtd.doesExist("bkg_md") and filename is not None:
             Load(
@@ -2226,12 +2250,17 @@ class LaueData(BaseDataModel):
                 PreserveEvents=False,
             )
 
-            ratio = (
-                mtd[self.instrument].getNumberHistograms()
-                / mtd["bkg"].getNumberHistograms()
-            )
+            inst = mtd["bkg"].getInstrument()
 
-            if ratio <= 1:
+            n_det_van = inst.getNumberDetectors()
+            n_hist_van = mtd["bkg"].getNumberHistograms()
+
+            n_det_van //= cols // c * rows // r
+            n_det_van *= cols // c * rows // r
+
+            lite_mode = n_det_van > n_det_inst
+
+            if lite_mode and n_hist_van == n_det_van:
                 PreprocessDetectorsToMD(
                     InputWorkspace="bkg", OutputWorkspace="_detectors"
                 )
@@ -2247,13 +2276,15 @@ class LaueData(BaseDataModel):
                 )
 
                 ratio = 1
+            else:
+                ratio = max([n_histo_inst // n_hist_van, 1])
+
+            cc = int(np.sqrt(ratio))
+            rr = int(np.sqrt(ratio))
 
             PreprocessDetectorsToMD(
                 InputWorkspace="bkg_lite", OutputWorkspace="_detectors"
             )
-
-            cc = int(np.sqrt(ratio))
-            rr = int(np.sqrt(ratio))
 
             pattern = self.grouping_list(
                 "_detectors", cols, rows, c, r, cc, rr
@@ -2287,18 +2318,41 @@ class LaueData(BaseDataModel):
                 "bkg", detector_calibration, tube_calibration
             )
 
-            if mtd.doesExist("sa_mask"):
-                MaskDetectors(Workspace="bkg", MaskedWorkspace="sa_mask")
+            for ws in ["mask", "sa_mask"]:
+                if mtd.doesExist(ws):
+                    PreprocessDetectorsToMD(
+                        InputWorkspace=ws, OutputWorkspace="_detectors"
+                    )
 
-            if mtd.doesExist("mask"):
-                MaskDetectors(Workspace="bkg", MaskedWorkspace="mask")
+                    pattern = self.grouping_list(
+                        "_detectors", cols, rows, c, r, cc, rr
+                    )
+
+                    GroupDetectors(
+                        InputWorkspace=ws,
+                        GroupingPattern=pattern,
+                        OutputWorkspace="mask_bkg",
+                    )
+
+                    for i, y in enumerate(mtd["mask_bkg"].extractY()):
+                        if np.sum(y) > 0:
+                            mtd["mask_bkg"].setY(i, y * np.inf)
+
+                    MaskDetectorsIf(
+                        InputWorkspace="mask_bkg",
+                        Mode="SelectIf",
+                        Operator="NotFinite",
+                        OutputWorkspace="mask_bkg",
+                    )
+
+                    MaskDetectors(Workspace="bkg", MaskedWorkspace="mask_bkg")
+
+                    DeleteWorkspace(Workspace="mask_bkg")
 
             self.crop_for_normalization("bkg")
 
             if not mtd["bkg"].run().hasProperty("NormalizationFactor"):
                 NormaliseByCurrent(InputWorkspace="bkg", OutputWorkspace="bkg")
-
-            # pc_sig = mtd[event_name].run().getProperty("gd_prtn_chrg").value
 
             CreateSingleValuedWorkspace(
                 DataValue=pc_bkg, OutputWorkspace="pc_scale"
@@ -2319,6 +2373,8 @@ class LaueData(BaseDataModel):
                 SaveNexus(Filename="/tmp/bkg.nxs", InputWorkspace="bkg")
 
             DeleteWorkspace(Workspace="bkg")
+
+            DeleteWorkspace(Workspace="_detectors")
 
     def normalize_to_hkl(self, md, projections, extents, bins, symmetry=None):
         """

@@ -28,6 +28,7 @@ from garnet.plots.peaks import PeakPlot
 from garnet.config.instruments import beamlines
 from garnet.reduction.ub import UBModel, Optimization, Reorient, lattice_group
 from garnet.reduction.peaks import PeaksModel, PeakModel, centering_reflection
+from garnet.reduction.resolution import ResolutionEllipsoid
 from garnet.reduction.data import DataModel
 from garnet.reduction.plan import SubPlan
 
@@ -282,11 +283,17 @@ class Integration(SubPlan):
                 centroid=False,
             )
 
+            res_file = self.get_plot_file("run#{}_res".format(run))
+
+            res = ResolutionEllipsoid("peaks", r_cut=r_cut)
+
+            res.fit()
+            res.plot_diagnostics(res_file)
+            res.apply()
+
             pk_file = self.get_diagnostic_file("run#{}_peaks".format(run))
 
             peaks.save_peaks(pk_file, "peaks")
-
-            self.r0, self.r1, self.r2 = [r_cut / 3] * 3
 
             data.delete_workspace("md")
 
@@ -516,7 +523,7 @@ class Integration(SubPlan):
 
             ellipsoid = PeakEllipsoid()
             ellipsoid.update_constraints(gQ0, gQ1, gQ2, gdQ)
-            ellipsoid.update_radii(self.r0, self.r1, self.r2)
+            ellipsoid.reset_radii()
 
             args = (gQ0, gQ1, gQ2, gd, gn, gdQ, gQ)
             fit_params = ellipsoid.fit(*args)
@@ -727,8 +734,6 @@ class Integration(SubPlan):
 
             hkl = peak.get_hkl(i)
 
-            Q_vec = peak.get_sample_Q(i)
-
             lamda = peak.get_wavelength(i)
 
             angles = peak.get_angles(i)
@@ -747,7 +752,9 @@ class Integration(SubPlan):
 
             bank_name = peak.get_bank_name(i)
 
-            bin_params = UB, hkl, lamda, R, two_theta, az_phi, r_cut, dQ
+            shape = peak.get_peak_shape(i)
+
+            bin_params = UB, hkl, lamda, R, two_theta, az_phi, shape, dQ
 
             bin_extent = self.bin_extent(*bin_params)
 
@@ -884,16 +891,25 @@ class Integration(SubPlan):
         R,
         two_theta,
         az_phi,
-        r_cut,
+        shape,
         dQ,
-        max_offset=0.5,
         bin_min=21,
         bin_max=21,
     ):
-        bins = np.clip(1 + np.floor(r_cut / dQ).astype(int), bin_min, bin_max)
-
         n, u, v = self.bin_axes(R, two_theta, az_phi)
         projections = [n, u, v]
+
+        params = self.project_ellipsoid_parameters(shape, projections)
+
+        c0, c1, c2, r0, r1, r2, v0, v1, v2 = params
+
+        U = np.column_stack([v0, v1, v2])
+        V = np.diag([r0**2, r1**2, r2**2])
+
+        S = np.dot(np.dot(U, V), U.T)
+        r_cut = 3 * np.sqrt(np.diag(S))
+
+        bins = np.clip(1 + np.floor(r_cut / dQ).astype(int), bin_min, bin_max)
 
         W = np.column_stack(projections)
         A = 2 * np.pi * (W.T @ UB)
@@ -907,9 +923,9 @@ class Integration(SubPlan):
 
         extents = np.array(
             [
-                [Q0 - r_cut, Q0 + r_cut],
-                [Q1 - r_cut, Q1 + r_cut],
-                [Q2 - r_cut, Q2 + r_cut],
+                [Q0 - r_cut[0], Q0 + r_cut[0]],
+                [Q1 - r_cut[1], Q1 + r_cut[1]],
+                [Q2 - r_cut[2], Q2 + r_cut[2]],
             ]
         )
 
@@ -963,13 +979,10 @@ class PeakEllipsoid:
     def copy_combine(self):
         self.combine_params = self.params.copy()
 
-    def update_radii(self, r0, r1, r2):
-        if r0 < self.params["r0"].max and r0 > self.params["r0"].min:
-            self.params["r0"].set(value=r0)
-        if r1 < self.params["r1"].max and r1 > self.params["r1"].min:
-            self.params["r1"].set(value=r1)
-        if r2 < self.params["r2"].max and r2 > self.params["r2"].min:
-            self.params["r2"].set(value=r2)
+    def reset_radii(self):
+        self.params["r0"].set(value=2 * self.params["r0"].min)
+        self.params["r1"].set(value=2 * self.params["r1"].min)
+        self.params["r2"].set(value=2 * self.params["r2"].min)
 
         self.params["u0"].set(value=0)
         self.params["u1"].set(value=0)
@@ -2149,15 +2162,13 @@ class PeakEllipsoid:
         pk = kernel > 0
         bkg = kernel > 0
 
-        I, sig, A, B = self.matched_filter(d_int, n_int, pk, bkg, kernel)
+        I, sig, _, _ = self.matched_filter(d_int, n_int, pk, bkg, kernel)
 
         y = d / n
         y[mask] = np.nan
 
-        if B <= 0 or not np.isfinite(B):
-            B = np.nanmin(y)
-        if A <= 0 or not np.isfinite(A):
-            A = np.nanmax(y) - B
+        B = np.nanpercentile(y, 15)
+        A = np.nanpercentile(y, 85) - B
 
         if A <= 0 or not np.isfinite(A):
             A = 1
@@ -2250,17 +2261,17 @@ class PeakEllipsoid:
 
         args_3d = [x0, x1, x2, y3d, e3d]
 
-        self.params["c0"].set(vary=est1d_0)
-        self.params["c1"].set(vary=est1d_1)
-        self.params["c2"].set(vary=est1d_2)
+        self.params["c0"].set(vary=True)
+        self.params["c1"].set(vary=True)
+        self.params["c2"].set(vary=True)
 
         self.params["u0"].set(vary=False)
         self.params["u1"].set(vary=False)
         self.params["u2"].set(vary=False)
 
-        self.params["r0"].set(vary=est1d_0)
-        self.params["r1"].set(vary=est1d_1)
-        self.params["r2"].set(vary=est1d_2)
+        self.params["r0"].set(vary=True)
+        self.params["r1"].set(vary=True)
+        self.params["r2"].set(vary=True)
 
         out = Minimizer(
             self.residual,
@@ -2284,13 +2295,41 @@ class PeakEllipsoid:
         self.params["c1"].set(vary=False)
         self.params["c2"].set(vary=False)
 
-        self.params["u0"].set(vary=est3d)
-        self.params["u1"].set(vary=est3d)
-        self.params["u2"].set(vary=est3d)
+        self.params["u0"].set(vary=True)
+        self.params["u1"].set(vary=True)
+        self.params["u2"].set(vary=True)
 
-        self.params["r0"].set(vary=est3d)
-        self.params["r1"].set(vary=est3d)
-        self.params["r2"].set(vary=est3d)
+        self.params["r0"].set(vary=True)
+        self.params["r1"].set(vary=True)
+        self.params["r2"].set(vary=True)
+
+        out = Minimizer(
+            self.residual,
+            self.params,
+            fcn_args=(args_1d, args_2d, args_3d),
+            nan_policy="omit",
+        )
+
+        result = out.minimize(
+            method="least_squares",
+            jac=self.jacobian,
+            max_nfev=30,
+        )
+
+        if report_fit:
+            print(fit_report(result))
+
+        self.params["c0"].set(vary=True)
+        self.params["c1"].set(vary=True)
+        self.params["c2"].set(vary=True)
+
+        self.params["u0"].set(vary=False)
+        self.params["u1"].set(vary=False)
+        self.params["u2"].set(vary=False)
+
+        self.params["r0"].set(vary=True)
+        self.params["r1"].set(vary=True)
+        self.params["r2"].set(vary=True)
 
         out = Minimizer(
             self.residual,

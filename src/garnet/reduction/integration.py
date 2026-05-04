@@ -492,129 +492,98 @@ class Integration(SubPlan):
         return tuple(np.round(v / tol).astype(int).tolist())
 
     def integrate_peaks(self, data):
-        harmonics = {}
+        result = {}
 
         for key, value in data.items():
             data_info, peak_info, index = value
 
             Q0, Q1, Q2, d, n, dQ, Q, projections = data_info
 
-            _, hkl, *_ = peak_info
+            (
+                peak_file,
+                hkl,
+                d_spacing,
+                wavelength,
+                angles,
+                goniometer,
+            ) = peak_info
 
-            harm = self.unit_key(hkl)
-
-            items = harmonics.get(key)
-            if items is None:
-                gQ0, gQ1, gQ2 = Q0.copy(), Q1.copy(), Q2.copy()
-                items = [], gQ0, gQ1, gQ2, d * 0, n * 0, dQ, Q * 1
-            keys, gQ0, gQ1, gQ2, gd, gn, gdQ, gQ = items
-            keys.append(key)
-            gd = self.add_with_padding(gd, d)
-            gn = self.add_with_padding(gn, n)
-
-            items = keys, gQ0, gQ1, gQ2, gd, gn, gdQ, gQ
-
-            harmonics[key] = items
-
-        result = {}
-
-        for harm, items in harmonics.items():
-            keys, gQ0, gQ1, gQ2, gd, gn, gdQ, gQ = items
+            print(self.status + " 2/2 {:}/{:}".format(index, self.total))
 
             ellipsoid = PeakEllipsoid()
-            ellipsoid.update_constraints(gQ0, gQ1, gQ2, gdQ)
+            ellipsoid.update_constraints(Q0, Q1, Q2, dQ)
             ellipsoid.reset_radii()
 
-            args = (gQ0, gQ1, gQ2, gd, gn, gdQ, gQ)
+            args = (Q0, Q1, Q2, d, n, dQ, Q)
             fit_params = ellipsoid.fit(*args)
 
-            for key in keys:
-                value = data[key]
+            intens_params = None
+            if fit_params is not None:
+                intens_params = ellipsoid.extract_result(*fit_params, Q)
 
-                data_info, peak_info, index = value
+                if intens_params is None:
+                    result[key] = None
+                    print("Cannot extract fit")
+                    assert False
 
-                Q0, Q1, Q2, d, n, dQ, Q, projections = data_info
+                c, S, *best_fit = ellipsoid.best_fit
 
-                (
-                    peak_file,
-                    hkl,
-                    d_spacing,
-                    wavelength,
-                    angles,
-                    goniometer,
-                ) = peak_info
+                shape = self.revert_ellipsoid_parameters(
+                    intens_params, projections
+                )
 
-                print(self.status + " 2/2 {:}/{:}".format(index, self.total))
+                norm_params = Q0, Q1, Q2, d, n, c, S
 
-                intens_params = None
-                if fit_params is not None:
-                    intens_params = ellipsoid.extract_fit(Q0, Q1, Q2, d, n, Q)
+                try:
+                    intens, sig = ellipsoid.integrate(*norm_params)
+                except Exception as e:
+                    print("Exception extracting intensity: {}".format(e))
+                    print(traceback.format_exc())
+                    result[key] = None
 
-                    if intens_params is None:
-                        result[key] = None
-                        print("Cannot extract fit")
-                        assert False
+                info = ellipsoid.info
+                best_prof = ellipsoid.best_prof
+                best_proj = ellipsoid.best_proj
+                data_norm_fit = ellipsoid.data_norm_fit
+                redchi2 = ellipsoid.redchi2
+                intensity = ellipsoid.intensity
+                sigma = ellipsoid.sigma
+                peak_background_mask = ellipsoid.peak_background_mask
+                integral = ellipsoid.integral
+                matched_filter = ellipsoid.filter
 
-                    c, S, *best_fit = ellipsoid.best_fit
+                if self.make_plot:
+                    self.peak_plot.add_ellipsoid_fit(best_fit)
 
-                    shape = self.revert_ellipsoid_parameters(
-                        intens_params, projections
+                    self.peak_plot.add_profile_fit(best_prof)
+
+                    self.peak_plot.add_projection_fit(best_proj)
+
+                    self.peak_plot.add_ellipsoid(c, S)
+
+                    self.peak_plot.update_envelope(*peak_background_mask)
+
+                    self.peak_plot.add_peak_info(
+                        hkl, d_spacing, wavelength, angles, goniometer
                     )
 
-                    norm_params = Q0, Q1, Q2, d, n, c, S
+                    self.peak_plot.add_peak_stats(redchi2, intensity, sigma)
+
+                    self.peak_plot.add_data_norm_fit(*data_norm_fit)
+
+                    self.peak_plot.add_integral_fit(integral)
+
+                    self.peak_plot.add_filter(matched_filter)
 
                     try:
-                        intens, sig = ellipsoid.integrate(*norm_params)
+                        self.peak_plot.save_plot(peak_file)
                     except Exception as e:
-                        print("Exception extracting intensity: {}".format(e))
+                        print("Exception saving figure: {}".format(e))
                         print(traceback.format_exc())
-                        result[key] = None
 
-                    info = ellipsoid.info
-                    best_prof = ellipsoid.best_prof
-                    best_proj = ellipsoid.best_proj
-                    data_norm_fit = ellipsoid.data_norm_fit
-                    redchi2 = ellipsoid.redchi2
-                    intensity = ellipsoid.intensity
-                    sigma = ellipsoid.sigma
-                    peak_background_mask = ellipsoid.peak_background_mask
-                    integral = ellipsoid.integral
-                    matched_filter = ellipsoid.filter
+                extra_info = [*info, *shape[:3], self.cntrt]
 
-                    if self.make_plot:
-                        self.peak_plot.add_ellipsoid_fit(best_fit)
-
-                        self.peak_plot.add_profile_fit(best_prof)
-
-                        self.peak_plot.add_projection_fit(best_proj)
-
-                        self.peak_plot.add_ellipsoid(c, S)
-
-                        self.peak_plot.update_envelope(*peak_background_mask)
-
-                        self.peak_plot.add_peak_info(
-                            hkl, d_spacing, wavelength, angles, goniometer
-                        )
-
-                        self.peak_plot.add_peak_stats(
-                            redchi2, intensity, sigma
-                        )
-
-                        self.peak_plot.add_data_norm_fit(*data_norm_fit)
-
-                        self.peak_plot.add_integral_fit(integral)
-
-                        self.peak_plot.add_filter(matched_filter)
-
-                        try:
-                            self.peak_plot.save_plot(peak_file)
-                        except Exception as e:
-                            print("Exception saving figure: {}".format(e))
-                            print(traceback.format_exc())
-
-                    extra_info = [*info, *shape[:3], self.cntrt]
-
-                    result[key] = intens, sig, shape, extra_info, hkl
+                result[key] = intens, sig, shape, extra_info, hkl
 
         return result
 
@@ -760,14 +729,12 @@ class Integration(SubPlan):
 
             bins, extents, projections, transform = bin_extent
 
-            data.slice_roi(bank_name, UB, hkl)
-
-            md = bank_name + "_slice"
+            md = bank_name
 
             data.normalize_to_hkl(md, transform, extents, bins)
 
-            d, _, Q0, Q1, Q2 = data.extract_bin_info(md + "_data")
-            n, _, Q0, Q1, Q2 = data.extract_bin_info(md + "_norm")
+            d, _, Q0, Q1, Q2 = data.extract_bin_info(bank_name + "_data")
+            n, _, Q0, Q1, Q2 = data.extract_bin_info(bank_name + "_norm")
 
             data.check_volume_preservation(md + "_result")
 
@@ -1934,18 +1901,18 @@ class PeakEllipsoid:
 
         S_inv = inv_S.copy()
 
-        # s = np.sqrt(scipy.stats.chi2.ppf(0.997, df=3))
-        # S_blur = np.diag((np.array(self.voxels(x0, x1, x2)) * 0.6) ** 2 * s)
+        s = np.sqrt(scipy.stats.chi2.ppf(0.997, df=3))
+        S_blur = np.diag((np.array(self.voxels(x0, x1, x2)) * 0.6) ** 2 * s)
 
-        # S = np.linalg.inv(inv_S) - S_blur
+        S = np.linalg.inv(inv_S) - S_blur
 
-        # evals, evecs = np.linalg.eigh(S)
-        # evals = np.maximum(evals, 1e-12)
-        # S = evecs @ np.diag(evals) @ evecs.T
-
-        # inv_S = np.linalg.inv(S)
+        evals, evecs = np.linalg.eigh(S)
+        evals = np.maximum(evals, 1e-12)
+        S = evecs @ np.diag(evals) @ evecs.T
 
         args = x0, x1, x2, c, inv_S
+
+        inv_S = np.linalg.inv(S)
 
         A0 = self.params["A1d_0"]
         A1 = self.params["A1d_1"]
@@ -2040,10 +2007,6 @@ class PeakEllipsoid:
 
         self.intensity.append(I)
         self.sigma.append(s)
-
-        # return c, c_err, inv_S, y1, y2, y3
-
-        # c, c_err, inv_S, vals1d, vals2d, vals3d = weights
 
         if not np.linalg.det(inv_S) > 0:
             print("Improper optimal covariance")
@@ -2141,19 +2104,19 @@ class PeakEllipsoid:
         kernel = p / p_int
 
         if mode.startswith("1d"):
-            i = self.estimate_center_weighted(d_int, n_int, kernel)
-            if mode.endswith("0"):
-                self.params["c0"].set(value=x0[i, 0, 0])
-            elif mode.endswith("1"):
-                self.params["c1"].set(value=x1[0, i, 0])
-            else:
-                self.params["c2"].set(value=x2[0, 0, i])
+            # i = self.estimate_center_weighted(d_int, n_int, kernel)
+            # if mode.endswith("0"):
+            #     self.params["c0"].set(value=x0[i, 0, 0])
+            # elif mode.endswith("1"):
+            #     self.params["c1"].set(value=x1[0, i, 0])
+            # else:
+            #     self.params["c2"].set(value=x2[0, 0, i])
 
-            c0 = self.params["c0"].value
-            c1 = self.params["c1"].value
-            c2 = self.params["c2"].value
+            # c0 = self.params["c0"].value
+            # c1 = self.params["c1"].value
+            # c2 = self.params["c2"].value
 
-            c = c0, c1, c2
+            # c = c0, c1, c2
 
             p = self.gaussian(x0, x1, x2, c, inv_S, mode=mode)
 
@@ -2261,95 +2224,65 @@ class PeakEllipsoid:
 
         args_3d = [x0, x1, x2, y3d, e3d]
 
-        self.params["c0"].set(vary=True)
-        self.params["c1"].set(vary=True)
-        self.params["c2"].set(vary=True)
+        protocol = [False] * 9
+        n_iter = 10
 
-        self.params["u0"].set(vary=False)
-        self.params["u1"].set(vary=False)
-        self.params["u2"].set(vary=False)
+        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
-        self.params["r0"].set(vary=True)
-        self.params["r1"].set(vary=True)
-        self.params["r2"].set(vary=True)
+        protocol = [True] * 3 + [False] * 6
+        n_iter = 10
 
-        out = Minimizer(
-            self.residual,
-            self.params,
-            fcn_args=(args_1d, args_2d, args_3d),
-            nan_policy="omit",
-        )
+        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
-        result = out.minimize(
-            method="least_squares",
-            jac=self.jacobian,
-            max_nfev=30,
-        )
+        protocol = [False] * 6 + [True] * 3
+        n_iter = 20
 
-        if report_fit:
-            print(fit_report(result))
+        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
-        self.params = result.params
+        protocol = [False] * 3 + [True] * 3 + [True] * 3
+        n_iter = 20
 
-        self.params["c0"].set(vary=False)
-        self.params["c1"].set(vary=False)
-        self.params["c2"].set(vary=False)
+        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
-        self.params["u0"].set(vary=True)
-        self.params["u1"].set(vary=True)
-        self.params["u2"].set(vary=True)
+        protocol = [True] * 3 + [False] * 3 + [True] * 3
+        n_iter = 20
 
-        self.params["r0"].set(vary=True)
-        self.params["r1"].set(vary=True)
-        self.params["r2"].set(vary=True)
-
-        out = Minimizer(
-            self.residual,
-            self.params,
-            fcn_args=(args_1d, args_2d, args_3d),
-            nan_policy="omit",
-        )
-
-        result = out.minimize(
-            method="least_squares",
-            jac=self.jacobian,
-            max_nfev=30,
-        )
-
-        if report_fit:
-            print(fit_report(result))
-
-        self.params["c0"].set(vary=True)
-        self.params["c1"].set(vary=True)
-        self.params["c2"].set(vary=True)
-
-        self.params["u0"].set(vary=False)
-        self.params["u1"].set(vary=False)
-        self.params["u2"].set(vary=False)
-
-        self.params["r0"].set(vary=True)
-        self.params["r1"].set(vary=True)
-        self.params["r2"].set(vary=True)
-
-        out = Minimizer(
-            self.residual,
-            self.params,
-            fcn_args=(args_1d, args_2d, args_3d),
-            nan_policy="omit",
-        )
-
-        result = out.minimize(
-            method="least_squares",
-            jac=self.jacobian,
-            max_nfev=30,
-        )
-
-        if report_fit:
-            print(fit_report(result))
-
-        self.params = result.params
+        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
         return args_1d, args_2d, args_3d
+
+    def sweep(
+        self, args_1d, args_2d, args_3d, protocol, n_iter=50, report_fit=False
+    ):
+        self.params["c0"].set(vary=protocol[0])
+        self.params["c1"].set(vary=protocol[1])
+        self.params["c2"].set(vary=protocol[2])
+
+        self.params["u0"].set(vary=protocol[3])
+        self.params["u1"].set(vary=protocol[4])
+        self.params["u2"].set(vary=protocol[5])
+
+        self.params["r0"].set(vary=protocol[6])
+        self.params["r1"].set(vary=protocol[7])
+        self.params["r2"].set(vary=protocol[8])
+
+        out = Minimizer(
+            self.residual,
+            self.params,
+            fcn_args=(args_1d, args_2d, args_3d),
+            nan_policy="omit",
+        )
+
+        result = out.minimize(
+            method="least_squares",
+            jac=self.jacobian,
+            max_nfev=n_iter,
+        )
+
+        if report_fit:
+            print(fit_report(result))
+
+        self.params = result.params
 
     def extract_fit(self, x0_prof, x1_proj, x2_proj, d, n, xmod):
         x0 = x0_prof - xmod
@@ -2741,6 +2674,15 @@ class PeakEllipsoid:
         result = self.matched_filter(d, n, pk, bkg, kernel)
 
         I_filt, sig_filt, A_filt, b_filt = result
+
+        # Inflate the matched-filter uncertainty by sqrt(max(1, chi2_red))
+        # when the 3-D Gaussian model fit is poor (overdispersion correction).
+        # self.redchi2 is [chi2_1d_list, chi2_2d_list, chi2_3d_scalar].
+        if self.redchi2:
+            chi2_3d = self.redchi2[-1]
+            if np.isfinite(chi2_3d) and chi2_3d > 1:
+                sig_filt = sig_filt * np.sqrt(chi2_3d)
+                result = I_filt, sig_filt, A_filt, b_filt
 
         self.filter = result
 

@@ -912,7 +912,7 @@ class BaseDataModel:
         UB = np.asarray(UB, dtype=float)
         hkl = np.asarray(hkl, dtype=float)
 
-        offsets = np.array(list(itertools.product([-1.0, 1.0], repeat=3)))
+        offsets = np.array(list(itertools.product([-0.8, 0.8], repeat=3)))
         corners_hkl = hkl[None, :] + offsets
 
         corners_Q = (2 * np.pi * UB @ corners_hkl.T).T

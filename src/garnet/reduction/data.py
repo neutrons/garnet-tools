@@ -843,7 +843,7 @@ class BaseDataModel:
 
         """
 
-        dl = 0 * lamda
+        dl = 1e-3 * lamda
         da = 2 * self.dt
 
         theta = 0.5 * np.deg2rad(two_theta)
@@ -859,15 +859,9 @@ class BaseDataModel:
         return np.array([dQ0, dQ1, dQ2]) * da
 
     def clear_norm(self, md):
-        if mtd.doesExist(md + "_data"):
-            DeleteWorkspace(Workspace=md + "_data")
-        if mtd.doesExist(md + "_norm"):
-            DeleteWorkspace(Workspace=md + "_norm")
-
-        if mtd.doesExist(md + "_bkg_data"):
-            DeleteWorkspace(Workspace=md + "_bkg_data")
-        if mtd.doesExist(md + "_bkg_norm"):
-            DeleteWorkspace(Workspace=md + "_bkg_norm")
+        for suffix in ["_data", "_norm", "_bkg_data", "_bkg_norm", "_result"]:
+            if mtd.doesExist(md + suffix):
+                DeleteWorkspace(Workspace=md + suffix)
 
     def bin_in_Q(self, md, extents, bins, projections):
         """

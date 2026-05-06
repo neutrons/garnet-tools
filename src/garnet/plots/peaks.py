@@ -1489,3 +1489,13 @@ class PeakPlot(BasePlot):
                 self._sci_notation(intensity[-1]), intensity[-1] / sigma[-1]
             )
         )
+
+    def save_plot(self, filename):
+        """Save the current peak figure and then reinitialize for the next peak.
+
+        Overrides BasePlot.save_plot to explicitly close the figure after saving,
+        preventing memory from accumulating across many peaks.
+        """
+        self.fig.savefig(filename, bbox_inches="tight")
+        plt.close(self.fig)
+        self.__init__()

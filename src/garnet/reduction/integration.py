@@ -2498,11 +2498,11 @@ class PeakEllipsoid:
         n_pk = n[pk].copy()
         n_bkg = n[bkg].copy()
 
-        # k_pk = kernel[pk]
-        # k_bkg = kernel[bkg]
+        k_pk = kernel[pk]
+        k_bkg = kernel[bkg]
 
         bkg_cnts = np.nansum(d_bkg)
-        bkg_norm = np.nansum(n_bkg)
+        bkg_norm = np.nansum(n_bkg * k_bkg)
 
         if bkg_cnts == 0.0:
             bkg_cnts = float("nan")
@@ -2518,7 +2518,7 @@ class PeakEllipsoid:
             b_err = 0
 
         pk_cnts = np.nansum(d_pk)
-        pk_norm = np.nansum(n_pk)
+        pk_norm = np.nansum(n_pk * k_pk)
 
         if pk_cnts == 0.0:
             pk_cnts = float("nan")
@@ -2528,7 +2528,7 @@ class PeakEllipsoid:
         vol_pk = float(core.sum())
         vol_bkg = float(shell.sum())
 
-        vol = vol_pk
+        vol = k_pk.sum()
 
         ratio = vol_pk / vol_bkg if vol_bkg > 0 else 0
 

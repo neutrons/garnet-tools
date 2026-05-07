@@ -13,7 +13,7 @@ class ResolutionEllipsoid:
         self,
         peaks_ws,
         r_cut=1.0,
-        sig_noise_cut=20.0,
+        sig_noise_cut=5.0,
         min_peaks=10,
         scale_bounds=(0.5, 2.0),
     ):
@@ -124,7 +124,9 @@ class ResolutionEllipsoid:
             ]
         )
 
-        x = kf_hat
+        x = kf_hat - ki_hat
+        x /= np.linalg.norm(x)
+
         z = np.cross(ki_hat, kf_hat)
         z /= np.linalg.norm(z)
 
@@ -140,6 +142,25 @@ class ResolutionEllipsoid:
         return R.T @ V_lab
 
     def _model_design_lab_wilkinson(self, peak):
+        """
+        Approximation to the resolution function.
+
+        J. B. Forsyth, Single Crystal Pulsed Neutron Diffraction, in
+        Chemical Crystallography with Pulsed Neutrons and Synchroton X-Rays,
+        edited by M. A. Carrondo and G. A. Jeffrey (Springer Netherlands,
+        Dordrecht, 1988), pp. 117–135.
+
+        Parameters
+        ----------
+        peak : peak object
+            Single crystal peak.
+
+        Returns
+        -------
+        A : ndarray
+            Design matrix.
+
+        """
         two_theta = peak.getScattering()
         lamda = peak.getWavelength()
 
@@ -149,28 +170,25 @@ class ResolutionEllipsoid:
         s = np.sin(theta)
         ct = 1.0 / np.tan(theta)
 
-        A = np.zeros((3, 5), dtype=float)
+        A = np.zeros((3, 4), dtype=float)
 
-        # parameters:
-        # x[0] = (sigma_t / T)^2 = (sigma_lambda / lambda)^2
-        # x[1] = sigma_alpha_i^2
-        # x[2] = sigma_alpha_f^2
-        # x[3] = sigma_beta_i^2 + sigma_beta_f^2, or one combined beta term
-        # x[4] = eta_s^2
+        # parameters
+        # x0 = (dlambda/lambda)^2
+        # x1 = sigma_alpha^2
+        # x2 = sigma_beta^2
+        # x3 = eta_s^2
 
-        # Hx
+        # Hn
         A[0, 0] = H**2
-        A[0, 1] = H**2 * ct**2 / 4.0
-        A[0, 2] = H**2 * ct**2 / 4.0
+        A[0, 1] = H**2 * ct**2
 
-        # Hy
-        A[1, 1] = H**2 / 4.0
-        A[1, 2] = H**2 / 4.0
-        A[1, 4] = H**2
+        # Hu
+        A[1, 1] = H**2
+        A[1, 3] = H**2
 
-        # Hz
-        A[2, 3] = H**2 / (4.0 * s**2)
-        A[2, 4] = H**2
+        # Hv
+        A[2, 2] = H**2 / s**2
+        A[2, 3] = H**2
 
         return A
 
@@ -180,9 +198,8 @@ class ResolutionEllipsoid:
         x = np.array(
             [
                 self.model["sigma_dlambda_over_lambda"] ** 2,
-                self.model["sigma_alpha_i"] ** 2,
-                self.model["sigma_alpha_f"] ** 2,
-                self.model["sigma_beta_combined"] ** 2,
+                self.model["sigma_alpha"] ** 2,
+                self.model["sigma_beta"] ** 2,
                 self.model["eta_s"] ** 2,
             ]
         )
@@ -205,7 +222,8 @@ class ResolutionEllipsoid:
         used = []
 
         for i, peak in enumerate(ws):
-            if peak.getIntensityOverSigma() < self.sig_noise_cut:
+            sig_noise = peak.getIntensityOverSigma()
+            if sig_noise < self.sig_noise_cut:
                 continue
 
             two_theta = peak.getScattering()
@@ -236,8 +254,10 @@ class ResolutionEllipsoid:
             y_p = self._vech_diag(cov_w_obs)
             A_p = self._model_design_lab_wilkinson(peak)
 
-            A_blocks.append(A_p)
-            y_blocks.append(y_p)
+            w = np.sqrt(sig_noise)
+
+            A_blocks.append(w * A_p)
+            y_blocks.append(w * y_p)
             used.append(i)
 
         A = np.vstack(A_blocks)
@@ -247,10 +267,9 @@ class ResolutionEllipsoid:
 
         self.model = {
             "sigma_dlambda_over_lambda": np.sqrt(max(x[0], 0.0)),
-            "sigma_alpha_i": np.sqrt(max(x[1], 0.0)),
-            "sigma_alpha_f": np.sqrt(max(x[2], 0.0)),
-            "sigma_beta_combined": np.sqrt(max(x[3], 0.0)),
-            "eta_s": np.sqrt(max(x[4], 0.0)),
+            "sigma_alpha": np.sqrt(max(x[1], 0.0)),
+            "sigma_beta": np.sqrt(max(x[2], 0.0)),
+            "eta_s": np.sqrt(max(x[3], 0.0)),
             "variance_parameters": x,
             "residual_norm": residual_norm,
             "used_peaks": used,
@@ -324,6 +343,7 @@ class ResolutionEllipsoid:
 
         two_theta = np.array([r["two_theta"] for r in rows])
         lamda = np.array([r["lambda"] for r in rows])
+        signal_noise = np.array([r["signal_noise"] for r in rows])
 
         obs = {
             "x": np.array([r["obs_x"] for r in rows]),
@@ -347,7 +367,7 @@ class ResolutionEllipsoid:
             sig_obs = np.sqrt(np.maximum(obs[lab], 0.0))
             sig_pred = np.sqrt(np.maximum(pred[lab], 0.0))
 
-            sc = ax.scatter(sig_obs, sig_pred, c=lamda, s=25)
+            sc = ax.scatter(sig_obs, sig_pred, c=lamda, s=25, cmap="viridis")
 
             lo = min(sig_obs.min(), sig_pred.min())
             hi = max(sig_obs.max(), sig_pred.max())
@@ -373,8 +393,10 @@ class ResolutionEllipsoid:
             sc = ax.scatter(
                 np.rad2deg(two_theta),
                 resid,
-                c=lamda,
+                c=signal_noise,
                 s=25,
+                cmap="plasma",
+                norm="log",
             )
 
             ax.axhline(0, color="k", lw=1)
@@ -382,7 +404,7 @@ class ResolutionEllipsoid:
             ax.set_ylabel(f"$\\Delta\\sigma_{lab}$ [$\\AA^{{-1}}$]")
             ax.set_title(f"${lab}$-axis width")
             ax.minorticks_on()
-            cb = fig.colorbar(sc, ax=ax, label="$\\lambda$ [$\\AA$]")
+            cb = fig.colorbar(sc, ax=ax, label="$I/\\sigma$")
             cb.ax.minorticks_on()
 
         fig.savefig(filename, bbox_inches="tight")

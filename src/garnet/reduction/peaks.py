@@ -262,7 +262,7 @@ class PeaksModel:
             BackgroundOuterRadius=background_outer_radius,
             UseOnePercentBackgroundCorrection=True,
             Ellipsoid=True if method == "ellipsoid" else False,
-            FixQAxis=True,
+            FixQAxis=False,
             FixMajorAxisLength=False,
             UseCentroid=centroid,
             MaxIterations=1,

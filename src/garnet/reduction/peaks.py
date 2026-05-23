@@ -269,7 +269,7 @@ class PeaksModel:
             IntegrateIfOnEdge=True,
             AdaptiveQBackground=adaptive,
             AdaptiveQMultiplier=radius_scale,
-            MaskEdgeTubes=True,
+            MaskEdgeTubes=False,
             OutputWorkspace=peaks,
         )
 

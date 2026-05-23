@@ -1,6 +1,8 @@
 import sys
 import os
 
+import pprint
+
 import multiprocess as multiprocessing
 
 directory = os.path.dirname(os.path.realpath(__file__))
@@ -82,6 +84,8 @@ if __name__ == "__main__":
             if key != reduction and key != "temp":
                 if rp.plan.get(reduction_types[key]) is not None:
                     rp.plan.pop(reduction_types[key])
+
+        pprint.pp(rp.plan)
 
         inst.create_directories()
 

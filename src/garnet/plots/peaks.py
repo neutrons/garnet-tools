@@ -26,7 +26,7 @@ class PeakPlot(BasePlot):
     def __init__(self):
         super(PeakPlot, self).__init__()
 
-        plt.close("all")
+        self.close()
 
         self.fig = plt.figure(figsize=(6.4 * 2, 4.8 * 2), layout="constrained")
 
@@ -1491,11 +1491,9 @@ class PeakPlot(BasePlot):
         )
 
     def save_plot(self, filename):
-        """Save the current peak figure and then reinitialize for the next peak.
+        """Save the current peak figure without rebuilding it.
 
-        Overrides BasePlot.save_plot to explicitly close the figure after saving,
-        preventing memory from accumulating across many peaks.
+        PeakPlot mutators update existing artists in place, so repeated saves can
+        reuse the same figure instead of recreating the entire layout for each peak.
         """
-        self.fig.savefig(filename, bbox_inches="tight")
-        plt.close(self.fig)
-        self.__init__()
+        super(PeakPlot, self).save_plot(filename)

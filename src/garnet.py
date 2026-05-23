@@ -2729,12 +2729,12 @@ class FormModel:
 
         return projections[best_key]
 
-    def autolim(self, UB, W, d_min, n=401):
+    def autolim(self, UB, W, d_min, n=400):
         """
         Robust limits for the transformed cube q in [-s_max, s_max]^3.
         """
         UB = np.asarray(UB, dtype=float)
-        W = np.asarray(W, dtype=float)
+        W = np.column_stack(W)
 
         s_max = 1.0 / float(d_min) / np.sqrt(3.0)
         T = np.linalg.inv(UB @ W)
@@ -2752,7 +2752,7 @@ class FormModel:
 
         x_max, y_max, z_max = np.maximum(limits, 1)
 
-        return x_max, y_max, z_max, n, n, n
+        return x_max, y_max, z_max, n + 1, n + 1, n // 4 + 1
 
 
 class Garnet(QMainWindow):

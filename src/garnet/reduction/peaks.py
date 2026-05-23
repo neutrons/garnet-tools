@@ -36,7 +36,6 @@ from mantid import config
 config["Q.convention"] = "Crystallography"
 
 import numpy as np
-from scipy.optimize import nnls
 
 centering_reflection = {
     "P": "Primitive",
@@ -222,7 +221,7 @@ class PeaksModel:
         background_inner_fact=np.cbrt(2),
         background_outer_fact=np.cbrt(3),
         method="ellipsoid",
-        centroid=True,
+        centroid=False,
     ):
         """
         Integrate peaks using spherical or ellipsoidal regions.
@@ -1759,28 +1758,32 @@ class PeakModel:
 
         c0, c1, c2 = Q0, Q1, Q2
 
+        r0 = r1 = r2 = r_cut
+
+        v0, v1, v2 = np.eye(3).tolist()
+
         if shape.shapeName() == "ellipsoid":
-            shape_dict = eval(shape.toJSON())
+            try:
+                shape = eval(shape.toJSON())
+            except:
+                shape = None
 
-            c0 = Q0 + shape_dict["translation0"]
-            c1 = Q1 + shape_dict["translation1"]
-            c2 = Q2 + shape_dict["translation2"]
+            if shape is not None:
+                c0 = Q0 + shape["translation0"]
+                c1 = Q1 + shape["translation1"]
+                c2 = Q2 + shape["translation2"]
 
-            v0 = [float(val) for val in shape_dict["direction0"].split(" ")]
-            v1 = [float(val) for val in shape_dict["direction1"].split(" ")]
-            v2 = [float(val) for val in shape_dict["direction2"].split(" ")]
+                v0 = [float(val) for val in shape["direction0"].split(" ")]
+                v1 = [float(val) for val in shape["direction1"].split(" ")]
+                v2 = [float(val) for val in shape["direction2"].split(" ")]
 
-            r0 = shape_dict["radius0"]
-            r1 = shape_dict["radius1"]
-            r2 = shape_dict["radius2"]
+                r0 = shape["radius0"]
+                r1 = shape["radius1"]
+                r2 = shape["radius2"]
 
-            r0 = r0 if r0 < r_cut else r_cut
-            r1 = r1 if r1 < r_cut else r_cut
-            r2 = r2 if r2 < r_cut else r_cut
-
-        else:
-            r0 = r1 = r2 = r_cut
-            v0, v1, v2 = np.eye(3).tolist()
+                r0 = r0 if r0 < r_cut else r_cut
+                r1 = r1 if r1 < r_cut else r_cut
+                r2 = r2 if r2 < r_cut else r_cut
 
         return c0, c1, c2, r0, r1, r2, v0, v1, v2
 

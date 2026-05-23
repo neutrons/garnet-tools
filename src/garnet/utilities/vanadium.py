@@ -291,6 +291,7 @@ class Vanadium:
             AllowList="gd_prtn_chrg,proton_charge",
             OutputWorkspace=workspace,
             FilterByTimeStop=time_stop,
+            LoadNexusInstrumentXML=False,
         )
 
         FilterBadPulses(InputWorkspace=workspace, OutputWorkspace=workspace)

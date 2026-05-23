@@ -19,7 +19,6 @@ from mantid.simpleapi import (
     LoadIsawUB,
     LoadIsawSpectrum,
     CloneWorkspace,
-    CopySample,
     SetGoniometer,
     SetSample,
     LoadSampleShape,
@@ -59,6 +58,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import argparse
 
 from garnet.reduction.ub import Optimization
+from garnet.reduction.resolution import ResolutionEllipsoid
 
 point_group_dict = {
     "-1": "-1 (Triclinic)",
@@ -511,6 +511,14 @@ class Peaks:
         self.max_order = 0
         self.modUB = np.zeros((3, 3))
         self.modHKL = np.zeros((3, 3))
+
+    def refine_ellipsoids(self, peaks):
+        filename = os.path.splitext(self.filename)[0] + "_res.pdf"
+
+        res = ResolutionEllipsoid(peaks, r_cut=np.inf)
+
+        res.fit()
+        res.plot_diagnostics(filename)
 
     def refine_UB(self, peaks):
         opt = Optimization(peaks)
@@ -1314,6 +1322,7 @@ class Peaks:
         )
 
         self.refine_UB(peaks)
+        self.refine_ellipsoids(peaks)
 
         SaveIsawUB(InputWorkspace=peaks, Filename=filename + ".mat")
 

@@ -21,6 +21,11 @@ class BasePlot:
 
         self.fig = plt.figure()
 
+    def close(self):
+        if getattr(self, "fig", None) is not None:
+            plt.close(self.fig)
+            self.fig = None
+
     def save_plot(self, filename):
         """
         Save plot.

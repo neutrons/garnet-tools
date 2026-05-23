@@ -229,4 +229,22 @@ def test_peak_plot():
     assert os.path.exists(file)
 
 
+def test_peak_plot_reuses_figure_between_saves():
+    plot = PeakPlot()
+
+    file_0 = os.path.join(filepath, "ellipsoid_reuse_0.png")
+    file_1 = os.path.join(filepath, "ellipsoid_reuse_1.png")
+
+    fig_id = id(plot.fig)
+
+    plot.save_plot(file_0)
+    plot.save_plot(file_1)
+
+    assert os.path.exists(file_0)
+    assert os.path.exists(file_1)
+    assert id(plot.fig) == fig_id
+
+    plot.close()
+
+
 test_peak_plot()

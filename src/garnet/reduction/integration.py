@@ -283,6 +283,10 @@ class Integration(SubPlan):
                 centroid=False,
             )
 
+            pk_file = self.get_diagnostic_file("run#{}_peaks".format(run))
+
+            peaks.save_peaks(pk_file, "peaks")
+
             res_file = self.get_plot_file("run#{}_res".format(run))
 
             res = ResolutionEllipsoid("peaks", r_cut=np.inf)

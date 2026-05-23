@@ -12,8 +12,8 @@ class ResolutionEllipsoid:
     def __init__(
         self,
         peaks_ws,
-        r_cut=0.5,
-        sig_noise_cut=10.0,
+        r_cut=np.inf,
+        sig_noise_cut=5.0,
         min_peaks=10,
         scale_bounds=(0.5, 2.0),
     ):

@@ -1081,88 +1081,104 @@ class PeakEllipsoid:
 
         return c, inv_S
 
-    def data_norm(self, d, n, rel_err=30):
+    def data_norm(self, d, n, v, rel_err=30):
         mask = (n > 0) & np.isfinite(n)
 
         d[~mask] = np.nan
         n[~mask] = np.nan
+        v[~mask] = np.nan
 
         bkg_lvl = np.nanpercentile(d, rel_err)
 
         y_int = d / n
-        e_int = np.sqrt(d + bkg_lvl + 1) / n
+        e_int = np.sqrt(v + bkg_lvl) / n
 
         return y_int, e_int
 
-    def profile_project(self, x0, x1, x2, d, n, w, mode="3d"):
+    def profile_project(self, x0, x1, x2, d, n, w, c, inv_S, mode="3d"):
         dx0, dx1, dx2 = self.voxels(x0, x1, x2)
 
+        p = self.gaussian(x0, x1, x2, c, inv_S, mode="3d")
+        # p_int = self.gaussian_integral(inv_S, mode="3d")
+
+        # k = p / p_int
+        p /= np.nanmean(p)
+
         if mode == "1d_0":
-            d_int = np.nansum(d, axis=(1, 2))
-            n_int = np.nanmean(n / dx1 / dx2, axis=(1, 2))
+            d_int = np.nansum(d * p, axis=(1, 2))
+            v_int = np.nansum(d * p**2, axis=(1, 2))
+            n_int = np.nanmean(n * p / dx1 / dx2, axis=(1, 2))
             w_int = np.nanmean(w, axis=(1, 2))
         elif mode == "1d_1":
-            d_int = np.nansum(d, axis=(0, 2))
-            n_int = np.nanmean(n / dx0 / dx2, axis=(0, 2))
+            d_int = np.nansum(d * p, axis=(0, 2))
+            v_int = np.nansum(d * p**2, axis=(0, 2))
+            n_int = np.nanmean(n * p / dx0 / dx2, axis=(0, 2))
             w_int = np.nanmean(w, axis=(0, 2))
         elif mode == "1d_2":
-            d_int = np.nansum(d, axis=(0, 1))
-            n_int = np.nanmean(n / dx0 / dx1, axis=(0, 1))
+            d_int = np.nansum(d * p, axis=(0, 1))
+            v_int = np.nansum(d * p**2, axis=(0, 1))
+            n_int = np.nanmean(n * p / dx0 / dx1, axis=(0, 1))
             w_int = np.nanmean(w, axis=(0, 1))
         elif mode == "2d_0":
-            d_int = np.nansum(d, axis=0)
-            n_int = np.nanmean(n / dx0, axis=0)
+            d_int = np.nansum(d * p, axis=0)
+            v_int = np.nansum(d * p**2, axis=0)
+            n_int = np.nanmean(n * p / dx0, axis=0)
             w_int = np.nanmean(w, axis=0)
         elif mode == "2d_1":
-            d_int = np.nansum(d, axis=1)
-            n_int = np.nanmean(n / dx1, axis=1)
+            d_int = np.nansum(d * p, axis=1)
+            v_int = np.nansum(d * p**2, axis=1)
+            n_int = np.nanmean(n * p / dx1, axis=1)
             w_int = np.nanmean(w, axis=1)
         elif mode == "2d_2":
-            d_int = np.nansum(d, axis=2)
-            n_int = np.nanmean(n / dx2, axis=2)
+            d_int = np.nansum(d * p, axis=2)
+            v_int = np.nansum(d * p**2, axis=2)
+            n_int = np.nanmean(n * p / dx2, axis=2)
             w_int = np.nanmean(w, axis=2)
         elif mode == "3d":
-            d_int = d
+            d_int = d.copy()
+            v_int = d.copy()
             n_int = n.copy()
             w_int = w.copy()
 
-        return d_int, n_int, w_int
+        return d_int, n_int, v_int, w_int
 
-    def normalize(self, x0, x1, x2, d, n, w, mode="3d", rel_err=30, perc=99.7):
-        d_int, n_int, w_int = self.profile_project(
-            x0, x1, x2, d, n, w, mode=mode
+    def normalize(
+        self, x0, x1, x2, d, n, w, c, inv_S, mode="3d", rel_err=30, perc=99.7
+    ):
+        d_int, n_int, v_int, w_int = self.profile_project(
+            x0, x1, x2, d, n, w, c, inv_S, mode=mode
         )
 
-        if mode == "1d_0":
-            r = x0[:, 0, 0]
-            df = 1
-        elif mode == "1d_1":
-            r = x1[0, :, 0]
-            df = 1
-        elif mode == "1d_2":
-            r = x2[0, 0, :]
-            df = 1
-        elif mode == "2d_0":
-            r = np.sqrt(x1[0, :, :] ** 2 + x2[0, :, :] ** 2)
-            df = 2
-        elif mode == "2d_1":
-            r = np.sqrt(x0[:, 0, :] ** 2 + x2[:, 0, :] ** 2)
-            df = 2
-        elif mode == "2d_2":
-            r = np.sqrt(x0[:, :, 0] ** 2 + x1[:, :, 0] ** 2)
-            df = 2
-        elif mode == "3d":
-            r = np.sqrt(x0**2 + x1**2 + x2**2)
-            df = 3
+        # if mode == "1d_0":
+        #     r = x0[:, 0, 0]
+        #     df = 1
+        # elif mode == "1d_1":
+        #     r = x1[0, :, 0]
+        #     df = 1
+        # elif mode == "1d_2":
+        #     r = x2[0, 0, :]
+        #     df = 1
+        # elif mode == "2d_0":
+        #     r = np.sqrt(x1[0, :, :] ** 2 + x2[0, :, :] ** 2)
+        #     df = 2
+        # elif mode == "2d_1":
+        #     r = np.sqrt(x0[:, 0, :] ** 2 + x2[:, 0, :] ** 2)
+        #     df = 2
+        # elif mode == "2d_2":
+        #     r = np.sqrt(x0[:, :, 0] ** 2 + x1[:, :, 0] ** 2)
+        #     df = 2
+        # elif mode == "3d":
+        #     r = np.sqrt(x0**2 + x1**2 + x2**2)
+        #     df = 3
 
-        r_max = (np.max(r) - np.min(r)) / 2
-        sigma = r_max / scipy.stats.chi2.ppf(perc / 100, df=df)
+        # r_max = (np.max(r) - np.min(r)) / 2
+        # sigma = r_max / scipy.stats.chi2.ppf(perc / 100, df=df)
 
-        f = 0.9 * np.exp(-((r / sigma) ** 2)) + 0.1
+        # f = 0.9 * np.exp(-((r / sigma) ** 2)) + 0.1
 
-        y_int, e_int = self.data_norm(d_int, n_int, rel_err)
+        y_int, e_int = self.data_norm(d_int, n_int, v_int)
 
-        return y_int, e_int / w_int / f
+        return y_int, e_int / w_int
 
     def ellipsoid_covariance(self, inv_S, mode="3d", perc=99.7):
         if mode == "3d":
@@ -2093,10 +2109,10 @@ class PeakEllipsoid:
 
         S_inv = inv_S.copy()
 
-        s = np.sqrt(scipy.stats.chi2.ppf(0.997, df=3))
-        S_blur = np.diag((np.array(self.voxels(x0, x1, x2)) * 0.6) ** 2 * s)
+        # s = np.sqrt(scipy.stats.chi2.ppf(0.997, df=3))
+        # S_blur = np.diag((np.array(self.voxels(x0, x1, x2)) * 0.6) ** 2 * s)
 
-        S = np.linalg.inv(inv_S) - S_blur
+        S = np.linalg.inv(inv_S)  # - S_blur
 
         evals, evecs = np.linalg.eigh(S)
         evals = np.maximum(evals, 1e-12)
@@ -2302,17 +2318,9 @@ class PeakEllipsoid:
 
         w = np.ones_like(n)
 
-        d_int, n_int, _ = self.profile_project(x0, x1, x2, d, n, w, mode=mode)
-
-        p = self.gaussian(x0, x1, x2, c, inv_S, mode=mode)
-        p_int = self.gaussian_integral(inv_S, mode=mode)
-
-        kernel = p / p_int
-
-        pk = kernel > 0
-        bkg = kernel > 0
-
-        I, sig, _, _ = self.matched_filter(d_int, n_int, pk, bkg, kernel)
+        d_int, n_int, *_ = self.profile_project(
+            x0, x1, x2, d, n, w, c, inv_S, mode=mode
+        )
 
         y = d / n
         y[~mask] = np.nan
@@ -2328,9 +2336,7 @@ class PeakEllipsoid:
         self.params.add("A" + mode, value=A, min=0, max=np.inf)
         self.params.add("B" + mode, value=B, min=0, max=np.inf)
 
-        strong = I > 3 * sig
-
-        return strong
+        return A > B
 
     def estimate_envelope(
         self,
@@ -2369,9 +2375,15 @@ class PeakEllipsoid:
             c0, c1, c2, r0, r1, r2, u0, u1, u2
         )
 
-        y1d_0, e1d_0 = self.normalize(x0, x1, x2, d, n, wgt, mode="1d_0")
-        y1d_1, e1d_1 = self.normalize(x0, x1, x2, d, n, wgt, mode="1d_1")
-        y1d_2, e1d_2 = self.normalize(x0, x1, x2, d, n, wgt, mode="1d_2")
+        y1d_0, e1d_0 = self.normalize(
+            x0, x1, x2, d, n, wgt, c, inv_S, mode="1d_0"
+        )
+        y1d_1, e1d_1 = self.normalize(
+            x0, x1, x2, d, n, wgt, c, inv_S, mode="1d_1"
+        )
+        y1d_2, e1d_2 = self.normalize(
+            x0, x1, x2, d, n, wgt, c, inv_S, mode="1d_2"
+        )
 
         est1d_0 = self.quick_gaussian(x0, x1, x2, d, n, c, inv_S, mode="1d_0")
         est1d_1 = self.quick_gaussian(x0, x1, x2, d, n, c, inv_S, mode="1d_1")
@@ -2394,9 +2406,15 @@ class PeakEllipsoid:
             c0, c1, c2, r0, r1, r2, u0, u1, u2
         )
 
-        y2d_0, e2d_0 = self.normalize(x0, x1, x2, d, n, wgt, mode="2d_0")
-        y2d_1, e2d_1 = self.normalize(x0, x1, x2, d, n, wgt, mode="2d_1")
-        y2d_2, e2d_2 = self.normalize(x0, x1, x2, d, n, wgt, mode="2d_2")
+        y2d_0, e2d_0 = self.normalize(
+            x0, x1, x2, d, n, wgt, c, inv_S, mode="2d_0"
+        )
+        y2d_1, e2d_1 = self.normalize(
+            x0, x1, x2, d, n, wgt, c, inv_S, mode="2d_1"
+        )
+        y2d_2, e2d_2 = self.normalize(
+            x0, x1, x2, d, n, wgt, c, inv_S, mode="2d_2"
+        )
 
         est2d_0 = self.quick_gaussian(x0, x1, x2, d, n, c, inv_S, mode="2d_0")
         est2d_1 = self.quick_gaussian(x0, x1, x2, d, n, c, inv_S, mode="2d_1")
@@ -2411,7 +2429,7 @@ class PeakEllipsoid:
 
         args_2d = [x0, x1, x2, y2d, e2d, w2d]
 
-        y3d, e3d = self.normalize(x0, x1, x2, d, n, wgt, mode="3d")
+        y3d, e3d = self.normalize(x0, x1, x2, d, n, wgt, c, inv_S, mode="3d")
 
         w3d = self.uniform_mode_weights([y3d], [e3d])[0]
 
@@ -2750,14 +2768,14 @@ class PeakEllipsoid:
 
         return intens, sig, b, b_err, vol, *data_norm
 
-    def matched_filter(self, d, n, pk, bkg, kernel, rel_error=0.05):
+    def matched_filter(self, d, n, v, pk, bkg, kernel, rel_error=0.15):
         mask = (pk | bkg) & (n > 0)
         p = kernel.copy()
         p[~mask] = np.nan
 
         b = np.nanquantile(d[mask], rel_error)
 
-        e = np.sqrt(d + b + 1)
+        e = np.sqrt(v + b)
         e[np.isclose(d, 0)] = 1
 
         q = n * p
@@ -2787,33 +2805,20 @@ class PeakEllipsoid:
 
         dx0, dx1, dx2 = self.voxels(x0, x1, x2)
 
-        x = np.array([x0 - c0, x1 - c1, x2 - c2])
-
         C = S.copy()
 
         sigma = np.sqrt(C[0, 0]) / scale
 
         S_inv = np.linalg.inv(C)
 
-        ellipsoid = np.einsum("ij,jklm,iklm->klm", S_inv, x, x)
+        weights = np.ones_like(n)
 
-        structure = np.ones((3, 1, 1), dtype=bool)
-
-        mask = ellipsoid <= 1
-        for i in range(3):
-            mask = scipy.ndimage.binary_dilation(mask, structure=structure)
-
-        d_int = d.copy()
-        n_int = n.copy()
-
-        d_int[~mask] = np.nan
-        n_int[~mask] = np.nan
-
-        d_int = np.nansum(d_int, axis=(1, 2))
-        n_int = np.nanmean(n_int / dx1 / dx2, axis=(1, 2))
+        d_int, n_int, v_int, _ = self.profile_project(
+            x0, x1, x2, d, n, weights, c, S_inv, mode="1d_0"
+        )
 
         y = d_int / n_int
-        e = np.sqrt(d_int) / n_int
+        e = np.sqrt(v_int) / n_int
 
         x = x0[:, 0, 0] - c0
 
@@ -2825,7 +2830,9 @@ class PeakEllipsoid:
             pk = np.abs(x) < scale * sigma
             bkg = np.abs(x) >= scale * sigma
 
-            I, I_err, A, b = self.matched_filter(d_int, n_int, pk, bkg, kernel)
+            I, I_err, A, b = self.matched_filter(
+                d_int, n_int, v_int, pk, bkg, kernel
+            )
 
             w = np.clip(y - b, 0, None)
 
@@ -2891,7 +2898,7 @@ class PeakEllipsoid:
 
         self.integral = x, y_fit, y, e
 
-        result = self.matched_filter(d, n, pk, bkg, kernel)
+        result = self.matched_filter(d, n, d, pk, bkg, kernel)
 
         I_filt, sig_filt, A_filt, b_filt = result
 

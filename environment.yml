@@ -1,7 +1,7 @@
-name: garnet_reduction
+name: garnet
 channels:
   - conda-forge
-  - mantid/label/nightly
+  - mantid
   - oncat
 dependencies:
   - python
@@ -17,5 +17,6 @@ dependencies:
   - pyvista
   - scikit-learn
   - scikit-image
+  - gemmi
   - pip:
     - pyoncat

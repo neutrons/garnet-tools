@@ -26,7 +26,7 @@ from mantid.simpleapi import (
     MaskDetectors,
     MaskDetectorsIf,
     MaskBTP,
-    ClearMaskFlag,
+    SetInstrumentParameter,
     SetGoniometer,
     LoadSampleShape,
     SetSample,
@@ -234,11 +234,18 @@ class BaseDataModel:
                 LoadEventNexus(
                     Filename=files[0],
                     OutputWorkspace=self.instrument,
-                    LoadNexusInstrumentXML=False,
+                    LoadNexusInstrumentXML=True,
                     # LoadLogs=False,
                 )
             else:
                 LoadNexus(Filename=files[0], OutputWorkspace=self.instrument)
+
+            SetInstrumentParameter(
+                Workspace=self.instrument,
+                ParameterName="tube-gap",
+                ParameterType="Number",
+                Value="0.00065",
+            )
 
             ExtractMonitors(
                 InputWorkspace=self.instrument,
@@ -1390,7 +1397,7 @@ class LaueData(BaseDataModel):
                 FilterByTimeStop=time_cut,
                 FilterByTofMin=None,
                 FilterByTofMax=None,
-                LoadNexusInstrumentXML=False,
+                LoadNexusInstrumentXML=True,
             )
 
         if type(runs) is list and mtd[event_name].isGroup():
@@ -1655,17 +1662,43 @@ class LaueData(BaseDataModel):
 
         """
 
+        bank_names = self._bank_component_names(event_name, bank_name)
+
         CropToComponent(
             InputWorkspace=event_name,
             OutputWorkspace=bank_name,
-            ComponentNames=bank_name,
+            ComponentNames=",".join(bank_names),
         )
 
-        MaskBTP(
-            Workspace=event_name,
-            Instrument=self.instrument,
-            Bank=bank_name.replace("bank", ""),
-        )
+        if self.instrument != "CORELLI":
+            MaskBTP(
+                Workspace=event_name,
+                Instrument=self.instrument,
+                Bank=bank_name.replace("bank", ""),
+            )
+
+    def _bank_component_names(self, event_name, bank_name):
+        if self.instrument != "CORELLI":
+            return [bank_name]
+
+        prefix = bank_name.rstrip("0123456789")
+        suffix = bank_name[len(prefix) :]
+
+        if not suffix:
+            return [bank_name]
+
+        bank_no = int(suffix)
+        instrument = mtd[event_name].getInstrument()
+
+        bank_names = []
+        for offset in (-1, 0, 1):
+            component_name = f"{prefix}{bank_no + offset}"
+            if bank_no + offset < 1:
+                continue
+            if instrument.getComponentByName(component_name) is not None:
+                bank_names.append(component_name)
+
+        return bank_names if len(bank_names) > 0 else [bank_name]
 
     def apply_mask(self, event_name, detector_mask, save=False):
         """
@@ -1921,6 +1954,13 @@ class LaueData(BaseDataModel):
 
         if not mtd.doesExist("sa"):
             LoadNexus(Filename=vanadium_file, OutputWorkspace="sa_van")
+
+            SetInstrumentParameter(
+                Workspace="sa_van",
+                ParameterName="tube-gap",
+                ParameterType="Number",
+                Value="0.00065",
+            )
 
             RemoveLogs(Workspace="sa_van")
 
@@ -2226,7 +2266,7 @@ class LaueData(BaseDataModel):
             Load(
                 Filename=filename,
                 OutputWorkspace="bkg",
-                LoadNexusInstrumentXML=False,
+                LoadNexusInstrumentXML=True,
             )
 
             pc_bkg = mtd["bkg"].run().getProperty("gd_prtn_chrg").value

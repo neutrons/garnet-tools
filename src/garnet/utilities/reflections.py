@@ -554,7 +554,7 @@ class Peaks:
         scale = 1 if self.scale is None else self.scale
         if mtd[self.peaks].getNumberPeaks() > 1 and self.scale is None:
             I = np.array(mtd[self.peaks].column("Intens"))
-            I0 = np.nanpercentile(I, 99)
+            I0 = np.nanpercentile(I, 95)
             scale = maximal / I0
             self.scale = scale
             self.maximal = maximal
@@ -1309,6 +1309,14 @@ class Peaks:
         self.calculate_statistics(peaks, filename + "_symm.txt")
 
         self.renumber_peaks(peaks)
+
+        FilterPeaks(
+            InputWorkspace=peaks,
+            OutputWorkspace=peaks,
+            FilterVariable="Signal/Noise",
+            FilterValue=3,
+            Operator=">=",
+        )
 
         SaveHKL(
             InputWorkspace=peaks,

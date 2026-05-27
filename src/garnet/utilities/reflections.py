@@ -562,7 +562,10 @@ class Peaks:
         indices = np.arange(mtd[self.peaks].getNumberPeaks())
         for i, peak in zip(indices.tolist(), mtd[self.peaks]):
             peak.setIntensity(scale * peak.getIntensity())
-            peak.setSigmaIntensity(scale * peak.getSigmaIntensity())
+            if peak.getIntensity() > maximal * 10:
+                peak.setSigmaIntensity(peak.getIntensity())
+            else:
+                peak.setSigmaIntensity(scale * peak.getSigmaIntensity())
             peak.setPeakNumber(peak.getRunNumber())
             peak.setBinCount(peak.getRunNumber())
             # peak.setRunNumber(1)

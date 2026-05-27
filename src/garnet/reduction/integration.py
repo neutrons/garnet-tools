@@ -1098,41 +1098,64 @@ class PeakEllipsoid:
     def profile_project(self, x0, x1, x2, d, n, w, c, inv_S, mode="3d"):
         dx0, dx1, dx2 = self.voxels(x0, x1, x2)
 
-        p = self.gaussian(x0, x1, x2, c, inv_S, mode="3d")
-        # p_int = self.gaussian_integral(inv_S, mode="3d")
+        if mode == "1d_0":
+            p = self.gaussian(x0, x1, x2, c, inv_S, mode="2d_0")[
+                np.newaxis, :, :
+            ]
+        elif mode == "1d_1":
+            p = self.gaussian(x0, x1, x2, c, inv_S, mode="2d_1")[
+                :, np.newaxis, :
+            ]
+        elif mode == "1d_2":
+            p = self.gaussian(x0, x1, x2, c, inv_S, mode="2d_2")[
+                :, :, np.newaxis
+            ]
+        elif mode == "2d_0":
+            p = self.gaussian(x0, x1, x2, c, inv_S, mode="1d_0")[
+                :, np.newaxis, np.newaxis
+            ]
+        elif mode == "2d_1":
+            p = self.gaussian(x0, x1, x2, c, inv_S, mode="1d_1")[
+                np.newaxis, :, np.newaxis
+            ]
+        elif mode == "2d_2":
+            p = self.gaussian(x0, x1, x2, c, inv_S, mode="1d_2")[
+                np.newaxis, np.newaxis, :
+            ]
+        else:
+            p = np.ones_like(d)
 
-        # k = p / p_int
         p /= np.nanmean(p)
 
         if mode == "1d_0":
             d_int = np.nansum(d * p, axis=(1, 2))
             v_int = np.nansum(d * p**2, axis=(1, 2))
-            n_int = np.nanmean(n * p / dx1 / dx2, axis=(1, 2))
+            n_int = np.nansum(n * p / dx1 / dx2, axis=(1, 2))
             w_int = np.nanmean(w, axis=(1, 2))
         elif mode == "1d_1":
             d_int = np.nansum(d * p, axis=(0, 2))
             v_int = np.nansum(d * p**2, axis=(0, 2))
-            n_int = np.nanmean(n * p / dx0 / dx2, axis=(0, 2))
+            n_int = np.nansum(n * p / dx0 / dx2, axis=(0, 2))
             w_int = np.nanmean(w, axis=(0, 2))
         elif mode == "1d_2":
             d_int = np.nansum(d * p, axis=(0, 1))
             v_int = np.nansum(d * p**2, axis=(0, 1))
-            n_int = np.nanmean(n * p / dx0 / dx1, axis=(0, 1))
+            n_int = np.nansum(n * p / dx0 / dx1, axis=(0, 1))
             w_int = np.nanmean(w, axis=(0, 1))
         elif mode == "2d_0":
             d_int = np.nansum(d * p, axis=0)
             v_int = np.nansum(d * p**2, axis=0)
-            n_int = np.nanmean(n * p / dx0, axis=0)
+            n_int = np.nansum(n * p / dx0, axis=0)
             w_int = np.nanmean(w, axis=0)
         elif mode == "2d_1":
             d_int = np.nansum(d * p, axis=1)
             v_int = np.nansum(d * p**2, axis=1)
-            n_int = np.nanmean(n * p / dx1, axis=1)
+            n_int = np.nansum(n * p / dx1, axis=1)
             w_int = np.nanmean(w, axis=1)
         elif mode == "2d_2":
             d_int = np.nansum(d * p, axis=2)
             v_int = np.nansum(d * p**2, axis=2)
-            n_int = np.nanmean(n * p / dx2, axis=2)
+            n_int = np.nansum(n * p / dx2, axis=2)
             w_int = np.nanmean(w, axis=2)
         elif mode == "3d":
             d_int = d.copy()

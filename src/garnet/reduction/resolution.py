@@ -180,7 +180,6 @@ class ResolutionEllipsoid:
         two_theta = peak.getScattering()
         phi = peak.getAzimuthal()
         lamda = peak.getWavelength()
-        t = peak.getTOF()
 
         k = 2.0 * np.pi / lamda
 
@@ -203,8 +202,6 @@ class ResolutionEllipsoid:
         Q_vec = k * q_lambda
         Q2 = np.dot(Q_vec, Q_vec)
 
-        L = self._tof_path_length(lamda, t)
-
         if Q2 > 0:
             qhat = Q_vec / np.sqrt(Q2)
             mosaic_cov_unit = Q2 * (np.eye(3) - np.outer(qhat, qhat))
@@ -217,8 +214,7 @@ class ResolutionEllipsoid:
                 k**2 * self._outer6(beta_i),  # sigma_beta_i^2
                 k**2 * self._outer6(alpha_f),  # sigma_alpha_f^2
                 k**2 * self._outer6(beta_f),  # sigma_beta_f^2
-                k**2 * self._outer6(q_lambda) / t**2,  # sigma_tof^2
-                k**2 * self._outer6(q_lambda) / L**2,  # sigma_L^2
+                k**2 * self._outer6(q_lambda),  # (sigma_dl/lambda)^2
                 self._vech6(mosaic_cov_unit),  # sigma_mosaic^2
             ]
         )
@@ -234,8 +230,7 @@ class ResolutionEllipsoid:
                 self.model["sigma_beta_i"] ** 2,
                 self.model["sigma_alpha_f"] ** 2,
                 self.model["sigma_beta_f"] ** 2,
-                self.model["sigma_t"] ** 2,
-                self.model["sigma_L"] ** 2,
+                self.model["sigma_dl_over_l"] ** 2,
                 self.model["sigma_mosaic"] ** 2,
             ]
         )
@@ -347,9 +342,8 @@ class ResolutionEllipsoid:
             "sigma_beta_i": np.sqrt(max(x[1], 0.0)),
             "sigma_alpha_f": np.sqrt(max(x[2], 0.0)),
             "sigma_beta_f": np.sqrt(max(x[3], 0.0)),
-            "sigma_t": np.sqrt(max(x[4], 0.0)),
-            "sigma_L": np.sqrt(max(x[5], 0.0)),
-            "sigma_mosaic": np.sqrt(max(x[6], 0.0)),
+            "sigma_dl_over_l": np.sqrt(max(x[4], 0.0)),
+            "sigma_mosaic": np.sqrt(max(x[5], 0.0)),
             "variance_parameters": x,
             "residual_norm": residual_norm,
             "used_peaks": used,

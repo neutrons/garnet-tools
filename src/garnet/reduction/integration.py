@@ -269,8 +269,6 @@ class Integration(SubPlan):
 
             self.peaks, self.data = peaks, data
 
-            r_cut = self.params["Radius"]
-
             self.r_cut = r_cut
 
             self.predict_add_satellite_peaks(lamda_min, lamda_max)
@@ -904,10 +902,13 @@ class Integration(SubPlan):
 
         r_cut = np.where(r_cut < 3 * dQ, 3 * dQ, r_cut)
 
-        bins = np.clip(1 + np.floor(r_cut / dQ).astype(int), bin_min, bin_max)
-
         W = np.column_stack(projections)
         A = 2 * np.pi * (W.T @ UB)
+
+        miller_half_width = 0.5 * np.sum(np.abs(A), axis=1)
+        r_cut = np.minimum(r_cut, miller_half_width)
+
+        bins = np.clip(1 + np.floor(r_cut / dQ).astype(int), bin_min, bin_max)
 
         Wp = np.linalg.inv(W.T @ (2 * np.pi * UB)).T
         transform = Wp.tolist()
@@ -1088,10 +1089,10 @@ class PeakEllipsoid:
         n[~mask] = np.nan
         v[~mask] = np.nan
 
-        bkg_lvl = np.nanpercentile(d, rel_err)
-
         y_int = d / n
-        e_int = np.sqrt(v + bkg_lvl) / n
+        # Count-space weighting: wr = (d - y_fit*n)/sqrt(d+1)
+        # Equivalent normalized-space sigma is sqrt(d+1)/n.
+        e_int = np.sqrt(np.clip(d, 0, None) + 1) / n
 
         return y_int, e_int
 
@@ -2374,7 +2375,7 @@ class PeakEllipsoid:
         d = scipy.ndimage.gaussian_filter(d_int, sigma=0.6, mode="nearest")
         n = scipy.ndimage.gaussian_filter(n_int, sigma=0.6, mode="nearest")
 
-        e = np.sqrt(d) / n
+        e = np.sqrt(np.clip(d, 0, None) + 1) / n
 
         if self.combine_params is not None:
             self.params = self.combine_params.copy()
@@ -2579,7 +2580,8 @@ class PeakEllipsoid:
         d_val = d.copy()
         n_val = n.copy()
 
-        y, e = d_val / n_val, np.sqrt(d_val) / n_val
+        y = d_val / n_val
+        e = np.sqrt(np.clip(d_val, 0, None) + 1) / n_val
 
         if (np.array(y.shape) <= 3).any():
             log_fit_time("small-shape")
@@ -2841,7 +2843,7 @@ class PeakEllipsoid:
         )
 
         y = d_int / n_int
-        e = np.sqrt(v_int) / n_int
+        e = np.sqrt(np.clip(d_int, 0, None) + 1) / n_int
 
         x = x0[:, 0, 0] - c0
 
@@ -2896,7 +2898,7 @@ class PeakEllipsoid:
         self.info = [d3x, b, b_err]
 
         y = d / n
-        e = np.sqrt(d) / n
+        e = np.sqrt(np.clip(d, 0, None) + 1) / n
 
         intens_raw, sig_raw = self.extract_raw_intensity(d, pk, bkg)
 

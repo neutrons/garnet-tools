@@ -382,10 +382,13 @@ def _process_run(config, ipts, run, idx, tol):
         +config["l_max"] / 2,
     ]
 
+    bins = [501, 501, 501]
+
     ConvertQtoHKLMDHisto(
         InputWorkspace=md_ws,
         PeaksWorkspace=strong_ws,
         Extents=extents,
+        Bins=bins,
         OutputWorkspace=combine_ws,
     )
 

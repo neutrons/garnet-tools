@@ -989,7 +989,7 @@ class Peaks:
             InputWorkspace=self.peaks,
             OutputWorkspace=self.peaks,
             FilterVariable="Signal/Noise",
-            FilterValue=1,
+            FilterValue=2,
             Operator=">=",
         )
 
@@ -999,7 +999,7 @@ class Peaks:
             InputWorkspace=self.peaks,
             OutputWorkspace=self.peaks,
             FilterVariable="Signal/Noise",
-            FilterValue=1,
+            FilterValue=2,
             Operator=">=",
         )
 
@@ -1314,7 +1314,7 @@ class Peaks:
             InputWorkspace=peaks,
             OutputWorkspace=peaks,
             FilterVariable="Signal/Noise",
-            FilterValue=3,
+            FilterValue=2,
             Operator=">=",
         )
 
@@ -1496,7 +1496,7 @@ class Peaks:
             InputWorkspace=name,
             OutputWorkspace=name + "_stats",
             FilterVariable="Signal/Noise",
-            FilterValue=1,
+            FilterValue=2,
             Operator=">=",
         )
 

@@ -7,7 +7,6 @@ import numpy as np
 
 import scipy.spatial.transform
 import scipy.special
-import scipy.ndimage
 import scipy.stats
 
 from lmfit import Minimizer, Parameters, fit_report
@@ -934,6 +933,15 @@ class PeakEllipsoid:
     def __init__(self):
         self.params = Parameters()
         self.relaxed_profile_cut = 5.0
+        self.prior_strength_center = 0.25
+        self.prior_strength_width = 0.10
+        self.prior_strength_rotation = 0.10
+        self.prior_center_mean = np.zeros(3)
+        self.prior_center_sigma = np.ones(3)
+        self.prior_log_r_mean = np.zeros(3)
+        self.prior_log_r_sigma = np.ones(3)
+        self.prior_u_mean = np.zeros(3)
+        self.prior_u_sigma = np.ones(3)
 
     def update_constraints(self, x0, x1, x2, dx):
         dx0 = x0[:, 0, 0][1] - x0[:, 0, 0][0]
@@ -1024,6 +1032,7 @@ class PeakEllipsoid:
         best = self.best_ordered_shape(r0, r1, r2, v0, v1, v2)
 
         r0, r1, r2 = best["r"]
+        u0, u1, u2 = best["u"]
 
         self.params["c0"].set(value=0)
         self.params["c1"].set(value=0)
@@ -1036,15 +1045,94 @@ class PeakEllipsoid:
             else:
                 p.set(value=2 * p.min)
 
-        self.params["u0"].set(value=0)
-        self.params["u1"].set(value=0)
-        self.params["u2"].set(value=0)
+        self.params["u0"].set(value=u0)
+        self.params["u1"].set(value=u1)
+        self.params["u2"].set(value=u2)
 
-        umax = np.deg2rad(45)
+        self.params["u0"].set(min=-np.pi, max=np.pi)
+        self.params["u1"].set(min=-np.pi, max=np.pi)
+        self.params["u2"].set(min=-np.pi, max=np.pi)
 
-        self.params["u0"].set(min=-umax, max=umax)
-        self.params["u1"].set(min=-umax, max=umax)
-        self.params["u2"].set(min=-umax, max=umax)
+        self.initialize_priors(best)
+
+    def initialize_priors(self, best):
+        radii = np.asarray(best["r"], dtype=float)
+        rotvec = np.asarray(best["u"], dtype=float)
+        center_scale = max(0.5 * np.mean(radii), 1e-8)
+        width_scale = max(0.5, 1e-8)
+        rotation_scale = np.maximum(np.abs(rotvec), np.deg2rad(10.0))
+
+        self.prior_center_mean = np.zeros(3)
+        self.prior_center_sigma = np.full(3, center_scale, dtype=float)
+
+        self.prior_log_r_mean = np.log(np.maximum(radii, 1e-12))
+        self.prior_log_r_sigma = np.full(3, width_scale, dtype=float)
+
+        self.prior_u_mean = rotvec
+        self.prior_u_sigma = rotation_scale
+
+    def prior_residual(self, params):
+        terms = []
+
+        for name, mean, sigma in zip(
+            ["c0", "c1", "c2"], self.prior_center_mean, self.prior_center_sigma
+        ):
+            terms.append(
+                np.sqrt(self.prior_strength_center)
+                * (params[name].value - mean)
+                / sigma
+            )
+
+        for name, mean, sigma in zip(
+            ["r0", "r1", "r2"], self.prior_log_r_mean, self.prior_log_r_sigma
+        ):
+            value = max(params[name].value, 1e-12)
+            terms.append(
+                np.sqrt(self.prior_strength_width)
+                * (np.log(value) - mean)
+                / sigma
+            )
+
+        for name, mean, sigma in zip(
+            ["u0", "u1", "u2"], self.prior_u_mean, self.prior_u_sigma
+        ):
+            terms.append(
+                np.sqrt(self.prior_strength_rotation)
+                * (params[name].value - mean)
+                / sigma
+            )
+
+        return np.asarray(terms, dtype=float)
+
+    def prior_jacobian(self, params):
+        names = ["c0", "c1", "c2", "r0", "r1", "r2", "u0", "u1", "u2"]
+        params_list = [name for name, _ in params.items()]
+        jac = np.zeros((len(params_list), len(names)), dtype=float)
+
+        for col, (name, sigma) in enumerate(
+            zip(["c0", "c1", "c2"], self.prior_center_sigma)
+        ):
+            jac[params_list.index(name), col] = (
+                np.sqrt(self.prior_strength_center) / sigma
+            )
+
+        for offset, (name, sigma) in enumerate(
+            zip(["r0", "r1", "r2"], self.prior_log_r_sigma), start=3
+        ):
+            value = max(params[name].value, 1e-12)
+            jac[params_list.index(name), offset] = np.sqrt(
+                self.prior_strength_width
+            ) / (sigma * value)
+
+        for offset, (name, sigma) in enumerate(
+            zip(["u0", "u1", "u2"], self.prior_u_sigma), start=6
+        ):
+            jac[params_list.index(name), offset] = (
+                np.sqrt(self.prior_strength_rotation) / sigma
+            )
+
+        ind = [i for i, (_, par) in enumerate(params.items()) if par.vary]
+        return jac[ind]
 
     def S_matrix(self, r0, r1, r2, u0, u1, u2):
         U = self.U_matrix(u0, u1, u2)
@@ -2052,8 +2140,9 @@ class PeakEllipsoid:
         cost_1d = self.residual_1d(params, *args_1d, c, inv_S)
         cost_2d = self.residual_2d(params, *args_2d, c, inv_S)
         cost_3d = self.residual_3d(params, *args_3d, c, inv_S)
+        cost_prior = self.prior_residual(params)
 
-        cost = np.concatenate([cost_1d, cost_2d, cost_3d])
+        cost = np.concatenate([cost_1d, cost_2d, cost_3d, cost_prior])
         cost = np.nan_to_num(cost, nan=0.0, posinf=1e16, neginf=-1e16)
 
         return cost
@@ -2081,8 +2170,9 @@ class PeakEllipsoid:
         jac_1d = self.jacobian_1d(params, *args_1d, c, inv_S, dr, du)
         jac_2d = self.jacobian_2d(params, *args_2d, c, inv_S, dr, du)
         jac_3d = self.jacobian_3d(params, *args_3d, c, inv_S, dr, du)
+        jac_prior = self.prior_jacobian(params)
 
-        jac = np.column_stack([jac_1d, jac_2d, jac_3d])
+        jac = np.column_stack([jac_1d, jac_2d, jac_3d, jac_prior])
         jac = np.nan_to_num(jac, nan=0.0, posinf=1e16, neginf=-1e16)
 
         return jac.T
@@ -2372,8 +2462,8 @@ class PeakEllipsoid:
         wgt,
         report_fit=False,
     ):
-        d = scipy.ndimage.gaussian_filter(d_int, sigma=0.6, mode="nearest")
-        n = scipy.ndimage.gaussian_filter(n_int, sigma=0.6, mode="nearest")
+        d = d_int.copy()
+        n = n_int.copy()
 
         e = np.sqrt(np.clip(d, 0, None) + 1) / n
 
@@ -2471,25 +2561,22 @@ class PeakEllipsoid:
 
         self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
+        protocol = [True, False, False] * 2 + [False] * 3
+        n_iter = 10
+
+        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
+
+        protocol = [False, True, False] * 2 + [False] * 3
+        n_iter = 10
+
+        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
+
+        protocol = [False, False, True] * 2 + [False] * 3
+        n_iter = 10
+
+        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
+
         amplitude, background = self.estimate_peak_strength()
-
-        if np.any(amplitude > background):
-            protocol = [True, False, False] * 2 + [False] * 3
-            n_iter = 10
-
-            self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
-
-            protocol = [False, True, False] * 2 + [False] * 3
-            n_iter = 10
-
-            self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
-
-            protocol = [False, False, True] * 2 + [False] * 3
-            n_iter = 10
-
-            self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
-
-            amplitude, background = self.estimate_peak_strength()
 
         if np.all(amplitude > background):
             protocol = [False] * 3 + [True] * 3 + [True] * 3

@@ -13,7 +13,7 @@ from qtpy.QtWidgets import (
     QLineEdit,
     QPushButton,
     QListWidget,
-    QGridLayout,
+    QHBoxLayout,
     QVBoxLayout,
     QComboBox,
     QAbstractItemView,
@@ -55,7 +55,7 @@ class View(QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.layout = QGridLayout()
+        self.layout = QVBoxLayout()
         self.setLayout(self.layout)
 
         login_label = QLabel("ONCat Login")
@@ -66,34 +66,31 @@ class View(QWidget):
         self.pass_line.setEchoMode(QLineEdit.Password)
         self.login_button = QPushButton("Sign In")
         self.refresh_button = QPushButton("Refresh")
+        self.report_button = QPushButton("Copy Report")
         self.message_label = QLabel("Not Signed In")
         self.message_label.setStyleSheet("color: red;")
         self.message_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
-        self.layout.addWidget(login_label, 0, 0)
-        self.layout.addWidget(user_label, 0, 1)
-        self.layout.addWidget(self.user_line, 0, 2, 1, 3)
-        self.layout.addWidget(pass_label, 0, 5)
-        self.layout.addWidget(self.pass_line, 0, 6, 1, 1)
-        self.layout.addWidget(self.login_button, 0, 8)
-        self.layout.addWidget(self.message_label, 0, 7)
-        self.layout.setColumnMinimumWidth(7, 300)
+        login_layout = QHBoxLayout()
+        login_layout.addWidget(login_label)
+        login_layout.addWidget(user_label)
+        login_layout.addWidget(self.user_line, 2)
+        login_layout.addWidget(pass_label)
+        login_layout.addWidget(self.pass_line)
+        login_layout.addWidget(self.login_button)
+        login_layout.addWidget(self.message_label, 2)
+        self.layout.addLayout(login_layout)
 
         instrument_cbox_label = QLabel("Instrument: ")
         self.instrument_cbox = QComboBox(self)
         instruments = ["TOPAZ", "MANDI", "CORELLI", "SNAP", "WAND²", "DEMAND"]
         self.instrument_cbox.addItems(instruments)
-        self.layout.addWidget(instrument_cbox_label, 1, 0)
-        self.layout.addWidget(self.instrument_cbox, 1, 1, 1, 8)
 
         ipts_label = QLabel("IPTS: ")
         self.ipts_field = QComboBox(self)
-        self.layout.addWidget(ipts_label, 2, 0)
-        self.layout.addWidget(self.ipts_field, 2, 1, 1, 7)
 
         self.name_list = QListWidget()
         self.name_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.layout.addWidget(self.name_list, 3, 0, 3, 4)
 
         self.runs_label = QLabel("Run Numbers: ")
         self.runs_list = QLineEdit()
@@ -101,14 +98,32 @@ class View(QWidget):
         self.exp_cbox = QComboBox(self)
         self.exp_cbox.setEnabled(False)
 
-        self.layout.addWidget(self.runs_label, 7, 0)
-        self.layout.addWidget(self.runs_list, 7, 1, 1, 7)
-        self.layout.addWidget(self.refresh_button, 7, 8)
-        self.layout.addWidget(self.exp_cbox, 2, 8)
+        ipts_layout = QHBoxLayout()
+        ipts_layout.addWidget(instrument_cbox_label)
+        ipts_layout.addWidget(self.instrument_cbox)
+        ipts_layout.addWidget(ipts_label)
+        ipts_layout.addWidget(self.ipts_field, 1)
+        ipts_layout.addWidget(self.exp_cbox)
+        self.layout.addLayout(ipts_layout)
 
         self.plot = FigureCanvas(Figure(figsize=(8, 6)))
-        self.layout.addWidget(self.plot, 3, 4, 2, 5)
-        self.layout.addWidget(NavigationToolbar(self.plot, self), 5, 4, 1, 5)
+        self.toolbar = NavigationToolbar(self.plot, self)
+
+        right_layout = QVBoxLayout()
+        right_layout.addWidget(self.plot, 1)
+        right_layout.addWidget(self.toolbar)
+
+        content_layout = QHBoxLayout()
+        content_layout.addWidget(self.name_list, 1)
+        content_layout.addLayout(right_layout, 2)
+        self.layout.addLayout(content_layout, 1)
+
+        runs_layout = QHBoxLayout()
+        runs_layout.addWidget(self.runs_label)
+        runs_layout.addWidget(self.runs_list, 1)
+        runs_layout.addWidget(self.report_button)
+        runs_layout.addWidget(self.refresh_button)
+        self.layout.addLayout(runs_layout)
 
     def ipts_entered(self):
         if self.ipts_field.hasAcceptableInput():
@@ -151,6 +166,9 @@ class View(QWidget):
 
     def connect_refresh_button(self, update):
         self.refresh_button.clicked.connect(update)
+
+    def connect_report_button(self, update):
+        self.report_button.clicked.connect(update)
 
     def plot_goniometer(
         self,
@@ -441,6 +459,7 @@ class Presenter:
         self.view.connect_login_button(self.sign_in)
         self.view.connect_select_experiment(self.set_exp)
         self.view.connect_refresh_button(self.refresh)
+        self.view.connect_report_button(self.copy_experiment_report)
 
         self.switch_instrument()
         self.login = None
@@ -492,6 +511,25 @@ class Presenter:
 
     def refresh(self):
         self.set_ipts()
+
+    def copy_experiment_report(self):
+        if not self.data_files:
+            self.view.show_message(
+                "No experiment data to report", color="orange"
+            )
+            return
+
+        report = self.model.experiment_summary_table(
+            self.data_files, self.inst_params
+        )
+        if report == "":
+            self.view.show_message(
+                "No experiment data to report", color="orange"
+            )
+            return
+
+        QApplication.clipboard().setText(report)
+        self.view.show_message("Experiment report copied", color="green")
 
     def set_exp(self):
         self.data_files = self.model.retrieve_data_files(
@@ -755,6 +793,140 @@ class Model:
         ]
 
         return np.array([r for sub_list in run_list for r in sub_list])
+
+    def _runs_to_string_with_step(self, runs):
+        runs = sorted(set(int(r) for r in runs))
+        if len(runs) == 0:
+            return ""
+
+        parts = []
+        i = 0
+        n = len(runs)
+        while i < n:
+            if i == n - 1:
+                parts.append(str(runs[i]))
+                break
+
+            start = runs[i]
+            step = runs[i + 1] - runs[i]
+            j = i + 1
+            while j + 1 < n and (runs[j + 1] - runs[j]) == step:
+                j += 1
+
+            end = runs[j]
+            if end == start:
+                parts.append(str(start))
+            elif step == 1:
+                parts.append("{}:{}".format(start, end))
+            else:
+                parts.append("{}:{};{}".format(start, end, step))
+
+            i = j + 1
+
+        return ",".join(parts)
+
+    def _extract_goniometer_average(self, df, inst_params, axis_name):
+        base = inst_params["GoniometerEntry"] + "." + axis_name.lower()
+        average_value = base + ".average_value"
+        average = base + ".average"
+
+        value = df.get(average_value, None)
+        if value is None:
+            value = df.get(average, None)
+
+        if value is None:
+            return np.nan
+
+        if isinstance(value, list):
+            if len(value) == 0 or value[0] is None:
+                return np.nan
+            value = value[0]
+
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return np.nan
+
+    def _format_markdown_table(self, headers, rows):
+        if len(rows) == 0:
+            return ""
+
+        table = [
+            "| " + " | ".join(headers) + " |",
+            "| " + " | ".join(["---"] * len(headers)) + " |",
+        ]
+        for row in rows:
+            table.append("| " + " | ".join(row) + " |")
+
+        return "\n".join(table)
+
+    def experiment_summary_table(self, data_files, inst_params):
+        if not data_files:
+            return ""
+
+        title_entry = inst_params["Title"]
+        run_number_entry = inst_params["RunNumber"]
+        gonio_axes = list(inst_params["Goniometer"].keys())
+
+        grouped = {}
+        for df in data_files:
+            title = str(df.get(title_entry, "")).strip()
+            if title == "":
+                title = "(untitled)"
+
+            grouped.setdefault(title, []).append(df)
+
+        rows = []
+        for title in sorted(grouped):
+            files = grouped[title]
+            files = sorted(files, key=lambda x: int(x[run_number_entry]))
+
+            runs = [int(df[run_number_entry]) for df in files]
+            run_string = self._runs_to_string_with_step(runs)
+
+            angle_values = []
+            step_values = []
+            for axis in gonio_axes:
+                values = np.array(
+                    [
+                        self._extract_goniometer_average(df, inst_params, axis)
+                        for df in files
+                    ],
+                    dtype=float,
+                )
+
+                valid = values[~np.isnan(values)]
+                if len(valid) == 0:
+                    angle_values.append("n/a")
+                    step_values.append("n/a")
+                    continue
+
+                angle_values.append(
+                    "{:.3f} to {:.3f}".format(
+                        np.nanmin(valid), np.nanmax(valid)
+                    )
+                )
+
+                if len(valid) > 1:
+                    avg_step = np.nanmean(np.abs(np.diff(valid)))
+                    step_values.append("{:.3f}".format(avg_step))
+                else:
+                    step_values.append("n/a")
+
+            rows.append(
+                [
+                    title.replace("|", "/"),
+                    run_string,
+                    *angle_values,
+                    *step_values,
+                ]
+            )
+
+        headers = ["Title", "Run String"]
+        headers += ["{} Range (deg)".format(axis) for axis in gonio_axes]
+        headers += ["{} Avg Step (deg)".format(axis) for axis in gonio_axes]
+
+        return self._format_markdown_table(headers, rows)
 
     def prepare_runs_for_multiple_plots(self, run_number_list):
         rs = run_number_list.copy()

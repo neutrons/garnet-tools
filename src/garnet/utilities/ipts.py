@@ -944,10 +944,7 @@ class Model:
             files = sorted(files, key=lambda x: int(x[run_number_entry]))
 
             runs = [int(df[run_number_entry]) for df in files]
-            if len(runs) > 0:
-                run_string = "{} -> {}".format(min(runs), max(runs))
-            else:
-                run_string = ""
+            run_string = self._runs_to_string_with_step(runs)
 
             angle_values = []
             step_values = []
@@ -967,14 +964,14 @@ class Model:
                     continue
 
                 angle_values.append(
-                    "{:.3f} -> {:.3f}".format(
+                    "{:.1f} -> {:.1f}".format(
                         np.nanmin(valid), np.nanmax(valid)
                     )
                 )
 
                 if len(valid) > 1:
                     med_step = np.nanmedian(np.abs(np.diff(valid)))
-                    step_values.append("{:.3f}".format(med_step))
+                    step_values.append("{:.1f}".format(med_step))
                 else:
                     step_values.append("n/a")
 
@@ -994,8 +991,12 @@ class Model:
 
             proton_charge = proton_charge[np.isfinite(proton_charge)]
             if len(proton_charge) > 0:
+                proton_scale = 1e12
+                if inst_params.get("Scale") != "metadata.entry.proton_charge":
+                    proton_scale = 1.0
+
                 proton_charge_stat = "{:.6g}".format(
-                    np.nansum(proton_charge) / 1e12
+                    np.nansum(proton_charge) / proton_scale
                 )
             else:
                 proton_charge_stat = "n/a"

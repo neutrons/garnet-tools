@@ -1,6 +1,7 @@
 import os
 import sys
 import traceback
+import csv
 
 import numpy as np
 
@@ -17,6 +18,7 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QComboBox,
     QAbstractItemView,
+    QFileDialog,
 )
 from qtpy.QtGui import QIcon
 from qtpy.QtCore import Qt
@@ -66,7 +68,7 @@ class View(QWidget):
         self.pass_line.setEchoMode(QLineEdit.Password)
         self.login_button = QPushButton("Sign In")
         self.refresh_button = QPushButton("Refresh")
-        self.report_button = QPushButton("Copy Report")
+        self.report_button = QPushButton("Export CSV")
         self.message_label = QLabel("Not Signed In")
         self.message_label.setStyleSheet("color: red;")
         self.message_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -169,6 +171,27 @@ class View(QWidget):
 
     def connect_report_button(self, update):
         self.report_button.clicked.connect(update)
+
+    def save_report_file_dialog(self, path=""):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+
+        default_file = (
+            os.path.join(path, "experiment_report.csv") if path else ""
+        )
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export experiment report",
+            default_file,
+            "CSV files (*.csv)",
+            options=options,
+        )
+
+        if filename and not filename.lower().endswith(".csv"):
+            filename += ".csv"
+
+        return filename
 
     def plot_goniometer(
         self,
@@ -459,7 +482,7 @@ class Presenter:
         self.view.connect_login_button(self.sign_in)
         self.view.connect_select_experiment(self.set_exp)
         self.view.connect_refresh_button(self.refresh)
-        self.view.connect_report_button(self.copy_experiment_report)
+        self.view.connect_report_button(self.export_experiment_report)
 
         self.switch_instrument()
         self.login = None
@@ -512,24 +535,36 @@ class Presenter:
     def refresh(self):
         self.set_ipts()
 
-    def copy_experiment_report(self):
+    def export_experiment_report(self):
         if not self.data_files:
             self.view.show_message(
                 "No experiment data to report", color="orange"
             )
             return
 
-        report = self.model.experiment_summary_table(
+        filename = self.view.save_report_file_dialog(
+            self.model.default_export_path(
+                self.inst_params, self.view.get_ipts()
+            )
+        )
+        if not filename:
+            return
+
+        headers, rows = self.model.experiment_summary_rows(
             self.data_files, self.inst_params
         )
-        if report == "":
+        if len(rows) == 0:
             self.view.show_message(
                 "No experiment data to report", color="orange"
             )
             return
 
-        QApplication.clipboard().setText(report)
-        self.view.show_message("Experiment report copied", color="green")
+        with open(filename, "w", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(headers)
+            writer.writerows(rows)
+
+        self.view.show_message("Experiment report exported", color="green")
 
     def set_exp(self):
         self.data_files = self.model.retrieve_data_files(
@@ -715,6 +750,7 @@ class Model:
             run_number,
             inst_params["Title"],
             inst_params["Scale"],
+            "metadata.entry.proton_charge",
             "id",
         ]
 
@@ -847,22 +883,46 @@ class Model:
         except (TypeError, ValueError):
             return np.nan
 
-    def _format_markdown_table(self, headers, rows):
-        if len(rows) == 0:
-            return ""
+    def _extract_numeric(self, df, keys):
+        for key in keys:
+            value = df.get(key, None)
+            if value is None:
+                continue
+            if isinstance(value, list):
+                if len(value) == 0:
+                    continue
+                value = value[0]
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                continue
+        return np.nan
 
-        table = [
-            "| " + " | ".join(headers) + " |",
-            "| " + " | ".join(["---"] * len(headers)) + " |",
+    def default_export_path(self, inst_params, ipts_number):
+        facility = str(inst_params.get("Facility", "")).strip()
+        instrument = str(inst_params.get("Name", "")).strip()
+        ipts = str(ipts_number).strip()
+
+        if facility == "" or instrument == "" or ipts == "":
+            return os.getcwd()
+
+        candidates = [
+            os.path.join(
+                os.sep, facility, instrument, "IPTS-{}".format(ipts), "shared"
+            ),
+            os.path.join(os.sep, facility, instrument, "IPTS-{}".format(ipts)),
+            os.path.join(os.sep, facility, instrument),
         ]
-        for row in rows:
-            table.append("| " + " | ".join(row) + " |")
 
-        return "\n".join(table)
+        for path in candidates:
+            if os.path.isdir(path):
+                return path
 
-    def experiment_summary_table(self, data_files, inst_params):
+        return os.getcwd()
+
+    def experiment_summary_rows(self, data_files, inst_params):
         if not data_files:
-            return ""
+            return [], []
 
         title_entry = inst_params["Title"]
         run_number_entry = inst_params["RunNumber"]
@@ -874,6 +934,8 @@ class Model:
             if title == "":
                 title = "(untitled)"
 
+            title = title.replace(",", "")
+
             grouped.setdefault(title, []).append(df)
 
         rows = []
@@ -882,7 +944,10 @@ class Model:
             files = sorted(files, key=lambda x: int(x[run_number_entry]))
 
             runs = [int(df[run_number_entry]) for df in files]
-            run_string = self._runs_to_string_with_step(runs)
+            if len(runs) > 0:
+                run_string = "{} -> {}".format(min(runs), max(runs))
+            else:
+                run_string = ""
 
             angle_values = []
             step_values = []
@@ -902,31 +967,55 @@ class Model:
                     continue
 
                 angle_values.append(
-                    "{:.3f} to {:.3f}".format(
+                    "{:.3f} -> {:.3f}".format(
                         np.nanmin(valid), np.nanmax(valid)
                     )
                 )
 
                 if len(valid) > 1:
-                    avg_step = np.nanmean(np.abs(np.diff(valid)))
-                    step_values.append("{:.3f}".format(avg_step))
+                    med_step = np.nanmedian(np.abs(np.diff(valid)))
+                    step_values.append("{:.3f}".format(med_step))
                 else:
                     step_values.append("n/a")
+
+            proton_charge = np.array(
+                [
+                    self._extract_numeric(
+                        df,
+                        [
+                            "metadata.entry.proton_charge",
+                            "metadata.entry.proton_charge.average",
+                        ],
+                    )
+                    for df in files
+                ],
+                dtype=float,
+            )
+
+            proton_charge = proton_charge[np.isfinite(proton_charge)]
+            if len(proton_charge) > 0:
+                proton_charge_stat = "{:.6g}".format(
+                    np.nansum(proton_charge) / 1e12
+                )
+            else:
+                proton_charge_stat = "n/a"
 
             rows.append(
                 [
                     title.replace("|", "/"),
                     run_string,
+                    proton_charge_stat,
                     *angle_values,
                     *step_values,
                 ]
             )
 
         headers = ["Title", "Run String"]
+        headers += ["Proton Charge (C, sum)"]
         headers += ["{} Range (deg)".format(axis) for axis in gonio_axes]
-        headers += ["{} Avg Step (deg)".format(axis) for axis in gonio_axes]
+        headers += ["{} Median Step (deg)".format(axis) for axis in gonio_axes]
 
-        return self._format_markdown_table(headers, rows)
+        return headers, rows
 
     def prepare_runs_for_multiple_plots(self, run_number_list):
         rs = run_number_list.copy()

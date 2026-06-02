@@ -934,14 +934,17 @@ class PeakEllipsoid:
         self.params = Parameters()
         self.relaxed_profile_cut = 5.0
         self.prior_strength_center = 0.25
-        self.prior_strength_width = 0.10
-        self.prior_strength_rotation = 0.10
+        self.prior_strength_cov = 0.10
         self.prior_center_mean = np.zeros(3)
         self.prior_center_sigma = np.ones(3)
-        self.prior_log_r_mean = np.zeros(3)
-        self.prior_log_r_sigma = np.ones(3)
-        self.prior_u_mean = np.zeros(3)
-        self.prior_u_sigma = np.ones(3)
+        self.prior_S0 = np.eye(3)
+        self.prior_cov_sigma = np.ones(6)
+
+    def vech6(self, M):
+        return np.array(
+            [M[0, 0], M[1, 1], M[2, 2], M[1, 2], M[0, 2], M[0, 1]],
+            dtype=float,
+        )
 
     def update_constraints(self, x0, x1, x2, dx):
         dx0 = x0[:, 0, 0][1] - x0[:, 0, 0][0]
@@ -1057,19 +1060,16 @@ class PeakEllipsoid:
 
     def initialize_priors(self, best):
         radii = np.asarray(best["r"], dtype=float)
-        rotvec = np.asarray(best["u"], dtype=float)
-        center_scale = max(0.5 * np.mean(radii), 1e-8)
-        width_scale = max(0.5, 1e-8)
-        rotation_scale = np.maximum(np.abs(rotvec), np.deg2rad(10.0))
+        u0, u1, u2 = best["u"]
+        center_scale = max(np.mean(radii), 1e-8)
 
         self.prior_center_mean = np.zeros(3)
         self.prior_center_sigma = np.full(3, center_scale, dtype=float)
 
-        self.prior_log_r_mean = np.log(np.maximum(radii, 1e-12))
-        self.prior_log_r_sigma = np.full(3, width_scale, dtype=float)
-
-        self.prior_u_mean = rotvec
-        self.prior_u_sigma = rotation_scale
+        self.prior_S0 = self.S_matrix(*radii, u0, u1, u2)
+        v0 = self.vech6(self.prior_S0)
+        floor = max(0.25 * np.nanmax(np.abs(np.diag(self.prior_S0))), 1e-8)
+        self.prior_cov_sigma = np.maximum(np.abs(v0), floor)
 
     def prior_residual(self, params):
         terms = []
@@ -1083,29 +1083,23 @@ class PeakEllipsoid:
                 / sigma
             )
 
-        for name, mean, sigma in zip(
-            ["r0", "r1", "r2"], self.prior_log_r_mean, self.prior_log_r_sigma
-        ):
-            value = max(params[name].value, 1e-12)
-            terms.append(
-                np.sqrt(self.prior_strength_width)
-                * (np.log(value) - mean)
-                / sigma
-            )
+        r0 = params["r0"].value
+        r1 = params["r1"].value
+        r2 = params["r2"].value
+        u0 = params["u0"].value
+        u1 = params["u1"].value
+        u2 = params["u2"].value
 
-        for name, mean, sigma in zip(
-            ["u0", "u1", "u2"], self.prior_u_mean, self.prior_u_sigma
-        ):
-            terms.append(
-                np.sqrt(self.prior_strength_rotation)
-                * (params[name].value - mean)
-                / sigma
-            )
+        S = self.S_matrix(r0, r1, r2, u0, u1, u2)
+        dS = self.vech6(S - self.prior_S0)
+        terms += (
+            np.sqrt(self.prior_strength_cov) * dS / self.prior_cov_sigma
+        ).tolist()
 
         return np.asarray(terms, dtype=float)
 
-    def prior_jacobian(self, params):
-        names = ["c0", "c1", "c2", "r0", "r1", "r2", "u0", "u1", "u2"]
+    def prior_jacobian(self, params, S, dr, du):
+        names = ["c0", "c1", "c2", "S00", "S11", "S22", "S12", "S02", "S01"]
         params_list = [name for name, _ in params.items()]
         jac = np.zeros((len(params_list), len(names)), dtype=float)
 
@@ -1116,20 +1110,19 @@ class PeakEllipsoid:
                 np.sqrt(self.prior_strength_center) / sigma
             )
 
-        for offset, (name, sigma) in enumerate(
-            zip(["r0", "r1", "r2"], self.prior_log_r_sigma), start=3
-        ):
-            value = max(params[name].value, 1e-12)
-            jac[params_list.index(name), offset] = np.sqrt(
-                self.prior_strength_width
-            ) / (sigma * value)
+        d_inv_S = {
+            "r0": dr[0],
+            "r1": dr[1],
+            "r2": dr[2],
+            "u0": du[0],
+            "u1": du[1],
+            "u2": du[2],
+        }
 
-        for offset, (name, sigma) in enumerate(
-            zip(["u0", "u1", "u2"], self.prior_u_sigma), start=6
-        ):
-            jac[params_list.index(name), offset] = (
-                np.sqrt(self.prior_strength_rotation) / sigma
-            )
+        cov_scale = np.sqrt(self.prior_strength_cov) / self.prior_cov_sigma
+        for name in ["r0", "r1", "r2", "u0", "u1", "u2"]:
+            dS = -S @ d_inv_S[name] @ S
+            jac[params_list.index(name), 3:] = cov_scale * self.vech6(dS)
 
         ind = [i for i, (_, par) in enumerate(params.items()) if par.vary]
         return jac[ind]
@@ -1178,9 +1171,7 @@ class PeakEllipsoid:
         v[~mask] = np.nan
 
         y_int = d / n
-        # Count-space weighting: wr = (d - y_fit*n)/sqrt(d+1)
-        # Equivalent normalized-space sigma is sqrt(d+1)/n.
-        e_int = np.sqrt(np.clip(d, 0, None) + 1) / n
+        e_int = np.sqrt(d + np.nanpercentile(d, rel_err) + 1) / n
 
         return y_int, e_int
 
@@ -1260,33 +1251,6 @@ class PeakEllipsoid:
         d_int, n_int, v_int, w_int = self.profile_project(
             x0, x1, x2, d, n, w, c, inv_S, mode=mode
         )
-
-        # if mode == "1d_0":
-        #     r = x0[:, 0, 0]
-        #     df = 1
-        # elif mode == "1d_1":
-        #     r = x1[0, :, 0]
-        #     df = 1
-        # elif mode == "1d_2":
-        #     r = x2[0, 0, :]
-        #     df = 1
-        # elif mode == "2d_0":
-        #     r = np.sqrt(x1[0, :, :] ** 2 + x2[0, :, :] ** 2)
-        #     df = 2
-        # elif mode == "2d_1":
-        #     r = np.sqrt(x0[:, 0, :] ** 2 + x2[:, 0, :] ** 2)
-        #     df = 2
-        # elif mode == "2d_2":
-        #     r = np.sqrt(x0[:, :, 0] ** 2 + x1[:, :, 0] ** 2)
-        #     df = 2
-        # elif mode == "3d":
-        #     r = np.sqrt(x0**2 + x1**2 + x2**2)
-        #     df = 3
-
-        # r_max = (np.max(r) - np.min(r)) / 2
-        # sigma = r_max / scipy.stats.chi2.ppf(perc / 100, df=df)
-
-        # f = 0.9 * np.exp(-((r / sigma) ** 2)) + 0.1
 
         y_int, e_int = self.data_norm(d_int, n_int, v_int)
 
@@ -2166,11 +2130,12 @@ class PeakEllipsoid:
 
         dr = self.inv_S_deriv_r(r0, r1, r2, u0, u1, u2)
         du = self.inv_S_deriv_u(r0, r1, r2, u0, u1, u2)
+        S = np.linalg.inv(inv_S)
 
         jac_1d = self.jacobian_1d(params, *args_1d, c, inv_S, dr, du)
         jac_2d = self.jacobian_2d(params, *args_2d, c, inv_S, dr, du)
         jac_3d = self.jacobian_3d(params, *args_3d, c, inv_S, dr, du)
-        jac_prior = self.prior_jacobian(params)
+        jac_prior = self.prior_jacobian(params, S, dr, du)
 
         jac = np.column_stack([jac_1d, jac_2d, jac_3d, jac_prior])
         jac = np.nan_to_num(jac, nan=0.0, posinf=1e16, neginf=-1e16)
@@ -2741,11 +2706,11 @@ class PeakEllipsoid:
 
         ellipsoid = np.einsum("ij,jklm,iklm->klm", S_inv, x, x)
 
-        pk = ellipsoid <= 1
+        mask = ellipsoid <= 1
 
         structure = np.ones((3, 3, 3), dtype=bool)
 
-        # pk = scipy.ndimage.binary_dilation(mask, structure=structure)
+        pk = scipy.ndimage.binary_dilation(mask, structure=structure)
 
         # bound = np.zeros_like(pk, dtype=bool)
         # bound[0, :, :] = True

@@ -18,7 +18,7 @@ from mantid import config
 
 config["Q.convention"] = "Crystallography"
 
-config["MultiThreaded.MaxCores"] == "1"
+config["MultiThreaded.MaxCores"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
@@ -225,7 +225,7 @@ class Integration(SubPlan):
                 peaks.integrate_peaks(
                     "md",
                     "peaks",
-                    r_cut / 3,
+                    r_cut / np.cbrt(3),
                     method="ellipsoid",
                     centroid=False,
                 )
@@ -275,7 +275,7 @@ class Integration(SubPlan):
             peaks.integrate_peaks(
                 "md",
                 "peaks",
-                r_cut / 3,
+                r_cut / np.cbrt(3),
                 method="ellipsoid",
                 centroid=False,
             )
@@ -337,7 +337,7 @@ class Integration(SubPlan):
 
             peaks.combine_peaks("peaks", "combine")
 
-            pk_file = self.get_diagnostic_file("run#{}_peaks".format(run))
+            pk_file = self.get_diagnostic_file("run#{}_integrate".format(run))
 
             peaks.save_peaks(pk_file, "peaks")
 
@@ -1048,9 +1048,9 @@ class PeakEllipsoid:
             else:
                 p.set(value=2 * p.min)
 
-        self.params["u0"].set(value=u0)
-        self.params["u1"].set(value=u1)
-        self.params["u2"].set(value=u2)
+        self.params["u0"].set(value=0)
+        self.params["u1"].set(value=0)
+        self.params["u2"].set(value=0)
 
         self.params["u0"].set(min=-np.pi, max=np.pi)
         self.params["u1"].set(min=-np.pi, max=np.pi)
@@ -1059,14 +1059,14 @@ class PeakEllipsoid:
         self.initialize_priors(best)
 
     def initialize_priors(self, best):
-        radii = np.asarray(best["r"], dtype=float)
+        r0, r1, r2 = np.asarray(best["r"], dtype=float)
         u0, u1, u2 = best["u"]
-        center_scale = max(np.mean(radii), 1e-8)
+        center_scale = max(np.mean([r0, r1, r2]), 1e-8)
 
         self.prior_center_mean = np.zeros(3)
         self.prior_center_sigma = np.full(3, center_scale, dtype=float)
 
-        self.prior_S0 = self.S_matrix(*radii, u0, u1, u2)
+        self.prior_S0 = self.S_matrix(r0, r1, r2, u0, u1, u2)
         v0 = self.vech6(self.prior_S0)
         floor = max(0.25 * np.nanmax(np.abs(np.diag(self.prior_S0))), 1e-8)
         self.prior_cov_sigma = np.maximum(np.abs(v0), floor)

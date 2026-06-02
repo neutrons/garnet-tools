@@ -592,6 +592,7 @@ class FormView(QWidget):
 
         dim_log_label = QLabel("Log Name:")
 
+        self.param_log_combo = QComboBox(self)
         self.param_log_line = QLineEdit("sample_temperature")
 
         bin_layout.addWidget(min_label, 0, 1, Qt.AlignCenter)
@@ -635,7 +636,8 @@ class FormView(QWidget):
         bin_layout.addWidget(self.param_bins_4_line, 4, 3)
         bin_layout.addWidget(self.param_step_4_line, 4, 4)
         bin_layout.addWidget(dim_log_label, 4, 5, Qt.AlignRight)
-        bin_layout.addWidget(self.param_log_line, 4, 6, 1, 2)
+        bin_layout.addWidget(self.param_log_combo, 4, 6)
+        bin_layout.addWidget(self.param_log_line, 4, 7)
 
         self.miller_box = QCheckBox("Miller Index")
         self.miller_box.setChecked(False)
@@ -720,11 +722,25 @@ class FormView(QWidget):
     def connect_param_bins_4_line(self, update):
         self.param_bins_4_line.editingFinished.connect(update)
 
+    def connect_log_option_combo(self, update):
+        self.param_log_combo.activated.connect(lambda *_: update())
+
+    def set_log_options(self, log_options):
+        self.param_log_combo.clear()
+        for option in log_options:
+            self.param_log_combo.addItem(option)
+        self.auto_scale_dropdown(self.param_log_combo)
+
+    def get_log_option(self):
+        return self.param_log_combo.currentText()
+
     def get_log_name(self):
         return self.param_log_line.text()
 
     def set_log_name(self, name):
         self.param_log_line.setText(name)
+        index = self.param_log_combo.findText(name)
+        self.param_log_combo.setCurrentIndex(index)
 
     def get_miller_index(self):
         check = self.miller_box.isChecked()
@@ -1812,6 +1828,7 @@ class FormPresenter:
         self.view.connect_param_bins_2_line(self.update_param_step_2)
         self.view.connect_param_bins_3_line(self.update_param_step_3)
         self.view.connect_param_bins_4_line(self.update_param_step_4)
+        self.view.connect_log_option_combo(self.update_log_name)
 
         self.view.connect_symmetry_combo(self.update_symmetry)
 
@@ -1883,6 +1900,9 @@ class FormPresenter:
         if limits is not None and bins is not None:
             step = self.model.calculate_step(*limits, bins)
             self.view.set_param_step_4(step)
+
+    def update_log_name(self):
+        self.view.set_log_name(self.view.get_log_option())
 
     def auto_proj(self):
         UB_file = self.view.get_UB()
@@ -1966,6 +1986,9 @@ class FormPresenter:
 
         groupings = self.model.get_groupings()
         self.view.set_groupings(groupings)
+
+        logs = self.model.get_logs()
+        self.view.set_log_options(logs)
 
         grouping = self.model.get_grouping()
         if grouping is not None:
@@ -2597,6 +2620,10 @@ class FormModel:
 
     def get_groupings(self):
         return self.beamline["Groupings"]
+
+    def get_logs(self):
+        logs = self.beamline.get("Logs", [])
+        return list(dict.fromkeys(logs))
 
     def get_grouping(self):
         if self.reduction.plan is not None:

@@ -221,7 +221,7 @@ class PeaksModel:
         background_inner_fact=np.cbrt(2),
         background_outer_fact=np.cbrt(3),
         method="ellipsoid",
-        centroid=False,
+        centroid=True,
     ):
         """
         Integrate peaks using spherical or ellipsoidal regions.
@@ -264,7 +264,7 @@ class PeaksModel:
             FixQAxis=False,
             FixMajorAxisLength=False,
             UseCentroid=centroid,
-            MaxIterations=1,
+            MaxIterations=3,
             ReplaceIntensity=True,
             IntegrateIfOnEdge=True,
             AdaptiveQBackground=adaptive,

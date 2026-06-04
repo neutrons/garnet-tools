@@ -91,6 +91,8 @@ class PeakPlot(BasePlot):
         self.ellip_im = []
         self.ellip_el = []
         self.ellip_sp = []
+        self.ellip_est_el = []
+        self.ellip_est_sp = []
 
         x = np.arange(5)
         y = np.arange(6)
@@ -122,6 +124,11 @@ class PeakPlot(BasePlot):
         self.ellip_el.append(el)
         self.ellip_sp.append(sp)
 
+        el = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "w")
+        sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "w")
+        self.ellip_est_el.append(el)
+        self.ellip_est_sp.append(sp)
+
         # line = self._draw_intersecting_line(ax, 2.5, 3)
         # self.ellip_pt.append(line)
 
@@ -150,6 +157,11 @@ class PeakPlot(BasePlot):
         self.ellip_el.append(el)
         self.ellip_sp.append(sp)
 
+        el = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "w")
+        sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "w")
+        self.ellip_est_el.append(el)
+        self.ellip_est_sp.append(sp)
+
         # line = self._draw_intersecting_line(ax, 2.5, 3)
         # self.ellip_pt.append(line)
 
@@ -176,6 +188,11 @@ class PeakPlot(BasePlot):
         sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
         self.ellip_el.append(el)
         self.ellip_sp.append(sp)
+
+        el = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "w")
+        sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "w")
+        self.ellip_est_el.append(el)
+        self.ellip_est_sp.append(sp)
 
         # line = self._draw_intersecting_line(ax, 2.5, 3)
         # self.ellip_pt.append(line)
@@ -205,6 +222,11 @@ class PeakPlot(BasePlot):
         self.ellip_el.append(el)
         self.ellip_sp.append(sp)
 
+        el = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "w")
+        sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "w")
+        self.ellip_est_el.append(el)
+        self.ellip_est_sp.append(sp)
+
         # line = self._draw_intersecting_line(ax, 2.5, 3)
         # self.ellip_pt.append(line)
 
@@ -232,6 +254,11 @@ class PeakPlot(BasePlot):
         sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
         self.ellip_el.append(el)
         self.ellip_sp.append(sp)
+
+        el = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "w")
+        sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "w")
+        self.ellip_est_el.append(el)
+        self.ellip_est_sp.append(sp)
 
         # line = self._draw_intersecting_line(ax, 2.5, 3)
         # self.ellip_pt.append(line)
@@ -261,6 +288,11 @@ class PeakPlot(BasePlot):
         sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
         self.ellip_el.append(el)
         self.ellip_sp.append(sp)
+
+        el = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "w")
+        sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "w")
+        self.ellip_est_el.append(el)
+        self.ellip_est_sp.append(sp)
 
         # line = self._draw_intersecting_line(ax, 2.5, 3)
         # self.ellip_pt.append(line)
@@ -1168,6 +1200,53 @@ class PeakPlot(BasePlot):
 
         self.prof[2].relim()
         self.prof[2].autoscale_view()
+
+    def add_estimated_ellipsoid(self, c, S):
+        """
+        Draw estimated ellipsoid envelopes on ROI views.
+
+        Parameters
+        ----------
+        c : 1d-array
+            3 component center.
+        S : 2d-array
+            3x3 covariance matrix.
+
+        """
+
+        r = np.sqrt(np.diag(S))
+
+        rho = [
+            S[1, 2] / r[1] / r[2],
+            S[0, 2] / r[0] / r[2],
+            S[0, 1] / r[0] / r[1],
+        ]
+
+        for el, ax in zip(self.ellip_est_el[0:2], self.ellip[0:2]):
+            self._update_ellipse(el, ax, c[0], c[1], r[0], r[1], rho[2])
+
+        for el, ax in zip(self.ellip_est_el[2:4], self.ellip[2:4]):
+            self._update_ellipse(el, ax, c[0], c[2], r[0], r[2], rho[1])
+
+        for el, ax in zip(self.ellip_est_el[4:6], self.ellip[4:6]):
+            self._update_ellipse(el, ax, c[1], c[2], r[1], r[2], rho[0])
+
+        s = np.cbrt(2)
+
+        for el, ax in zip(self.ellip_est_sp[0:2], self.ellip[0:2]):
+            self._update_ellipse(
+                el, ax, c[0], c[1], r[0] * s, r[1] * s, rho[2]
+            )
+
+        for el, ax in zip(self.ellip_est_sp[2:4], self.ellip[2:4]):
+            self._update_ellipse(
+                el, ax, c[0], c[2], r[0] * s, r[2] * s, rho[1]
+            )
+
+        for el, ax in zip(self.ellip_est_sp[4:6], self.ellip[4:6]):
+            self._update_ellipse(
+                el, ax, c[1], c[2], r[1] * s, r[2] * s, rho[0]
+            )
 
     def _path(self, mask, x, y, dx, dy):
         if not mask.any():

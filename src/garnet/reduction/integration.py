@@ -277,7 +277,8 @@ class Integration(SubPlan):
                 "peaks",
                 r_cut / np.cbrt(3),
                 method="ellipsoid",
-                centroid=False,
+                centroid=True,
+                update=False,
             )
 
             pk_file = self.get_diagnostic_file("run#{}_peaks".format(run))
@@ -600,6 +601,7 @@ class Integration(SubPlan):
                 peak_background_mask = ellipsoid.peak_background_mask
                 integral = ellipsoid.integral
                 matched_filter = ellipsoid.filter
+                estimated_fit = ellipsoid.estimated_fit
 
                 if self.make_plot:
                     self.peak_plot.add_ellipsoid_fit(best_fit)
@@ -609,6 +611,8 @@ class Integration(SubPlan):
                     self.peak_plot.add_projection_fit(best_proj)
 
                     self.peak_plot.add_ellipsoid(c, S)
+
+                    self.peak_plot.add_estimated_ellipsoid(*estimated_fit)
 
                     self.peak_plot.update_envelope(*peak_background_mask)
 
@@ -932,12 +936,12 @@ class Integration(SubPlan):
 class PeakEllipsoid:
     def __init__(self):
         self.params = Parameters()
-        self.relaxed_profile_cut = 5.0
-        self.prior_strength_center = 0.25
-        self.prior_strength_cov = 0.10
+
+        self.lamda_center = 0.01 / 3
+        self.lamda_cov = 0.01 / 6
         self.prior_center_mean = np.zeros(3)
         self.prior_center_sigma = np.ones(3)
-        self.prior_S0 = np.eye(3)
+        self.prior_cov = np.eye(3)
         self.prior_cov_sigma = np.ones(6)
 
     def vech6(self, M):
@@ -1048,27 +1052,32 @@ class PeakEllipsoid:
             else:
                 p.set(value=2 * p.min)
 
-        self.params["u0"].set(value=0)
-        self.params["u1"].set(value=0)
-        self.params["u2"].set(value=0)
+        self.params["u0"].set(value=u0)
+        self.params["u1"].set(value=u1)
+        self.params["u2"].set(value=u2)
 
         self.params["u0"].set(min=-np.pi, max=np.pi)
         self.params["u1"].set(min=-np.pi, max=np.pi)
         self.params["u2"].set(min=-np.pi, max=np.pi)
+
+        self.estimated_fit = (
+            np.array([0.0, 0.0, 0.0]),
+            self.S_matrix(r0, r1, r2, u0, u1, u2),
+        )
 
         self.initialize_priors(best)
 
     def initialize_priors(self, best):
         r0, r1, r2 = np.asarray(best["r"], dtype=float)
         u0, u1, u2 = best["u"]
-        center_scale = max(np.mean([r0, r1, r2]), 1e-8)
+        center_scale = np.mean([r0, r1, r2])
 
         self.prior_center_mean = np.zeros(3)
         self.prior_center_sigma = np.full(3, center_scale, dtype=float)
 
-        self.prior_S0 = self.S_matrix(r0, r1, r2, u0, u1, u2)
-        v0 = self.vech6(self.prior_S0)
-        floor = max(0.25 * np.nanmax(np.abs(np.diag(self.prior_S0))), 1e-8)
+        self.prior_cov = self.S_matrix(r0, r1, r2, u0, u1, u2)
+        v0 = self.vech6(self.prior_cov)
+        floor = 0.25 * np.nanmax(np.abs(np.diag(self.prior_cov)))
         self.prior_cov_sigma = np.maximum(np.abs(v0), floor)
 
     def prior_residual(self, params):
@@ -1078,7 +1087,7 @@ class PeakEllipsoid:
             ["c0", "c1", "c2"], self.prior_center_mean, self.prior_center_sigma
         ):
             terms.append(
-                np.sqrt(self.prior_strength_center)
+                np.sqrt(self.lamda_center)
                 * (params[name].value - mean)
                 / sigma
             )
@@ -1091,10 +1100,8 @@ class PeakEllipsoid:
         u2 = params["u2"].value
 
         S = self.S_matrix(r0, r1, r2, u0, u1, u2)
-        dS = self.vech6(S - self.prior_S0)
-        terms += (
-            np.sqrt(self.prior_strength_cov) * dS / self.prior_cov_sigma
-        ).tolist()
+        dS = self.vech6(S - self.prior_cov)
+        terms += (np.sqrt(self.lamda_cov) * dS / self.prior_cov_sigma).tolist()
 
         return np.asarray(terms, dtype=float)
 
@@ -1107,7 +1114,7 @@ class PeakEllipsoid:
             zip(["c0", "c1", "c2"], self.prior_center_sigma)
         ):
             jac[params_list.index(name), col] = (
-                np.sqrt(self.prior_strength_center) / sigma
+                np.sqrt(self.lamda_center) / sigma
             )
 
         d_inv_S = {
@@ -1119,7 +1126,7 @@ class PeakEllipsoid:
             "u2": du[2],
         }
 
-        cov_scale = np.sqrt(self.prior_strength_cov) / self.prior_cov_sigma
+        cov_scale = np.sqrt(self.lamda_cov) / self.prior_cov_sigma
         for name in ["r0", "r1", "r2", "u0", "u1", "u2"]:
             dS = -S @ d_inv_S[name] @ S
             jac[params_list.index(name), 3:] = cov_scale * self.vech6(dS)
@@ -1300,20 +1307,18 @@ class PeakEllipsoid:
             for target, weight in zip(targets, weights)
         ]
 
-    def uniform_mode_weights(self, ys, es):
+    def uniform_mode_weights(self, ys, es, val=1.0):
         n_valid = sum(
             np.count_nonzero(np.isfinite(y) & np.isfinite(e) & (e > 0))
             for y, e in zip(ys, es)
         )
 
-        scale = 1 / np.sqrt(max(n_valid, 1))
+        scale = np.sqrt(val) / np.sqrt(max(n_valid, 1))
 
         return [np.full_like(e, scale, dtype=float) for e in es]
 
-    def chi_2_fit(self, x0, x1, x2, c, inv_S, y_fit, y, e, w=None, mode="3d"):
+    def chi_2_fit(self, x0, x1, x2, c, inv_S, y_fit, y, e, mode="3d"):
         c0, c1, c2 = c
-
-        w = self.coerce_weight(y, w)
 
         dx0, dx1, dx2 = x0 - c0, x1 - c1, x2 - c2
 
@@ -1353,7 +1358,7 @@ class PeakEllipsoid:
             m = 4
             k = 1
 
-        mask = (d2 <= 2 ** (2 / k)) & np.isfinite(e) & (e > 0) & np.isfinite(w)
+        mask = (d2 <= 2 ** (2 / k)) & np.isfinite(e) & (e > 0)
 
         n = np.sum(mask)
 
@@ -1362,10 +1367,7 @@ class PeakEllipsoid:
         if dof <= 0:
             return np.inf
         else:
-            return (
-                np.nansum((((y_fit[mask] - y[mask]) / e[mask]) * w[mask]) ** 2)
-                / dof
-            )
+            return np.nansum(((y_fit[mask] - y[mask]) / e[mask]) ** 2) / dof
 
     def estimate_intensity(self, x0, x1, x2, c, inv_S, y_fit, y, e, mode="3d"):
         c0, c1, c2 = c
@@ -2142,6 +2144,35 @@ class PeakEllipsoid:
 
         return jac.T
 
+    def collect_mode_fit_metrics(self, x0, x1, x2, c, inv_S, mode_data):
+        args = x0, x1, x2, c, inv_S
+
+        metrics = {}
+
+        for mode, (y, e) in mode_data.items():
+            A = self.params["A" + mode].value
+            B = self.params["B" + mode].value
+
+            y_fit = A * self.gaussian(*args, mode) + B
+
+            if mode == "3d":
+                valid = np.isfinite(y) & (e >= 0)
+            else:
+                valid = np.isfinite(y) & (e > 0)
+
+            y_fit[~valid] = np.nan
+
+            fit_triplet = (y_fit, y, e)
+
+            chi2 = self.chi_2_fit(x0, x1, x2, c, inv_S, *fit_triplet, mode)
+            I0, s0 = self.estimate_intensity(
+                x0, x1, x2, c, inv_S, *fit_triplet, mode
+            )
+
+            metrics[mode] = [I0, s0, chi2, fit_triplet]
+
+        return metrics
+
     def extract_result(self, args_1d, args_2d, args_3d, xmod):
         x0, x1, x2, y1d, e1d, w1d = args_1d
         x0, x1, x2, y2d, e2d, w2d = args_2d
@@ -2186,126 +2217,75 @@ class PeakEllipsoid:
             c0, c1, c2, r0, r1, r2, u0, u1, u2
         )
 
-        S_inv = inv_S.copy()
-
-        # s = np.sqrt(scipy.stats.chi2.ppf(0.997, df=3))
-        # S_blur = np.diag((np.array(self.voxels(x0, x1, x2)) * 0.6) ** 2 * s)
-
-        S = np.linalg.inv(inv_S)  # - S_blur
-
-        evals, evecs = np.linalg.eigh(S)
-        evals = np.maximum(evals, 1e-12)
-        S = evecs @ np.diag(evals) @ evecs.T
-
-        args = x0, x1, x2, c, inv_S
-
-        inv_S = np.linalg.inv(S)
-
-        A0 = self.params["A1d_0"]
-        A1 = self.params["A1d_1"]
-        A2 = self.params["A1d_2"]
-
-        B0 = self.params["B1d_0"]
-        B1 = self.params["B1d_1"]
-        B2 = self.params["B1d_2"]
-
-        y1d_0_fit = A0 * self.gaussian(*args, "1d_0") + B0
-        y1d_1_fit = A1 * self.gaussian(*args, "1d_1") + B1
-        y1d_2_fit = A2 * self.gaussian(*args, "1d_2") + B2
-
-        y1d_0_fit[~(np.isfinite(y1d_0) & (e1d_0 > 0))] = np.nan
-        y1d_1_fit[~(np.isfinite(y1d_1) & (e1d_1 > 0))] = np.nan
-        y1d_2_fit[~(np.isfinite(y1d_2) & (e1d_2 > 0))] = np.nan
-
-        y1 = [
-            (y1d_0_fit, y1d_0, e1d_0),
-            (y1d_1_fit, y1d_1, e1d_1),
-            (y1d_2_fit, y1d_2, e1d_2),
-        ]
-
-        chi2_1d = []
-        chi2_1d.append(
-            self.chi_2_fit(x0, x1, x2, c, inv_S, *y1[0], w1d[0], "1d_0")
-        )
-        chi2_1d.append(
-            self.chi_2_fit(x0, x1, x2, c, inv_S, *y1[1], w1d[1], "1d_1")
-        )
-        chi2_1d.append(
-            self.chi_2_fit(x0, x1, x2, c, inv_S, *y1[2], w1d[2], "1d_2")
+        mode_1d = {
+            "1d_0": (y1d_0, e1d_0),
+            "1d_1": (y1d_1, e1d_1),
+            "1d_2": (y1d_2, e1d_2),
+        }
+        metrics_1d = self.collect_mode_fit_metrics(
+            x0, x1, x2, c, inv_S, mode_1d
         )
 
-        self.redchi2.append(chi2_1d)
+        modes = ["1d_0", "1d_1", "1d_2"]
 
-        I0, s0 = self.estimate_intensity(x0, x1, x2, c, S_inv, *y1[0], "1d_0")
-        I1, s1 = self.estimate_intensity(x0, x1, x2, c, S_inv, *y1[1], "1d_1")
-        I2, s2 = self.estimate_intensity(x0, x1, x2, c, S_inv, *y1[2], "1d_2")
-
-        self.intensity.append([I0, I1, I2])
-        self.sigma.append([s0, s1, s2])
+        y1 = [metrics_1d[mode][3] for mode in modes]
+        self.redchi2.append([metrics_1d[mode][2] for mode in modes])
+        self.intensity.append([metrics_1d[mode][0] for mode in modes])
+        self.sigma.append([metrics_1d[mode][1] for mode in modes])
 
         # ---
 
-        A0 = self.params["A2d_0"]
-        A1 = self.params["A2d_1"]
-        A2 = self.params["A2d_2"]
-
-        B0 = self.params["B2d_0"]
-        B1 = self.params["B2d_1"]
-        B2 = self.params["B2d_2"]
-
-        y2d_0_fit = A0 * self.gaussian(*args, "2d_0") + B0
-        y2d_1_fit = A1 * self.gaussian(*args, "2d_1") + B1
-        y2d_2_fit = A2 * self.gaussian(*args, "2d_2") + B2
-
-        y2d_0_fit[~(np.isfinite(y2d_0) & (e2d_0 > 0))] = np.nan
-        y2d_1_fit[~(np.isfinite(y2d_1) & (e2d_1 > 0))] = np.nan
-        y2d_2_fit[~(np.isfinite(y2d_2) & (e2d_2 > 0))] = np.nan
-
-        y2 = [
-            (y2d_0_fit, y2d_0, e2d_0),
-            (y2d_1_fit, y2d_1, e2d_1),
-            (y2d_2_fit, y2d_2, e2d_2),
-        ]
-
-        chi2_2d = []
-        chi2_2d.append(
-            self.chi_2_fit(x0, x1, x2, c, inv_S, *y2[0], w2d[0], "2d_0")
-        )
-        chi2_2d.append(
-            self.chi_2_fit(x0, x1, x2, c, inv_S, *y2[1], w2d[1], "2d_1")
-        )
-        chi2_2d.append(
-            self.chi_2_fit(x0, x1, x2, c, inv_S, *y2[2], w2d[2], "2d_2")
+        mode_2d = {
+            "2d_0": (y2d_0, e2d_0),
+            "2d_1": (y2d_1, e2d_1),
+            "2d_2": (y2d_2, e2d_2),
+        }
+        metrics_2d = self.collect_mode_fit_metrics(
+            x0, x1, x2, c, inv_S, mode_2d
         )
 
-        self.redchi2.append(chi2_2d)
+        modes = ["2d_0", "2d_1", "2d_2"]
 
-        I0, s0 = self.estimate_intensity(x0, x1, x2, c, S_inv, *y2[0], "2d_0")
-        I1, s1 = self.estimate_intensity(x0, x1, x2, c, S_inv, *y2[1], "2d_1")
-        I2, s2 = self.estimate_intensity(x0, x1, x2, c, S_inv, *y2[2], "2d_2")
-
-        self.intensity.append([I0, I1, I2])
-        self.sigma.append([s0, s1, s2])
+        y2 = [metrics_2d[mode][3] for mode in modes]
+        self.redchi2.append([metrics_2d[mode][2] for mode in modes])
+        self.intensity.append([metrics_2d[mode][0] for mode in modes])
+        self.sigma.append([metrics_2d[mode][1] for mode in modes])
 
         # ---
 
-        B = self.params["B3d"].value
-        A = self.params["A3d"].value
+        mode_3d = {"3d": (y3d, e3d)}
+        metrics_3d = self.collect_mode_fit_metrics(
+            x0, x1, x2, c, inv_S, mode_3d
+        )
 
-        y3d_fit = A * self.gaussian(*args, "3d") + B
+        y3 = metrics_3d["3d"][3]
+        self.redchi2.append(metrics_3d["3d"][2])
+        self.intensity.append(metrics_3d["3d"][0])
+        self.sigma.append(metrics_3d["3d"][1])
 
-        y3d_fit[~(np.isfinite(y3d) & (e3d >= 0))] = np.nan
-
-        y3 = (y3d_fit, y3d, e3d)
-
-        chi2 = self.chi_2_fit(x0, x1, x2, c, inv_S, *y3, w3d, "3d")
-
-        self.redchi2.append(chi2)
-
-        I, s = self.estimate_intensity(x0, x1, x2, c, S_inv, *y3, "3d")
-
-        self.intensity.append(I)
-        self.sigma.append(s)
+        self.fit_metrics = {
+            **{
+                mode: {
+                    "I0": values[0],
+                    "s0": values[1],
+                    "chi2": values[2],
+                }
+                for mode, values in metrics_1d.items()
+            },
+            **{
+                mode: {
+                    "I0": values[0],
+                    "s0": values[1],
+                    "chi2": values[2],
+                }
+                for mode, values in metrics_2d.items()
+            },
+            "3d": {
+                "I0": metrics_3d["3d"][0],
+                "s0": metrics_3d["3d"][1],
+                "chi2": metrics_3d["3d"][2],
+            },
+        }
 
         if not np.linalg.det(inv_S) > 0:
             print("Improper optimal covariance")
@@ -2319,6 +2299,8 @@ class PeakEllipsoid:
 
         c0 += xmod
         c = c0, c1, c2
+
+        self.estimated_fit[0][0] += xmod
 
         r0, r1, r2 = np.sqrt(V)
 
@@ -2473,7 +2455,7 @@ class PeakEllipsoid:
 
         y1d = [y1d_0, y1d_1, y1d_2]
         e1d = [e1d_0, e1d_1, e1d_2]
-        w1d = self.uniform_mode_weights(y1d, e1d)
+        w1d = self.uniform_mode_weights(y1d, e1d, 0.05)
 
         args_1d = [x0, x1, x2, y1d, e1d, w1d]
 
@@ -2504,7 +2486,7 @@ class PeakEllipsoid:
 
         y2d = [y2d_0, y2d_1, y2d_2]
         e2d = [e2d_0, e2d_1, e2d_2]
-        w2d = self.uniform_mode_weights(y2d, e2d)
+        w2d = self.uniform_mode_weights(y2d, e2d, 0.2)
 
         args_2d = [x0, x1, x2, y2d, e2d, w2d]
 
@@ -2526,18 +2508,25 @@ class PeakEllipsoid:
 
         self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
-        protocol = [True, False, False] * 2 + [False] * 3
-        n_iter = 10
+        lamda_1d, lamda_2d = self.update_adaptive_prior(
+            args_1d, args_2d, args_3d
+        )
+
+        w1d = self.uniform_mode_weights(y1d, e1d, lamda_1d)
+        w2d = self.uniform_mode_weights(y2d, e2d, lamda_2d)
+
+        args_1d = [x0, x1, x2, y1d, e1d, w1d]
+        args_2d = [x0, x1, x2, y2d, e2d, w2d]
+
+        # ---
+
+        protocol = [True] * 3 + [False] * 3 + [False] * 3
+        n_iter = 20
 
         self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
-        protocol = [False, True, False] * 2 + [False] * 3
-        n_iter = 10
-
-        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
-
-        protocol = [False, False, True] * 2 + [False] * 3
-        n_iter = 10
+        protocol = [False] * 3 + [True] * 3 + [False] * 3
+        n_iter = 20
 
         self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
@@ -2558,6 +2547,83 @@ class PeakEllipsoid:
         background = np.array([param for param in background], dtype=float)
 
         return amplitude, background
+
+    def update_adaptive_prior(self, args_1d, args_2d, args_3d):
+        x0, x1, x2, y1d, e1d, w1d = args_1d
+        x0, x1, x2, y2d, e2d, w2d = args_2d
+        x0, x1, x2, y3d, e3d, w3d = args_3d
+
+        y1d_0, y1d_1, y1d_2 = y1d
+        y2d_0, y2d_1, y2d_2 = y2d
+
+        e1d_0, e1d_1, e1d_2 = e1d
+        e2d_0, e2d_1, e2d_2 = e2d
+
+        c0 = self.params["c0"].value
+        c1 = self.params["c1"].value
+        c2 = self.params["c2"].value
+
+        r0 = self.params["r0"].value
+        r1 = self.params["r1"].value
+        r2 = self.params["r2"].value
+
+        u0 = self.params["u0"].value
+        u1 = self.params["u1"].value
+        u2 = self.params["u2"].value
+
+        c, inv_S = self.centroid_inverse_covariance(
+            c0, c1, c2, r0, r1, r2, u0, u1, u2
+        )
+
+        mode_1d = {
+            "1d_0": (y1d_0, e1d_0),
+            "1d_1": (y1d_1, e1d_1),
+            "1d_2": (y1d_2, e1d_2),
+        }
+        metrics_1d = self.collect_mode_fit_metrics(
+            x0, x1, x2, c, inv_S, mode_1d
+        )
+
+        mode_2d = {
+            "2d_0": (y2d_0, e2d_0),
+            "2d_1": (y2d_1, e2d_1),
+            "2d_2": (y2d_2, e2d_2),
+        }
+        metrics_2d = self.collect_mode_fit_metrics(
+            x0, x1, x2, c, inv_S, mode_2d
+        )
+
+        mode_3d = {"3d": (y3d, e3d)}
+        metrics_3d = self.collect_mode_fit_metrics(
+            x0, x1, x2, c, inv_S, mode_3d
+        )
+
+        I1d_0, e1d_0, chi2_1d_0, _ = metrics_1d["1d_0"]
+        I1d_1, e1d_1, chi2_1d_1, _ = metrics_1d["1d_1"]
+        I1d_2, e1d_2, chi2_1d_2, _ = metrics_1d["1d_2"]
+
+        I2d_0, e2d_0, chi2_2d_0, _ = metrics_2d["2d_0"]
+        I2d_1, e2d_1, chi2_2d_1, _ = metrics_2d["2d_1"]
+        I2d_2, e2d_2, chi2_2d_2, _ = metrics_2d["2d_2"]
+
+        I3d, e3d, chi2_3d, _ = metrics_3d["3d"]
+
+        scale_1d = chi2_3d / np.nanmedian([chi2_1d_0, chi2_1d_1, chi2_1d_2])
+        scale_2d = chi2_3d / np.nanmedian([chi2_2d_0, chi2_2d_1, chi2_2d_2])
+
+        sn_1d = np.nanmedian([I1d_0 / e1d_0, I1d_1 / e1d_1, I1d_2 / e1d_2])
+        sn_2d = np.nanmedian([I2d_0 / e2d_0, I2d_1 / e2d_1, I2d_2 / e2d_2])
+        sn_3d = I3d / e3d
+
+        scale = 1 / (1 + np.log10(sn_3d))
+
+        self.lamda_center = 1 if sn_1d < 5 else scale
+        self.lamda_cov = 1 if sn_2d < 5 else scale
+
+        self.lamda_center /= 3
+        self.lamda_cov /= 6
+
+        return scale_1d, scale_2d
 
     def sweep(
         self, args_1d, args_2d, args_3d, protocol, n_iter=50, report_fit=False

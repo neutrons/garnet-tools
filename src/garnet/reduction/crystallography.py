@@ -1,6 +1,10 @@
 from mantid.geometry import PointGroupFactory, SpaceGroupFactory
 
-import gemmi
+macro = True
+try:
+    import gemmi
+except ImportError:
+    macro = False
 
 point_groups = PointGroupFactory.getAllPointGroupSymbols()
 space_groups = SpaceGroupFactory.getAllSpaceGroupSymbols()
@@ -29,8 +33,10 @@ mantid_to_gemmi = {}
 gemmi_misses = []
 mantid_misses = []
 
+gemmi_table = gemmi.spacegroup_table() if macro else []
+
 keys = list(space_point.keys())
-for sg in gemmi.spacegroup_table():
+for sg in gemmi_table:
     name = sg.short_name()
 
     if sg.ext == "H":

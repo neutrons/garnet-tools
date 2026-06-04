@@ -222,6 +222,7 @@ class PeaksModel:
         background_outer_fact=np.cbrt(3),
         method="ellipsoid",
         centroid=True,
+        update=True,
     ):
         """
         Integrate peaks using spherical or ellipsoidal regions.
@@ -243,8 +244,10 @@ class PeaksModel:
             Factor of peak radius for background shell. The default is 1.5.
         method : str, optional
             Integration method. The default is 'sphere'.
-        centroid : str, optional
+        centroid : bool, optional
             Shift peak position to centroid. The default is True.
+        update : bool, optional
+            Update peak position. The defualt is True.
 
         """
 
@@ -276,25 +279,26 @@ class PeaksModel:
         if method == "sphere" and centroid:
             self.centroid_peaks(md, peaks, peak_radius)
 
-        for peak in mtd[peaks]:
-            Q0, Q1, Q2 = peak.getQSampleFrame()
+        if update:
+            for peak in mtd[peaks]:
+                Q0, Q1, Q2 = peak.getQSampleFrame()
 
-            shape = peak.getPeakShape()
+                shape = peak.getPeakShape()
 
-            shape_dict = eval(shape.toJSON())
+                shape_dict = eval(shape.toJSON())
 
-            if "translation0" in shape_dict.keys():
-                Q0 += shape_dict["translation0"]
-                Q1 += shape_dict["translation1"]
-                Q2 += shape_dict["translation2"]
+                if "translation0" in shape_dict.keys():
+                    Q0 += shape_dict["translation0"]
+                    Q1 += shape_dict["translation1"]
+                    Q2 += shape_dict["translation2"]
 
-                R = peak.getGoniometerMatrix()
+                    R = peak.getGoniometerMatrix()
 
-                Q = np.array([Q0, Q1, Q2])
-                Qx, Qy, Qz = R @ Q
+                    Q = np.array([Q0, Q1, Q2])
+                    Qx, Qy, Qz = R @ Q
 
-                if -4 * np.pi * Qz / np.linalg.norm(Q) ** 2 > 0:
-                    peak.setQSampleFrame(V3D(Q0, Q1, Q2))
+                    if -4 * np.pi * Qz / np.linalg.norm(Q) ** 2 > 0:
+                        peak.setQSampleFrame(V3D(Q0, Q1, Q2))
 
     def intensity_vs_radius(
         self,

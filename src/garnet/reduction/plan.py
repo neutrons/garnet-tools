@@ -316,6 +316,15 @@ class ReductionPlan:
             assert os.path.exists(fname)
         except AssertionError:
             print("{} does not exist!".format(fname))
+
+        try:
+            assert os.path.isfile(fname)
+            assert os.access(fname, os.R_OK)
+            with open(fname, "rb"):
+                pass
+        except (AssertionError, OSError):
+            print("{} exists but is not readable!".format(fname))
+
         try:
             if type(ext) is list:
                 assert os.path.splitext(fname)[1].lower() in ext

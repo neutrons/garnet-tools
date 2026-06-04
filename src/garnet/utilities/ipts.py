@@ -2,6 +2,7 @@ import os
 import sys
 import traceback
 import csv
+import re
 
 import numpy as np
 
@@ -43,6 +44,11 @@ try:
 except:
     qdarkstyle = None
     style = False
+
+try:
+    import qtawesome as qta
+except:
+    qta = None
 
 import pyoncat
 
@@ -87,9 +93,11 @@ class View(QWidget):
         self.instrument_cbox = QComboBox(self)
         instruments = ["TOPAZ", "MANDI", "CORELLI", "SNAP", "WAND²", "DEMAND"]
         self.instrument_cbox.addItems(instruments)
+        self.auto_scale_dropdown(self.instrument_cbox)
 
         ipts_label = QLabel("IPTS: ")
         self.ipts_field = QComboBox(self)
+        self.auto_scale_dropdown(self.ipts_field)
 
         self.name_list = QListWidget()
         self.name_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -99,6 +107,7 @@ class View(QWidget):
 
         self.exp_cbox = QComboBox(self)
         self.exp_cbox.setEnabled(False)
+        self.auto_scale_dropdown(self.exp_cbox)
 
         ipts_layout = QHBoxLayout()
         ipts_layout.addWidget(instrument_cbox_label)
@@ -110,6 +119,8 @@ class View(QWidget):
 
         self.plot = FigureCanvas(Figure(figsize=(8, 6)))
         self.toolbar = NavigationToolbar(self.plot, self)
+        self._run_guides = []
+        self.plot.mpl_connect("button_press_event", self._handle_plot_click)
 
         right_layout = QVBoxLayout()
         right_layout.addWidget(self.plot, 1)
@@ -201,17 +212,44 @@ class View(QWidget):
         scale_values,
         subplot_limits,
         inst_params,
+        log_values=None,
+        log_names=None,
     ):
         self.plot.figure.clf()
+        self._run_guides = []
 
         if self.get_ipts() == "":
             return
 
+        if log_values is None:
+            log_values = []
+        if log_names is None:
+            log_names = []
+
+        (
+            temp_values,
+            temp_names,
+            other_values,
+            other_names,
+        ) = self._split_temperature_logs(log_values, log_names)
+
+        has_logs = len(log_values) > 0
+
         self.plot.figure.subplots_adjust(wspace=0.1, top=0.85, bottom=0.1)
-        colors = ["C0", "C1", "C2", "C4"]
+        colors = self._series_colors(len(gonio_values))
 
         if len(subplot_limits) == 1:
-            ax1 = self.plot.figure.subplots()
+            if has_logs:
+                ax1, ax_log = self.plot.figure.subplots(
+                    2,
+                    1,
+                    sharex=True,
+                    gridspec_kw={"height_ratios": [3, 2]},
+                )
+            else:
+                ax1 = self.plot.figure.subplots()
+                ax_log = None
+
             if self.get_instrument() != "DEMAND":
                 for val, lab, c in zip(gonio_values, gonio_names, colors):
                     ax1.plot(run_numbers_list, val, ".", color=c, label=lab)
@@ -251,10 +289,10 @@ class View(QWidget):
                                 capsize=2,
                             )
 
-            ax1.set_ylabel("Goniometer Values (degrees)")
-            if self.get_instrument() != "DEMAND":
+            ax1.set_ylabel("Goniometer (degrees)")
+            if not has_logs and self.get_instrument() != "DEMAND":
                 ax1.set_xlabel("Run Number")
-            else:
+            elif not has_logs:
                 ax1.set_xlabel("Scan Number")
                 ax1.set_title(f"exp{self.get_experiment()}")
             ax1.set_xlim(subplot_limits[0][0] - 1, subplot_limits[0][1] + 1)
@@ -265,23 +303,109 @@ class View(QWidget):
             ax1.ticklabel_format(style="plain", axis="x", useOffset=False)
 
             ax2 = ax1.twinx()
-            color = "r"
+            color = "gray"
             ax2.set_ylabel(
                 f'Scale ({inst_params["Scale"].split(".")[-1]})', color=color
             )
             ax2.plot(run_numbers_list, scale_values, ".", color=color)
+            ax2.tick_params(
+                axis="x",
+                which="both",
+                bottom=False,
+                top=False,
+                labelbottom=False,
+            )
             ax2.tick_params(axis="y", labelcolor=color)
             ax2.set_ylim(
                 -0.1 * np.max(scale_values), np.max(scale_values) * 1.1
             )
+            self._set_plain_y_axis(ax1)
+            self._set_plain_y_axis(ax2)
+            self._enable_minor_ticks(ax1)
+            self._enable_minor_ticks(ax2, x=False)
+
+            if has_logs:
+                temp_colors = [
+                    self._log_series_color(name, i)
+                    for i, name in enumerate(temp_names)
+                ]
+                for vals, name, c in zip(temp_values, temp_names, temp_colors):
+                    ax_log.plot(
+                        run_numbers_list, vals, ".", color=c, label=name
+                    )
+
+                ax_log.set_ylabel("Temperature (K)")
+                if self.get_instrument() != "DEMAND":
+                    ax_log.set_xlabel("Run Number")
+                else:
+                    ax_log.set_xlabel("Scan Number")
+                    ax1.set_title(f"exp{self.get_experiment()}")
+
+                ax_log.set_xlim(
+                    subplot_limits[0][0] - 1, subplot_limits[0][1] + 1
+                )
+                ax_log.xaxis.set_major_locator(MaxNLocator(integer=True))
+                ax_log.ticklabel_format(
+                    style="plain", axis="x", useOffset=False
+                )
+                self._set_plain_y_axis(ax_log)
+                self._enable_minor_ticks(ax_log)
+
+                if len(temp_values) > 0:
+                    ax_log.legend(
+                        fontsize="x-small",
+                        loc="upper left",
+                        bbox_to_anchor=(0, 1.2),
+                    )
+
+                if len(other_values) > 0:
+                    ax_log2 = ax_log.twinx()
+                    other_colors = [
+                        self._log_series_color(name, i)
+                        for i, name in enumerate(other_names)
+                    ]
+                    for vals, name, c in zip(
+                        other_values, other_names, other_colors
+                    ):
+                        ax_log2.plot(
+                            run_numbers_list, vals, ".", color=c, label=name
+                        )
+                    ax_log2.tick_params(
+                        axis="x",
+                        which="both",
+                        bottom=False,
+                        top=False,
+                        labelbottom=False,
+                    )
+                    ax_log2.set_ylabel("Other Logs")
+                    self._set_plain_y_axis(ax_log2)
+                    self._enable_minor_ticks(ax_log2, x=False)
+                    ax_log2.legend(
+                        fontsize="x-small",
+                        loc="upper right",
+                        bbox_to_anchor=(1, 1.2),
+                    )
 
         else:
-            axs = self.plot.figure.subplots(
-                1,
-                len(subplot_limits),
-                sharey=True,
-                width_ratios=[l[1] - l[0] + 2 for l in subplot_limits],
-            )
+            if has_logs:
+                axs = self.plot.figure.subplots(
+                    2,
+                    len(subplot_limits),
+                    sharey="row",
+                    sharex="col",
+                    width_ratios=[l[1] - l[0] + 2 for l in subplot_limits],
+                    gridspec_kw={"height_ratios": [3, 2]},
+                )
+                gonio_axs = axs[0]
+                log_axs = axs[1]
+            else:
+                gonio_axs = self.plot.figure.subplots(
+                    1,
+                    len(subplot_limits),
+                    sharey=True,
+                    width_ratios=[l[1] - l[0] + 2 for l in subplot_limits],
+                )
+                log_axs = None
 
             if self.get_instrument() != "DEMAND":
                 self.plot.figure.supxlabel("Run Number", fontsize="medium")
@@ -291,7 +415,7 @@ class View(QWidget):
                     f"exp{self.get_experiment()}", fontsize="medium"
                 )
 
-            for i, ax1 in enumerate(axs):
+            for i, ax1 in enumerate(gonio_axs):
                 lim = subplot_limits[i]
                 lim_range = 1
                 ax1.set_xlim(lim[0] - lim_range, lim[1] + lim_range)
@@ -300,7 +424,7 @@ class View(QWidget):
                 )
 
                 if i == 0:
-                    ax1.set_ylabel("Goniometer Values (degrees)")
+                    ax1.set_ylabel("Goniometer (degrees)")
                     if self.get_instrument() != "DEMAND":
                         for val, lab, c in zip(
                             gonio_values, gonio_names, colors
@@ -394,12 +518,23 @@ class View(QWidget):
                         ax1.tick_params(axis="y", length=0)
 
                 ax2 = ax1.twinx()
-                color = "r"
+                color = "gray"
                 ax2.plot(run_numbers_list, scale_values, ".", color=color)
+                ax2.tick_params(
+                    axis="x",
+                    which="both",
+                    bottom=False,
+                    top=False,
+                    labelbottom=False,
+                )
                 ax2.tick_params(axis="y", labelcolor=color)
                 ax2.set_ylim(
                     -0.1 * np.max(scale_values), np.max(scale_values) * 1.1
                 )
+                self._set_plain_y_axis(ax1)
+                self._set_plain_y_axis(ax2)
+                self._enable_minor_ticks(ax1)
+                self._enable_minor_ticks(ax2, x=False)
                 if i < len(subplot_limits) - 1:
                     ax2.spines.right.set_visible(False)
                     ax2.spines.left.set_visible(False)
@@ -416,16 +551,283 @@ class View(QWidget):
                         color=color,
                     )
 
+                if has_logs:
+                    ax_log = log_axs[i]
+                    temp_colors = [
+                        self._log_series_color(name, i)
+                        for i, name in enumerate(temp_names)
+                    ]
+                    for vals, name, c in zip(
+                        temp_values, temp_names, temp_colors
+                    ):
+                        if i == 0:
+                            ax_log.plot(
+                                run_numbers_list,
+                                vals,
+                                ".",
+                                color=c,
+                                label=name,
+                            )
+                        else:
+                            ax_log.plot(run_numbers_list, vals, ".", color=c)
+
+                    ax_log.set_xlim(lim[0] - lim_range, lim[1] + lim_range)
+                    ax_log.xaxis.set_major_locator(MaxNLocator(integer=True))
+                    ax_log.ticklabel_format(
+                        style="plain", axis="x", useOffset=False
+                    )
+                    self._set_plain_y_axis(ax_log)
+                    self._enable_minor_ticks(ax_log)
+                    ax_log.tick_params(
+                        axis="x", which="both", bottom=True, labelbottom=True
+                    )
+                    if i == 0:
+                        ax_log.set_ylabel("Temperature (K)")
+                        if len(temp_values) > 0:
+                            ax_log.legend(
+                                fontsize="x-small",
+                                loc="upper left",
+                                bbox_to_anchor=(0, 1.2),
+                            )
+                    else:
+                        ax_log.tick_params(labelleft=False)
+                        ax_log.tick_params(axis="y", length=0)
+                        ax_log.spines.left.set_visible(False)
+
+                    if i < len(subplot_limits) - 1:
+                        ax_log.spines.right.set_visible(False)
+                        ax_log.tick_params(labelright=False)
+
+                    if len(other_values) > 0:
+                        ax_log2 = ax_log.twinx()
+                        other_colors = [
+                            self._log_series_color(name, i)
+                            for i, name in enumerate(other_names)
+                        ]
+                        for vals, name, c in zip(
+                            other_values, other_names, other_colors
+                        ):
+                            if i == len(subplot_limits) - 1:
+                                ax_log2.plot(
+                                    run_numbers_list,
+                                    vals,
+                                    ".",
+                                    color=c,
+                                    label=name,
+                                )
+                            else:
+                                ax_log2.plot(
+                                    run_numbers_list, vals, ".", color=c
+                                )
+                        ax_log2.tick_params(
+                            axis="x",
+                            which="both",
+                            bottom=False,
+                            top=False,
+                            labelbottom=False,
+                        )
+
+                        self._set_plain_y_axis(ax_log2)
+                        self._enable_minor_ticks(ax_log2, x=False)
+                        if i < len(subplot_limits) - 1:
+                            ax_log2.spines.right.set_visible(False)
+                            ax_log2.spines.left.set_visible(False)
+                            ax_log2.tick_params(labelright=False)
+                            ax_log2.tick_params(labelleft=False)
+                            ax_log2.tick_params(axis="y", length=0)
+                            ax_log2.tick_params(
+                                axis="x",
+                                which="both",
+                                bottom=False,
+                                labelbottom=False,
+                            )
+                        else:
+                            ax_log2.tick_params(labelright=True)
+                            ax_log2.spines.left.set_visible(False)
+                            ax_log2.tick_params(labelleft=False)
+                            ax_log2.set_ylabel("Other Logs")
+                            ax_log2.legend(
+                                fontsize="x-small",
+                                loc="upper right",
+                                bbox_to_anchor=(1, 1.2),
+                            )
+
         self.plot.figure.canvas.draw()
+
+    def _set_plain_y_axis(self, ax):
+        ax.ticklabel_format(style="plain", axis="y", useOffset=False)
+        formatter = ax.yaxis.get_major_formatter()
+        if hasattr(formatter, "set_scientific"):
+            formatter.set_scientific(False)
+        if hasattr(formatter, "set_useOffset"):
+            formatter.set_useOffset(False)
+
+    def _enable_minor_ticks(self, ax, x=True, y=True):
+        ax.minorticks_on()
+        if not x:
+            ax.tick_params(axis="x", which="minor", bottom=False, top=False)
+        if not y:
+            ax.tick_params(axis="y", which="minor", left=False, right=False)
+
+    def _series_colors(self, n):
+        return ["C{}".format(i) for i in range(n)]
+
+    def _clear_run_guides(self):
+        for line in self._run_guides:
+            try:
+                line.remove()
+            except ValueError:
+                pass
+        self._run_guides = []
+
+    def _guide_axes(self):
+        # Keep one axis per subplot panel (ignore twinx duplicates sharing bounds).
+        axes = []
+        seen = set()
+        for ax in self.plot.figure.axes:
+            bounds = tuple(np.round(ax.get_position().bounds, 6))
+            if bounds in seen:
+                continue
+            seen.add(bounds)
+            axes.append(ax)
+        return axes
+
+    def _handle_plot_click(self, event):
+        if event.inaxes is None or event.xdata is None or event.ydata is None:
+            return
+
+        # Snap to the nearest run number available in the clicked axes.
+        nearest = None
+        for line in event.inaxes.get_lines():
+            x = np.asarray(line.get_xdata(), dtype=float)
+            if len(x) == 0:
+                continue
+
+            valid = np.isfinite(x)
+            if not np.any(valid):
+                continue
+
+            runs = x[valid]
+            distances = np.abs(runs - float(event.xdata))
+            index = int(np.argmin(distances))
+            distance = float(distances[index])
+
+            if nearest is None or distance < nearest["distance"]:
+                nearest = {
+                    "distance": distance,
+                    "run": float(runs[index]),
+                }
+
+        if nearest is None:
+            return
+
+        run_value = nearest["run"]
+        run_text = (
+            str(int(round(run_value)))
+            if abs(run_value - round(run_value)) < 1e-6
+            else "{:.6g}".format(run_value)
+        )
+
+        if hasattr(self.toolbar, "set_message"):
+            self.toolbar.set_message(f"Run {run_text}")
+
+        self._clear_run_guides()
+        for ax in self._guide_axes():
+            line = ax.axvline(
+                run_value, color="black", linestyle="--", linewidth=1.0
+            )
+            self._run_guides.append(line)
+
+        self.plot.draw_idle()
+
+    def _log_series_color(self, name, index):
+        if "statistics" in str(name).lower():
+            return "gray"
+        return "C{}".format(index)
+
+    def _split_temperature_logs(self, log_values, log_names):
+        temp_values, temp_names = [], []
+        other_values, other_names = [], []
+
+        for vals, name in zip(log_values, log_names):
+            lname = str(name).lower()
+            is_temperature = "(k)" in lname or "temp" in lname
+            if is_temperature:
+                temp_values.append(vals)
+                temp_names.append(name)
+            else:
+                other_values.append(vals)
+                other_names.append(name)
+
+        return temp_values, temp_names, other_values, other_names
+
+    def auto_scale_dropdown(self, combo):
+        """
+        Autoscale a combobox width to fit item text and item icons.
+
+        This keeps both the closed state and popup comfortably wide for
+        currently loaded entries.
+        """
+
+        combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+
+        fm = combo.fontMetrics()
+        max_width = 0
+        digit = all(
+            [combo.itemText(i).isdigit() for i in range(combo.count())]
+        )
+
+        for i in range(combo.count()):
+            text = combo.itemText(i)
+            icon = QIcon()
+
+            if qta is not None:
+                icon = qta.icon("fa6s.hashtag" if digit else "fa6s.minus")
+
+                if text == "TOPAZ":
+                    icon = qta.icon("fa6s.gem")
+                elif text == "CORELLI":
+                    icon = qta.icon("fa6s.scissors")
+                elif text == "MANDI":
+                    icon = qta.icon("fa6s.dna")
+                elif text == "WAND²":
+                    icon = qta.icon("fa6s.wand-magic")
+                elif text == "DEMAND":
+                    icon = qta.icon("fa6s.magnet")
+                elif text == "SNAP":
+                    icon = qta.icon("fa6s.weight-scale")
+                elif text == "IMAGINE":
+                    icon = qta.icon("fa6s.lightbulb")
+
+            combo.setItemIcon(i, icon)
+
+        for i in range(combo.count()):
+            text = combo.itemText(i)
+            text_width = fm.horizontalAdvance(text)
+
+            icon = combo.itemIcon(i)
+            icon_width = 0
+            if not icon.isNull():
+                size = icon.actualSize(combo.iconSize())
+                icon_width = size.width() + 8
+
+            max_width = max(max_width, text_width + icon_width)
+
+        if max_width:
+            combo.setMinimumWidth(max_width + 40)
+        else:
+            combo.setMinimumWidth(0)
 
     def clear_ipts(self):
         """Clear the IPTS combo box."""
         self.ipts_field.clear()
+        self.auto_scale_dropdown(self.ipts_field)
 
     def add_ipts_items(self, items):
         """Add items to the IPTS combo box."""
         if items:
             self.ipts_field.addItems(items)
+        self.auto_scale_dropdown(self.ipts_field)
 
     def set_experiment_enabled(self, enabled: bool):
         """Enable or disable the experiment combo box."""
@@ -452,10 +854,12 @@ class View(QWidget):
     def clear_experiments(self):
         """Clear the experiments combo box."""
         self.exp_cbox.clear()
+        self.auto_scale_dropdown(self.exp_cbox)
 
     def set_experiment_current(self, text: str):
         """Set the current experiment text."""
         self.exp_cbox.setCurrentText(text)
+        self.auto_scale_dropdown(self.exp_cbox)
 
     def set_runs_text(self, text: str):
         """Set the runs list text."""
@@ -519,6 +923,7 @@ class Presenter:
             )
             # model populates the experiments combo-box as before
             self.model.set_experiments(self.view.exp_cbox, self.data_files)
+            self.view.auto_scale_dropdown(self.view.exp_cbox)
             self.names = self.model.run_title_dictionary(
                 self.data_files, self.inst_params
             )
@@ -575,6 +980,7 @@ class Presenter:
 
         self.clear()
         self.model.set_experiments(self.view.exp_cbox, self.data_files)
+        self.view.auto_scale_dropdown(self.view.exp_cbox)
         self.view.set_experiment_current(exp)
 
         mask = np.array([f"exp{exp}" in df["id"] for df in data_files])
@@ -644,9 +1050,17 @@ class Presenter:
             scale_values = self.model.scale_values(
                 self.data_files, data_indices, self.inst_params
             )
+            log_values, log_names = self.model.log_values(
+                self.data_files, data_indices, self.inst_params
+            )
 
             self.plot(
-                gonio_values, gonio_names, run_numbers_list, scale_values
+                gonio_values,
+                gonio_names,
+                run_numbers_list,
+                scale_values,
+                log_values,
+                log_names,
             )
 
     def clear(self):
@@ -656,7 +1070,15 @@ class Presenter:
         self.view.plot.figure.clf()
         self.view.plot.figure.canvas.draw()
 
-    def plot(self, gonio_values, gonio_names, run_numbers_list, scale_values):
+    def plot(
+        self,
+        gonio_values,
+        gonio_names,
+        run_numbers_list,
+        scale_values,
+        log_values,
+        log_names,
+    ):
         subplot_limits = getattr(self.model, "subplot_limits", [])
         inst_params = getattr(self, "inst_params", {})
 
@@ -667,6 +1089,8 @@ class Presenter:
             scale_values,
             subplot_limits,
             inst_params,
+            log_values,
+            log_names,
         )
 
     def sign_in(self):
@@ -694,6 +1118,18 @@ class Presenter:
 class Model:
     def __init__(self):
         pass
+
+    def _title_group_key(self, title):
+        text = str(title).strip()
+        match = re.match(r"^(.*?)([_\-\s]?)(\d+)$", text)
+        if match is None:
+            return text
+
+        base, sep, _ = match.groups()
+        if base == "":
+            return text
+
+        return "{}{}*".format(base, sep)
 
     def login_oncat(self, user: str, password: str):
         """
@@ -755,6 +1191,7 @@ class Model:
         ]
 
         projection += self.goniometer_entries(inst_params)
+        projection += self.log_projection_entries(inst_params)
 
         exts = [inst_params["Extension"]]
 
@@ -807,18 +1244,23 @@ class Model:
             [int(df[run_number_entry]) for df in data_files]
         )
 
-        unique_titles = np.unique(titles)
+        grouped_runs = {}
+        for title, run in zip(titles, run_numbers):
+            key = self._title_group_key(title)
+            if key not in grouped_runs:
+                grouped_runs[key] = []
+            grouped_runs[key].append(int(run))
 
         run_title_dict = {}
-        for unique_title in unique_titles:
-            runs = run_numbers[titles == unique_title]
+        for key in sorted(grouped_runs.keys()):
+            runs = np.array(sorted(set(grouped_runs[key])))
             run_seq = np.split(
                 runs.astype(str), np.where(np.diff(runs) > 1)[0] + 1
             )
             rs = ",".join(
                 [s[0] + ":" + s[-1] if len(s) - 1 else s[0] for s in run_seq]
             )
-            run_title_dict[unique_title] = rs
+            run_title_dict[key] = rs
 
         return run_title_dict
 
@@ -898,6 +1340,25 @@ class Model:
                 continue
         return np.nan
 
+    def log_projection_entries(self, inst_params):
+        log_entries = inst_params.get("Logs", [])
+        log_entry = inst_params.get("LogEntry", inst_params["GoniometerEntry"])
+
+        projection = []
+        for name in log_entries:
+            base = ".".join([log_entry, name.lower()])
+            projection.append(base + ".average_value")
+            projection.append(base + ".average")
+            # Backward compatibility: allow direct key lookups if present.
+            projection.append(name)
+
+        return list(dict.fromkeys(projection))
+
+    def log_value_keys(self, inst_params, name):
+        log_entry = inst_params.get("LogEntry", inst_params["GoniometerEntry"])
+        base = ".".join([log_entry, name.lower()])
+        return [base + ".average_value", base + ".average", name]
+
     def default_export_path(self, inst_params, ipts_number):
         facility = str(inst_params.get("Facility", "")).strip()
         instrument = str(inst_params.get("Name", "")).strip()
@@ -927,6 +1388,20 @@ class Model:
         title_entry = inst_params["Title"]
         run_number_entry = inst_params["RunNumber"]
         gonio_axes = list(inst_params["Goniometer"].keys())
+        log_entries = inst_params.get("Logs", [])
+        log_units = inst_params.get("LogUnits", [])
+
+        if len(log_units) < len(log_entries):
+            log_units = list(log_units) + [""] * (
+                len(log_entries) - len(log_units)
+            )
+
+        unique_entry_units = []
+        seen = set()
+        for entry, unit in zip(log_entries, log_units):
+            if entry not in seen:
+                seen.add(entry)
+                unique_entry_units.append((entry, unit))
 
         grouped = {}
         for df in data_files:
@@ -1001,6 +1476,24 @@ class Model:
             else:
                 proton_charge_stat = "n/a"
 
+            log_medians = []
+            for entry, unit in unique_entry_units:
+                values = np.array(
+                    [
+                        self._extract_numeric(
+                            df, self.log_value_keys(inst_params, entry)
+                        )
+                        for df in files
+                    ],
+                    dtype=float,
+                )
+                valid = values[np.isfinite(values)]
+                if len(valid) > 0:
+                    median_value = np.nanmedian(valid)
+                    log_medians.append("{:.6g}".format(median_value))
+                else:
+                    log_medians.append("n/a")
+
             rows.append(
                 [
                     title.replace("|", "/"),
@@ -1008,6 +1501,7 @@ class Model:
                     proton_charge_stat,
                     *angle_values,
                     *step_values,
+                    *log_medians,
                 ]
             )
 
@@ -1015,6 +1509,12 @@ class Model:
         headers += ["Proton Charge (C, sum)"]
         headers += ["{} Range (deg)".format(axis) for axis in gonio_axes]
         headers += ["{} Median Step (deg)".format(axis) for axis in gonio_axes]
+        headers += [
+            "{} Median".format(
+                entry if unit == "" else "{} ({})".format(entry, unit)
+            )
+            for entry, unit in unique_entry_units
+        ]
 
         return headers, rows
 
@@ -1197,6 +1697,43 @@ class Model:
 
         return a
 
+    def log_values(self, data_files, indices, inst_params):
+        log_entries = inst_params.get("Logs", [])
+        log_units = inst_params.get("LogUnits", [])
+
+        if len(log_units) < len(log_entries):
+            log_units = list(log_units) + [""] * (
+                len(log_entries) - len(log_units)
+            )
+
+        # Keep first occurrence order while preserving the entry/unit pairing.
+        unique_entry_units = []
+        seen = set()
+        for entry, unit in zip(log_entries, log_units):
+            if entry not in seen:
+                seen.add(entry)
+                unique_entry_units.append((entry, unit))
+
+        values_out = []
+        names_out = []
+
+        for entry, unit in unique_entry_units:
+            values = []
+            for df in data_files:
+                val = self._extract_numeric(
+                    df, self.log_value_keys(inst_params, entry)
+                )
+                values.append(val)
+
+            selected = np.array([values[i] for i in indices], dtype=float)
+
+            if np.any(np.isfinite(selected)):
+                values_out.append(selected)
+                label = entry if unit == "" else f"{entry} ({unit})"
+                names_out.append(label)
+
+        return values_out, names_out
+
 
 class ExperimentBrowser(QMainWindow):
     __instance = None
@@ -1211,7 +1748,7 @@ class ExperimentBrowser(QMainWindow):
 
         icon_path = "./icon.png"
         self.setWindowIcon(QIcon(icon_path))
-        name = "ipts-experiment-browser"
+        name = "Experiment Browser"
         self.setWindowTitle(name)
         self.setGeometry(0, 0, 1024, 635)
 

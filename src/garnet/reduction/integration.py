@@ -1073,7 +1073,7 @@ class PeakEllipsoid:
         self.initialize_priors(best)
 
     def initialize_priors(self, best):
-        r0, r1, r2 = np.asarray(best["r"], dtype=float)
+        r0, r1, r2 = best["r"]
         u0, u1, u2 = best["u"]
         center_scale = np.mean([r0, r1, r2])
 

@@ -937,8 +937,13 @@ class PeakEllipsoid:
     def __init__(self):
         self.params = Parameters()
 
-        self.lamda_center = 0.01 / 3
-        self.lamda_cov = 0.01 / 6
+        self.lamda_center = 0.01
+        self.lamda_cov = 0.01
+
+        self.mode_weights_1d = 0.05
+        self.mode_weights_2d = 0.2
+        self.mode_weights_3d = 1.0
+
         self.prior_center_mean = np.zeros(3)
         self.prior_center_sigma = np.ones(3)
         self.prior_cov = np.eye(3)
@@ -1178,7 +1183,7 @@ class PeakEllipsoid:
         v[~mask] = np.nan
 
         y_int = d / n
-        e_int = np.sqrt(d + np.nanpercentile(d, rel_err) + 1) / n
+        e_int = np.sqrt(v + np.nanpercentile(d, rel_err)) / n
 
         return y_int, e_int
 
@@ -2455,7 +2460,7 @@ class PeakEllipsoid:
 
         y1d = [y1d_0, y1d_1, y1d_2]
         e1d = [e1d_0, e1d_1, e1d_2]
-        w1d = self.uniform_mode_weights(y1d, e1d, 0.05)
+        w1d = self.uniform_mode_weights(y1d, e1d, self.mode_weights_1d)
 
         args_1d = [x0, x1, x2, y1d, e1d, w1d]
 
@@ -2486,13 +2491,13 @@ class PeakEllipsoid:
 
         y2d = [y2d_0, y2d_1, y2d_2]
         e2d = [e2d_0, e2d_1, e2d_2]
-        w2d = self.uniform_mode_weights(y2d, e2d, 0.2)
+        w2d = self.uniform_mode_weights(y2d, e2d, self.mode_weights_2d)
 
         args_2d = [x0, x1, x2, y2d, e2d, w2d]
 
         y3d, e3d = self.normalize(x0, x1, x2, d, n, wgt, c, inv_S, mode="3d")
 
-        w3d = self.uniform_mode_weights([y3d], [e3d])[0]
+        w3d = self.uniform_mode_weights([y3d], [e3d], self.mode_weights_3d)[0]
 
         est3d = self.quick_gaussian(x0, x1, x2, d, n, c, inv_S, mode="3d")
 
@@ -2508,15 +2513,7 @@ class PeakEllipsoid:
 
         self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
-        lamda_1d, lamda_2d = self.update_adaptive_prior(
-            args_1d, args_2d, args_3d
-        )
-
-        w1d = self.uniform_mode_weights(y1d, e1d, lamda_1d)
-        w2d = self.uniform_mode_weights(y2d, e2d, lamda_2d)
-
-        args_1d = [x0, x1, x2, y1d, e1d, w1d]
-        args_2d = [x0, x1, x2, y2d, e2d, w2d]
+        self.update_adaptive_prior(args_1d, args_2d, args_3d)
 
         # ---
 
@@ -2598,32 +2595,58 @@ class PeakEllipsoid:
             x0, x1, x2, c, inv_S, mode_3d
         )
 
-        I1d_0, e1d_0, chi2_1d_0, _ = metrics_1d["1d_0"]
-        I1d_1, e1d_1, chi2_1d_1, _ = metrics_1d["1d_1"]
-        I1d_2, e1d_2, chi2_1d_2, _ = metrics_1d["1d_2"]
+        I_1d_0, sig_1d_0, *_ = metrics_1d["1d_0"]
+        I_1d_1, sig_1d_1, *_ = metrics_1d["1d_1"]
+        I_1d_2, sig_1d_2, *_ = metrics_1d["1d_2"]
 
-        I2d_0, e2d_0, chi2_2d_0, _ = metrics_2d["2d_0"]
-        I2d_1, e2d_1, chi2_2d_1, _ = metrics_2d["2d_1"]
-        I2d_2, e2d_2, chi2_2d_2, _ = metrics_2d["2d_2"]
+        I_2d_0, sig_2d_0, *_ = metrics_2d["2d_0"]
+        I_2d_1, sig_2d_1, *_ = metrics_2d["2d_1"]
+        I_2d_2, sig_2d_2, *_ = metrics_2d["2d_2"]
 
-        I3d, e3d, chi2_3d, _ = metrics_3d["3d"]
+        I_3d, sig_3d, *_ = metrics_3d["3d"]
 
-        scale_1d = chi2_3d / np.nanmedian([chi2_1d_0, chi2_1d_1, chi2_1d_2])
-        scale_2d = chi2_3d / np.nanmedian([chi2_2d_0, chi2_2d_1, chi2_2d_2])
+        weights = (
+            [self.mode_weights_1d] * 3
+            + [self.mode_weights_2d] * 3
+            + [self.mode_weights_3d]
+        )
 
-        sn_1d = np.nanmedian([I1d_0 / e1d_0, I1d_1 / e1d_1, I1d_2 / e1d_2])
-        sn_2d = np.nanmedian([I2d_0 / e2d_0, I2d_1 / e2d_1, I2d_2 / e2d_2])
-        sn_3d = I3d / e3d
+        signal_to_noise = [
+            I_1d_0 / sig_1d_0,
+            I_1d_1 / sig_1d_1,
+            I_1d_2 / sig_1d_2,
+            I_2d_0 / sig_2d_0,
+            I_2d_1 / sig_2d_1,
+            I_2d_2 / sig_2d_2,
+            I_3d / sig_3d,
+        ]
 
-        scale = 1 / (1 + np.log10(sn_3d))
+        sn = self.safe_sn(signal_to_noise)
 
-        self.lamda_center = 1 if sn_1d < 5 else scale
-        self.lamda_cov = 1 if sn_2d < 5 else scale
+        w = np.asarray(weights, dtype=float)
 
-        self.lamda_center /= 3
-        self.lamda_cov /= 6
+        sn_eff = np.exp(np.sum(w * np.log(sn)) / np.sum(w))
 
-        return scale_1d, scale_2d
+        scale = self.prior_strength_from_sn(sn_eff)
+
+        self.prior_cov = scale / 6
+        self.prior_center = scale / 3
+
+    def safe_sn(self, sn, floor=1.0, ceiling=1e4):
+        sn = np.nan_to_num(sn, nan=floor, posinf=ceiling, neginf=floor)
+        return np.clip(sn, floor, ceiling)
+
+    def prior_strength_from_sn(
+        self,
+        sn_eff,
+        sn0=5.0,
+        power=2.0,
+        lam_min=0.03,
+        lam_max=1.0,
+    ):
+        sn_eff = self.safe_sn(sn_eff)
+
+        return lam_min + (lam_max - lam_min) / (1.0 + (sn_eff / sn0) ** power)
 
     def sweep(
         self, args_1d, args_2d, args_3d, protocol, n_iter=50, report_fit=False

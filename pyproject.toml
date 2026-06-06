@@ -5,7 +5,9 @@ dynamic = ["version"]
 requires-python = ">=3.10"
 dependencies = [
     "mantidworkbench >= 6.7.20230830",
-    "pyoncat ~= 1.6"
+  "pyoncat ~= 1.6",
+  "qtpy",
+  "pyqt6"
 ]
 license = { text = "GPL3.0" }
 
@@ -48,4 +50,4 @@ disable = ["too-many-locals",
            "too-many-arguments",
            "duplicate-code"
 ]
-extension-pkg-whitelist = ["PyQt5"]
+extension-pkg-whitelist = ["PyQt6"]

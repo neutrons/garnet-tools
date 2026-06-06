@@ -28,12 +28,12 @@ from qtpy.QtGui import QIntValidator, QTextCursor
 
 import matplotlib
 
-matplotlib.use("Qt5Agg")
+matplotlib.use("QtAgg")
 
-from matplotlib.backends.backend_qt5agg import (
+from matplotlib.backends.backend_qtagg import (
     FigureCanvasQTAgg as FigureCanvas,
 )
-from matplotlib.backends.backend_qt5agg import (
+from matplotlib.backends.backend_qtagg import (
     NavigationToolbar2QT as NavigationToolbar,
 )
 from matplotlib.figure import Figure
@@ -377,7 +377,7 @@ def handle_exception(exc_type, exc_value, exc_traceback):
     msg_box.setText("An unexpected error occurred. Please see details below:")
     msg_box.setDetailedText(error_message)
     msg_box.setIcon(QMessageBox.Critical)
-    msg_box.exec_()
+    msg_box.exec()
 
 
 if __name__ == "__main__":
@@ -389,4 +389,4 @@ if __name__ == "__main__":
 
     window = IntegratedPeaksViewer()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

@@ -28,6 +28,16 @@ class ResolutionEllipsoid:
         self.two_theta_min = np.inf
         self.two_theta_max = 0
 
+    def _transverse_directions(self, qhat):
+        ref = np.array([1.0, 0.0, 0.0])
+        if abs(np.dot(qhat, ref)) > 0.9:
+            ref = np.array([0.0, 1.0, 0.0])
+        m1 = np.cross(qhat, ref)
+        m1 /= np.linalg.norm(m1)
+        m2 = np.cross(qhat, m1)
+        m2 /= np.linalg.norm(m2)
+        return m1, m2
+
     def _normalize_columns(self, V):
         V = np.asarray(V, dtype=float)
         n = np.linalg.norm(V, axis=0, keepdims=True)
@@ -204,9 +214,10 @@ class ResolutionEllipsoid:
 
         if Q2 > 0:
             qhat = Q_vec / np.sqrt(Q2)
-            mosaic_cov_unit = Q2 * (np.eye(3) - np.outer(qhat, qhat))
+            m1, m2 = self._transverse_directions(qhat)
         else:
-            mosaic_cov_unit = np.zeros((3, 3))
+            m1 = np.array([1.0, 0.0, 0.0])
+            m2 = np.array([0.0, 1.0, 0.0])
 
         A = np.column_stack(
             [
@@ -214,8 +225,12 @@ class ResolutionEllipsoid:
                 k**2 * self._outer6(beta_i),  # sigma_beta_i^2
                 k**2 * self._outer6(alpha_f),  # sigma_alpha_f^2
                 k**2 * self._outer6(beta_f),  # sigma_beta_f^2
-                k**2 * self._outer6(q_lambda),  # (sigma_dl/lambda)^2
-                self._vech6(mosaic_cov_unit),  # sigma_mosaic^2
+                (k / lamda) ** 2
+                * self._outer6(q_lambda),  # sigma_dl_timing^2 (σ_λ = const)
+                k**2
+                * self._outer6(q_lambda),  # sigma_dl_mod^2 (σ_λ/λ = const)
+                Q2 * self._outer6(m1),  # sigma_mosaic_1^2
+                Q2 * self._outer6(m2),  # sigma_mosaic_2^2
             ]
         )
 
@@ -230,8 +245,10 @@ class ResolutionEllipsoid:
                 self.model["sigma_beta_i"] ** 2,
                 self.model["sigma_alpha_f"] ** 2,
                 self.model["sigma_beta_f"] ** 2,
-                self.model["sigma_dl_over_l"] ** 2,
-                self.model["sigma_mosaic"] ** 2,
+                self.model["sigma_dl_timing"] ** 2,
+                self.model["sigma_dl_mod"] ** 2,
+                self.model["sigma_mosaic_1"] ** 2,
+                self.model["sigma_mosaic_2"] ** 2,
             ]
         )
 
@@ -342,8 +359,10 @@ class ResolutionEllipsoid:
             "sigma_beta_i": np.sqrt(max(x[1], 0.0)),
             "sigma_alpha_f": np.sqrt(max(x[2], 0.0)),
             "sigma_beta_f": np.sqrt(max(x[3], 0.0)),
-            "sigma_dl_over_l": np.sqrt(max(x[4], 0.0)),
-            "sigma_mosaic": np.sqrt(max(x[5], 0.0)),
+            "sigma_dl_timing": np.sqrt(max(x[4], 0.0)),
+            "sigma_dl_mod": np.sqrt(max(x[5], 0.0)),
+            "sigma_mosaic_1": np.sqrt(max(x[6], 0.0)),
+            "sigma_mosaic_2": np.sqrt(max(x[7], 0.0)),
             "variance_parameters": x,
             "residual_norm": residual_norm,
             "used_peaks": used,
@@ -529,6 +548,9 @@ class ResolutionEllipsoid:
             ax = axes[2, j]
 
             name = names[lab]
+
+            sig_obs = np.sqrt(np.maximum(obs[lab], 0.0))
+            sig_pred = np.sqrt(np.maximum(pred[lab], 0.0))
 
             resid = np.abs(sig_obs - sig_pred) / sig_pred * 100
 

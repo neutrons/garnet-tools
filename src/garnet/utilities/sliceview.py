@@ -11,8 +11,13 @@ from mantid.simpleapi import LoadMD, mtd
 from mantidqt.widgets.sliceviewer.presenters.presenter import SliceViewer
 from mantidqt.plotting.functions import plot_md_ws_from_names
 
-# from qdarkstyle.light.palette import LightPalette
-# import qdarkstyle
+theme = True
+try:
+    from qdarkstyle.light.palette import LightPalette
+    import qdarkstyle
+
+except ImportError:
+    theme = False
 
 
 class MainWindow(QMainWindow):
@@ -26,14 +31,15 @@ class MainWindow(QMainWindow):
             self.setCentralWidget(viewer.view)
         except:
             plot_md_ws_from_names([name], True, False)
-            sys.exit(app.exec_())
+            sys.exit(app.exec())
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    # app.setStyleSheet(qdarkstyle.load_stylesheet(palette=LightPalette))
+    if theme:
+        app.setStyleSheet(qdarkstyle.load_stylesheet(palette=LightPalette))
 
     window = MainWindow(sys.argv[1])
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

@@ -4,8 +4,12 @@ import traceback
 
 import numpy as np
 import itertools
+import scipy.linalg
 
-os.environ["QT_API"] = "pyqt5"
+import pyvista as pv
+from pyvistaqt import QtInteractor
+
+os.environ["QT_API"] = "pyqt6"
 
 from qtpy.QtWidgets import (
     QApplication,
@@ -24,6 +28,8 @@ from qtpy.QtWidgets import (
     QPlainTextEdit,
     QSizePolicy,
     QMessageBox,
+    QSplitter,
+    QFrame,
 )
 
 from qtpy.QtGui import (
@@ -33,6 +39,7 @@ from qtpy.QtGui import (
     QIcon,
     QPixmap,
     QPainter,
+    QColor,
 )
 from qtpy.QtCore import Qt, QProcess, QElapsedTimer
 
@@ -51,12 +58,46 @@ from garnet.reduction.crystallography import (
 )
 
 
+def _compute_preview_transforms(UB, W):
+    """Compute (P, T, S) projection/transform/scale from UB @ W via QR + Cholesky."""
+    Bp = np.asarray(UB, dtype=float) @ np.column_stack(
+        [np.asarray(row, dtype=float) for row in W]
+    )
+    _, R = scipy.linalg.qr(Bp)
+    v = scipy.linalg.cholesky(R.T @ R, lower=False)
+    s = np.linalg.norm(v, axis=0)
+    T = v / s
+    P = v / v[0, 0]
+    S = np.linalg.norm(P, axis=0)
+    return P, T, S
+
+
+def _centering_mask(hkl, centering):
+    h, k, l = hkl[:, 0], hkl[:, 1], hkl[:, 2]
+    if centering == "I":
+        return (h + k + l) % 2 == 0
+    elif centering == "F":
+        return ((h + k) % 2 == 0) & ((h + l) % 2 == 0) & ((k + l) % 2 == 0)
+    elif centering == "A":
+        return (k + l) % 2 == 0
+    elif centering == "B":
+        return (h + l) % 2 == 0
+    elif centering == "C":
+        return (h + k) % 2 == 0
+    elif centering == "R":
+        return (-h + k + l) % 3 == 0
+    elif centering == "H":
+        return (h - k) % 3 == 0
+    return np.ones(len(hkl), dtype=bool)
+
+
 class FormView(QWidget):
     def __init__(self):
         super().__init__()
 
         layout = QVBoxLayout()
         load_save_layout = QHBoxLayout()
+        process_layout = QHBoxLayout()
 
         exp_tab = self.init_plan()
 
@@ -69,20 +110,199 @@ class FormView(QWidget):
         param_tab = self.param_plan()
         int_tab = self.int_plan()
 
-        plan_widget = QTabWidget(self)
-        plan_widget.addTab(norm_tab, "Normalization")
-        plan_widget.addTab(param_tab, "Parametrization")
-        plan_widget.addTab(int_tab, "Integration")
+        self.plan_widget = QTabWidget(self)
+        self.plan_widget.addTab(norm_tab, "Normalization")
+        self.plan_widget.addTab(param_tab, "Parametrization")
+        self.plan_widget.addTab(int_tab, "Integration")
 
-        layout.addWidget(plan_widget)
+        self._plotter_frame = QFrame(self)
+        self.plotter = QtInteractor(self._plotter_frame)
+        self.plotter.set_background("white")
+        self.plotter.enable_parallel_projection()
+        self._preview_T = None
+        self._preview_UB = None
 
-        self.output_line = QLineEdit("")
+        self._reset_view_btn = QPushButton(
+            qta.icon("fa6s.house"), "Isometric View", self
+        )
+        self._reset_view_btn.setToolTip("Reset to isometric view")
+        self._reset_view_btn.clicked.connect(self._on_reset_view)
 
-        self.cpu_line = QLineEdit("1")
-        self.cpu_line.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self._camera_btn = QPushButton(
+            qta.icon("fa6s.camera"), "Reset Camera", self
+        )
+        self._camera_btn.setToolTip("Reset camera (fit to scene)")
+        self._camera_btn.clicked.connect(self._on_reset_camera)
 
-        validator = QIntValidator(1, 64, self)
-        self.cpu_line.setValidator(validator)
+        self._plot_btn = QPushButton(
+            qta.icon("fa6s.rotate"), "Relot Preview", self
+        )
+        self._plot_btn.setToolTip("Refresh preview")
+
+        self._parallel_box = QCheckBox("Parallel Projection", self)
+        self._parallel_box.setChecked(True)
+        self._parallel_box.setToolTip("Toggle parallel projection")
+        self._parallel_box.stateChanged.connect(self._on_projection_changed)
+
+        self._recip_box = QCheckBox("Reciprocal Lattice", self)
+        self._recip_box.setChecked(True)
+        self._recip_box.setToolTip(
+            "Toggle reciprocal lattice compass labels (a*/b*/c* vs a/b/c)"
+        )
+        self._recip_box.stateChanged.connect(self._show_compass)
+
+        # --- Group 1: camera controls (2×2) + plot button ---
+        cam_widget = QWidget(self)
+        cam_grid = QGridLayout(cam_widget)
+        cam_grid.setContentsMargins(0, 0, 0, 0)
+        cam_grid.setSpacing(2)
+        cam_grid.addWidget(self._reset_view_btn, 0, 0)
+        cam_grid.addWidget(self._camera_btn, 1, 0)
+        cam_grid.addWidget(self._parallel_box, 0, 2)
+        cam_grid.addWidget(self._recip_box, 1, 2)
+        cam_grid.addWidget(self._plot_btn, 0, 1)
+
+        def _vsep():
+            s = QFrame(self)
+            s.setFrameShape(QFrame.VLine)
+            s.setFrameShadow(QFrame.Sunken)
+            return s
+
+        # --- Group 2: ±Qx/y/z Cartesian views (2×3) ---
+        qxyz_widget = QWidget(self)
+        qxyz_layout = QGridLayout(qxyz_widget)
+        qxyz_layout.setContentsMargins(0, 0, 0, 0)
+        qxyz_layout.setSpacing(2)
+        for label, tip, slot, row, col in [
+            (
+                "+Qx",
+                "View along +Qx",
+                lambda: self._q_axis_view(0, +1, 1),
+                0,
+                0,
+            ),
+            (
+                "+Qy",
+                "View along +Qy",
+                lambda: self._q_axis_view(1, +1, 2),
+                0,
+                1,
+            ),
+            (
+                "+Qz",
+                "View along +Qz",
+                lambda: self._q_axis_view(2, +1, 1),
+                0,
+                2,
+            ),
+            (
+                "-Qx",
+                "View along -Qx",
+                lambda: self._q_axis_view(0, -1, 1),
+                1,
+                0,
+            ),
+            (
+                "-Qy",
+                "View along -Qy",
+                lambda: self._q_axis_view(1, -1, 2),
+                1,
+                1,
+            ),
+            (
+                "-Qz",
+                "View along -Qz",
+                lambda: self._q_axis_view(2, -1, 1),
+                1,
+                2,
+            ),
+        ]:
+            btn = QPushButton(label, qxyz_widget)
+            btn.setToolTip(tip)
+            btn.setFixedHeight(24)
+            btn.setIcon(qta.icon("fa6s.right-long"))
+            btn.clicked.connect(slot)
+            qxyz_layout.addWidget(btn, row, col)
+
+        # --- Group 3: crystal axis views (2×3, colored) ---
+        crys_widget = QWidget(self)
+        crys_layout = QGridLayout(crys_widget)
+        crys_layout.setContentsMargins(0, 0, 0, 0)
+        crys_layout.setSpacing(2)
+        for label, tip, slot, color, row, col in [
+            (
+                "a*",
+                "View along a*",
+                lambda: self._axis_view(0, 1),
+                QColor("red"),
+                0,
+                0,
+            ),
+            (
+                "b*",
+                "View along b*",
+                lambda: self._axis_view(1, 2),
+                QColor("green"),
+                0,
+                1,
+            ),
+            (
+                "c*",
+                "View along c*",
+                lambda: self._axis_view(2, 0),
+                QColor("blue"),
+                0,
+                2,
+            ),
+            (
+                "a",
+                "View along a",
+                lambda: self._real_axis_view(0),
+                QColor("red"),
+                1,
+                0,
+            ),
+            (
+                "b",
+                "View along b",
+                lambda: self._real_axis_view(1),
+                QColor("green"),
+                1,
+                1,
+            ),
+            (
+                "c",
+                "View along c",
+                lambda: self._real_axis_view(2),
+                QColor("blue"),
+                1,
+                2,
+            ),
+        ]:
+            btn = QPushButton(label, crys_widget)
+            btn.setToolTip(tip)
+            btn.setFixedHeight(24)
+            btn.setMaximumWidth(36)
+            btn.setIcon(qta.icon("fa6s.right-long", color=color))
+            btn.clicked.connect(slot)
+            crys_layout.addWidget(btn, row, col)
+
+        ctrl_bar = QHBoxLayout()
+        ctrl_bar.setContentsMargins(4, 2, 4, 2)
+        ctrl_bar.setSpacing(4)
+        ctrl_bar.addWidget(cam_widget)
+        ctrl_bar.addStretch(1)
+        ctrl_bar.addWidget(_vsep())
+        ctrl_bar.addWidget(qxyz_widget)
+        ctrl_bar.addWidget(_vsep())
+        ctrl_bar.addWidget(crys_widget)
+
+        _pl = QVBoxLayout()
+        _pl.setContentsMargins(0, 0, 0, 0)
+        _pl.setSpacing(0)
+        _pl.addLayout(ctrl_bar)
+        _pl.addWidget(self.plotter.interactor, stretch=1)
+        self._plotter_frame.setLayout(_pl)
 
         name_label = QLabel("Config File:")
 
@@ -96,18 +316,30 @@ class FormView(QWidget):
         self.save_button.setIcon(qta.icon("fa6s.floppy-disk"))
         self.save_as_button.setIcon(qta.icon("fa6s.file-export"))
 
-        self.dev_box = QCheckBox("vDev", self)
-
         load_save_layout.addWidget(name_label)
         load_save_layout.addWidget(self.output_line)
         load_save_layout.addWidget(self.load_button)
         load_save_layout.addWidget(self.save_button)
         load_save_layout.addWidget(self.save_as_button)
-        load_save_layout.addWidget(self.cpu_line)
-        load_save_layout.addWidget(self.dev_box)
-        load_save_layout.addWidget(self.stop_button)
 
         layout.addLayout(load_save_layout)
+        layout.addWidget(self.plan_widget)
+
+        self.output_line = QLineEdit("")
+
+        self.cpu_line = QLineEdit("1")
+        self.cpu_line.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+
+        validator = QIntValidator(1, 64, self)
+        self.cpu_line.setValidator(validator)
+        self.dev_box = QCheckBox("vDev", self)
+
+        process_layout.addStretch(1)
+        process_layout.addWidget(self.cpu_line)
+        process_layout.addWidget(self.dev_box)
+        process_layout.addWidget(self.stop_button)
+
+        layout.addLayout(process_layout)
 
         self.output = QPlainTextEdit()
         self.output.setReadOnly(True)
@@ -121,7 +353,19 @@ class FormView(QWidget):
 
         layout.addStretch(1)
 
-        self.setLayout(layout)
+        form_widget = QWidget()
+        form_widget.setLayout(layout)
+
+        outer_splitter = QSplitter(Qt.Horizontal)
+        outer_splitter.addWidget(form_widget)
+        outer_splitter.addWidget(self._plotter_frame)
+        outer_splitter.setStretchFactor(0, 2)
+        outer_splitter.setStretchFactor(1, 3)
+
+        outer_layout = QHBoxLayout()
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.addWidget(outer_splitter)
+        self.setLayout(outer_layout)
 
         self.process = QProcess(self)
         self.process.readyReadStandardOutput.connect(self.handle_stdout)
@@ -590,8 +834,6 @@ class FormView(QWidget):
         self.param_proj_32_line.setValidator(validator)
         self.param_proj_33_line.setValidator(validator)
 
-        dim_log_label = QLabel("Log Name:")
-
         self.param_log_combo = QComboBox(self)
         self.param_log_line = QLineEdit("sample_temperature")
 
@@ -630,14 +872,16 @@ class FormView(QWidget):
         bin_layout.addWidget(self.param_proj_32_line, 3, 6)
         bin_layout.addWidget(self.param_proj_33_line, 3, 7)
 
+        param_layout = QHBoxLayout()
+        param_layout.addWidget(self.param_log_combo)
+        param_layout.addWidget(self.param_log_line)
+
         bin_layout.addWidget(dim_4_label, 4, 0)
         bin_layout.addWidget(self.param_min_4_line, 4, 1)
         bin_layout.addWidget(self.param_max_4_line, 4, 2)
         bin_layout.addWidget(self.param_bins_4_line, 4, 3)
         bin_layout.addWidget(self.param_step_4_line, 4, 4)
-        bin_layout.addWidget(dim_log_label, 4, 5, Qt.AlignRight)
-        bin_layout.addWidget(self.param_log_combo, 4, 6)
-        bin_layout.addWidget(self.param_log_line, 4, 7)
+        bin_layout.addLayout(param_layout, 4, 5, 1, 3)
 
         self.miller_box = QCheckBox("Miller Index")
         self.miller_box.setChecked(False)
@@ -1784,6 +2028,479 @@ class FormView(QWidget):
     def get_development(self):
         return self.dev_box.isChecked()
 
+    def connect_plan_tab_changed(self, callback):
+        self.plan_widget.currentChanged.connect(lambda *_: callback())
+
+    def get_plan_tab_index(self):
+        return self.plan_widget.currentIndex()
+
+    def connect_preview_update(self, callback):
+        for line in [
+            self.norm_proj_11_line,
+            self.norm_proj_12_line,
+            self.norm_proj_13_line,
+            self.norm_proj_21_line,
+            self.norm_proj_22_line,
+            self.norm_proj_23_line,
+            self.norm_proj_31_line,
+            self.norm_proj_32_line,
+            self.norm_proj_33_line,
+            self.norm_min_1_line,
+            self.norm_max_1_line,
+            self.norm_min_2_line,
+            self.norm_max_2_line,
+            self.norm_min_3_line,
+            self.norm_max_3_line,
+            self.param_proj_11_line,
+            self.param_proj_12_line,
+            self.param_proj_13_line,
+            self.param_proj_21_line,
+            self.param_proj_22_line,
+            self.param_proj_23_line,
+            self.param_proj_31_line,
+            self.param_proj_32_line,
+            self.param_proj_33_line,
+            self.param_min_1_line,
+            self.param_max_1_line,
+            self.param_min_2_line,
+            self.param_max_2_line,
+            self.param_min_3_line,
+            self.param_max_3_line,
+            self.min_d_line,
+        ]:
+            line.editingFinished.connect(callback)
+        self.centering_combo.currentIndexChanged.connect(lambda *_: callback())
+        self._plot_btn.clicked.connect(lambda *_: callback())
+
+    def _on_reset_view(self):
+        self.plotter.reset_camera()
+        self.plotter.view_isometric()
+
+    def _on_reset_camera(self):
+        self.plotter.reset_camera()
+
+    def _q_axis_view(self, col, sign, viewup_col):
+        """View along ±Qx/Qy/Qz in the display world frame.
+
+        The display world frame is the lab Cartesian frame rotated by the QR
+        normalization (absorbs U).  M = P @ UB^{-1} maps lab Cartesian vectors
+        to display world vectors; its columns are the Qx/Qy/Qz directions.
+        viewup_col: 1 (Qy) for ±Qx/±Qz views, 2 (Qz) for ±Qy views.
+        """
+        if self._preview_UB is None:
+            return
+        P, _, _ = _compute_preview_transforms(self._preview_UB, np.eye(3))
+        M = P @ np.linalg.inv(self._preview_UB)
+        norms = np.linalg.norm(M, axis=0)
+        norms[norms < 1e-10] = 1.0
+        M = M / norms
+        self.plotter.view_vector(
+            (sign * M[:, col]).tolist(), viewup=M[:, viewup_col].tolist()
+        )
+
+    def _crystal_T(self):
+        """Return T_crystal: crystal axes (a*, b*, c*) in the display world frame.
+
+        The display world frame is set by QR/Cholesky of UB@W, which rotates the
+        lab Cartesian frame so the first projection axis aligns with x.  Raw UB
+        columns are in lab Cartesian — they must be expressed in the display frame
+        before being used for view_vector or the compass.  _compute_preview_transforms
+        with W=I gives exactly that transformation.
+        """
+        _, T, _ = _compute_preview_transforms(self._preview_UB, np.eye(3))
+        return T
+
+    def _show_compass(self, *_):
+        if self._preview_UB is None:
+            return
+        T = self._crystal_T()
+        self.plotter.hide_axes()
+        if self._recip_box.isChecked():
+            # T columns are already unit-norm a*, b*, c* in display world frame
+            cols = T
+            actor = self.plotter.add_axes(
+                xlabel="a*", ylabel="b*", zlabel="c*"
+            )
+        else:
+            # Real lattice: a = b*×c*, b = c*×a*, c = a*×b*
+            a_dir = np.cross(T[:, 1], T[:, 2])
+            b_dir = np.cross(T[:, 2], T[:, 0])
+            c_dir = np.cross(T[:, 0], T[:, 1])
+            cols_raw = np.column_stack([a_dir, b_dir, c_dir])
+            norms = np.linalg.norm(cols_raw, axis=0)
+            norms[norms < 1e-10] = 1.0
+            cols = cols_raw / norms
+            actor = self.plotter.add_axes(xlabel="a", ylabel="b", zlabel="c")
+        t = pv._vtk.vtkMatrix4x4()
+        for i in range(3):
+            for j in range(3):
+                t.SetElement(i, j, cols[i, j])
+        actor.SetUserMatrix(t)
+        self.plotter.render()
+
+    def _on_projection_changed(self):
+        if self._parallel_box.isChecked():
+            self.plotter.enable_parallel_projection()
+        else:
+            self.plotter.disable_parallel_projection()
+
+    def _axis_view(self, col, up_col):
+        """View along crystal reciprocal axis col with up = axis up_col.
+
+        Uses T_crystal so directions are in the display world frame, not lab frame.
+        """
+        if self._preview_UB is None:
+            return
+        T = self._crystal_T()
+        self.plotter.view_vector(
+            T[:, col].tolist(), viewup=T[:, up_col].tolist()
+        )
+
+    def _real_axis_view(self, col):
+        """View along real lattice axis a/b/c (cross-products of T_crystal columns).
+
+        Matches NXV: a = b*×c*, b = c*×a*, c = a*×b*.  All in display world frame.
+        """
+        if self._preview_UB is None:
+            return
+        T = self._crystal_T()
+        dir_pairs = [(1, 2), (2, 0), (0, 1)]
+        up_pairs = [(2, 0), (0, 1), (1, 2)]
+        da, db = dir_pairs[col]
+        ua, ub_i = up_pairs[col]
+        direction = np.cross(T[:, da], T[:, db])
+        viewup = np.cross(T[:, ua], T[:, ub_i])
+        n = np.linalg.norm(direction)
+        vn = np.linalg.norm(viewup)
+        if n < 1e-10 or vn < 1e-10:
+            return
+        self.plotter.view_vector(
+            (direction / n).tolist(), viewup=(viewup / vn).tolist()
+        )
+
+    def _draw_box_with_grid(
+        self, P, T, S, min_lim, max_lim, labels, label_limits=None
+    ):
+        """Add an oriented wireframe box and oblique-axis grid to the plotter.
+
+        label_limits: optional (3,2) array of [vmin,vmax] per axis to use for
+        tick labels when they differ from the display geometry (e.g. a centered
+        parameter axis whose labels still show the real physical range).
+        """
+        box = pv.Box(
+            bounds=[
+                min_lim[0],
+                max_lim[0],
+                min_lim[1],
+                max_lim[1],
+                min_lim[2],
+                max_lim[2],
+            ]
+        )
+        M4 = np.eye(4, dtype=float)
+        M4[:3, :3] = P
+        box.transform(M4, inplace=True)
+        self.plotter.add_mesh(
+            box, style="wireframe", color="steelblue", line_width=2
+        )
+        center = P @ ((min_lim + max_lim) / 2.0)
+
+        min_bnd = min_lim * S
+        max_bnd = max_lim * S
+        bounds = np.array([[min_bnd[i], max_bnd[i]] for i in range(3)])
+        disp_limits = np.array([[min_lim[i], max_lim[i]] for i in range(3)])
+        tick_limits = label_limits if label_limits is not None else disp_limits
+
+        actor = self.plotter.show_grid(
+            xtitle=labels[0],
+            ytitle=labels[1],
+            ztitle=labels[2],
+            font_size=8,
+            minor_ticks=True,
+        )
+        actor.SetAxisBaseForX(*T[:, 0])
+        actor.SetAxisBaseForY(*T[:, 1])
+        actor.SetAxisBaseForZ(*T[:, 2])
+        actor.bounds = bounds.ravel()
+        actor.SetXAxisRange(disp_limits[0])
+        actor.SetYAxisRange(disp_limits[1])
+        actor.SetZAxisRange(disp_limits[2])
+        for ax_i, (vmin, vmax) in enumerate(tick_limits):
+            n = [actor.n_xlabels, actor.n_ylabels, actor.n_zlabels][ax_i]
+            fmt = [
+                actor.x_label_format,
+                actor.y_label_format,
+                actor.z_label_format,
+            ][ax_i]
+            lbl = pv.plotting.cube_axes_actor.make_axis_labels(
+                vmin=vmin, vmax=vmax, n=n, fmt=fmt
+            )
+            actor.SetAxisLabels(ax_i, lbl)
+        return center
+
+    def update_norm_preview(self, UB, W, extents, labels):
+        self.plotter.clear()
+        if UB is None or W is None:
+            self.plotter.render()
+            return
+        self._preview_UB = np.asarray(UB, dtype=float)
+        P, T, S = _compute_preview_transforms(UB, W)
+        self._preview_T = T
+        min_lim = np.array([e[0] if e else -5.0 for e in extents], dtype=float)
+        max_lim = np.array([e[1] if e else 5.0 for e in extents], dtype=float)
+        center = self._draw_box_with_grid(P, T, S, min_lim, max_lim, labels)
+        self.plotter.reset_camera()
+        self.plotter.set_focus(center.tolist())
+        self._show_compass()
+        self.plotter.render()
+
+    def update_param_preview(
+        self, UB, W, extents, bins, labels, log_extents, log_bins, log_name
+    ):
+        self.plotter.clear()
+        if UB is None:
+            self.plotter.render()
+            return
+        self._preview_UB = np.asarray(UB, dtype=float)
+
+        n_dims = sum(1 for b in bins[:3] if b is not None and b > 1)
+
+        if n_dims == 3:
+            P, T, S = _compute_preview_transforms(UB, W)
+            self._preview_T = T
+            min_lim = np.array(
+                [e[0] if e else -5.0 for e in extents[:3]], dtype=float
+            )
+            max_lim = np.array(
+                [e[1] if e else 5.0 for e in extents[:3]], dtype=float
+            )
+            center = self._draw_box_with_grid(
+                P, T, S, min_lim, max_lim, labels
+            )
+            self.plotter.reset_camera()
+            self.plotter.set_focus(center.tolist())
+            self._show_compass()
+
+        elif n_dims == 2:
+            P, T, S = _compute_preview_transforms(UB, W)
+            binned = [
+                i for i, b in enumerate(bins[:3]) if b is not None and b > 1
+            ]
+            ia, ib = binned[0], binned[1]
+
+            u = P[:, ia]
+            u_norm = np.linalg.norm(u)
+            u_hat = u / u_norm if u_norm > 1e-10 else u
+
+            # Gram-Schmidt: always computed for scale reference (v_norm)
+            v_raw = P[:, ib]
+            v_orth = v_raw - np.dot(v_raw, u_hat) * u_hat
+            v_norm = np.linalg.norm(v_orth)
+            v_hat = (
+                v_orth / v_norm
+                if v_norm > 1e-10
+                else np.array([0.0, 1.0, 0.0])
+            )
+
+            if self._recip_box.isChecked():
+                # Physical scattering-geometry frame:
+                # ki is along [0,0,1] in the display Cartesian frame (beam direction;
+                # QR/Cholesky always places the first projection axis along x so z is
+                # a sensible beam direction for horizontal-scattering-plane geometry).
+                # n_hat = ki × Q̂  →  normal to the scattering plane
+                # p_hat = Q̂ × n_hat  →  in-plane perpendicular to Q
+                ki_hat = np.array([0.0, 0.0, 1.0])
+                cross = np.cross(ki_hat, u_hat)
+                cross_n = np.linalg.norm(cross)
+                if cross_n > 1e-6:
+                    n_hat = cross / cross_n
+                    p_hat = np.cross(u_hat, n_hat)
+                else:
+                    n_hat = v_hat
+                    p_hat = np.cross(u_hat, n_hat)
+            else:
+                n_hat = v_hat
+                p_hat = np.cross(u_hat, n_hat)
+
+            ea = extents[ia] if extents[ia] else [-5.0, 5.0]
+            eb = extents[ib] if extents[ib] else [-5.0, 5.0]
+            ep = log_extents if log_extents else [0.0, 1.0]
+
+            # Scale parameter axis so the box looks isotropic: match geometric
+            # mean of the two spatial visual extents
+            size_a = u_norm * abs(ea[1] - ea[0])
+            size_b = v_norm * abs(eb[1] - eb[0])
+            param_range = abs(ep[1] - ep[0])
+            w_scale = (
+                np.sqrt(size_a * size_b) / param_range
+                if param_range > 1e-10
+                else 1.0
+            )
+
+            P2 = np.column_stack([u, n_hat * v_norm, p_hat * w_scale])
+            T2 = np.column_stack([u_hat, n_hat, p_hat])
+            S2 = np.array([u_norm, v_norm, w_scale])
+            self._preview_T = T2
+
+            # Center the parameter axis at the origin for display; keep real
+            # physical values (ep[0]..ep[1]) as tick labels
+            ep_half = (ep[1] - ep[0]) / 2.0
+            min_lim = np.array([ea[0], eb[0], -ep_half], dtype=float)
+            max_lim = np.array([ea[1], eb[1], +ep_half], dtype=float)
+            label_lim = np.array(
+                [[ea[0], ea[1]], [eb[0], eb[1]], [ep[0], ep[1]]]
+            )
+            ax_labels = [labels[ia], labels[ib], log_name or "param"]
+            center = self._draw_box_with_grid(
+                P2, T2, S2, min_lim, max_lim, ax_labels, label_limits=label_lim
+            )
+            self.plotter.reset_camera()
+            self.plotter.set_focus(center.tolist())
+            self._show_compass()
+
+        elif n_dims == 1:
+            ia = next(
+                i for i, b in enumerate(bins[:3]) if b is not None and b > 1
+            )
+            ea = extents[ia] if extents[ia] else [-5.0, 5.0]
+            ep = log_extents if log_extents else [0.0, 1.0]
+
+            chart = pv.Chart2D()
+            rect_x = np.array([ea[0], ea[1], ea[1], ea[0], ea[0]])
+            rect_y = np.array([ep[0], ep[0], ep[1], ep[1], ep[0]])
+            chart.line(rect_x, rect_y, color="steelblue", width=2)
+            chart.x_label = labels[ia] if labels else "dim"
+            chart.y_label = log_name or "param"
+            self.plotter.add_chart(chart)
+
+        else:
+            ep = log_extents if log_extents else [0.0, 1.0]
+            chart = pv.Chart2D()
+            chart.line(
+                np.array([ep[0], ep[1]]),
+                np.zeros(2),
+                color="steelblue",
+                width=2,
+            )
+            chart.x_label = log_name or "param"
+            chart.y_label = "Intensity"
+            self.plotter.add_chart(chart)
+
+        self.plotter.render()
+
+    def update_int_preview(
+        self, UB, centering, d_min, mod_vecs, max_order, sat_min_d=None
+    ):
+        self.plotter.clear()
+        if UB is None or d_min is None:
+            self.plotter.render()
+            return
+
+        B = np.asarray(UB, dtype=float)
+        q_max = 1.0 / float(d_min)
+
+        col_norms = np.linalg.norm(B, axis=0)
+        h_max, k_max, l_max = np.ceil(q_max / col_norms).astype(int) + 1
+
+        h = np.arange(-h_max, h_max + 1)
+        k = np.arange(-k_max, k_max + 1)
+        l = np.arange(-l_max, l_max + 1)
+        H, K, L = np.meshgrid(h, k, l, indexing="ij")
+        hkl = np.stack([H.ravel(), K.ravel(), L.ravel()], axis=1)
+
+        hkl = hkl[np.any(hkl != 0, axis=1)]
+        q_norms = np.linalg.norm(hkl @ B.T, axis=1)
+        hkl = hkl[q_norms <= q_max]
+        hkl = hkl[_centering_mask(hkl, centering)]
+
+        if len(hkl) == 0:
+            self.plotter.render()
+            return
+
+        if len(hkl) > 5000:
+            order = np.argsort(np.linalg.norm(hkl @ B.T, axis=1))
+            hkl = hkl[order[:5000]]
+
+        self._preview_UB = B
+        P, T, S = _compute_preview_transforms(UB, np.eye(3))
+        self._preview_T = T
+        positions = (P @ hkl.astype(float).T).T
+
+        peak_colors = ["steelblue", "tomato", "darkorange", "gold"]
+        pd_main = pv.PolyData(positions)
+        self.plotter.add_mesh(
+            pd_main,
+            color=peak_colors[0],
+            point_size=8,
+            render_points_as_spheres=True,
+        )
+
+        if max_order and max_order > 0:
+            for mv_i, q_vec in enumerate(mod_vecs or []):
+                if q_vec is None:
+                    continue
+                q = np.asarray(q_vec, dtype=float)
+                if np.linalg.norm(q) < 1e-10:
+                    continue
+                sat_q_max = 1.0 / float(sat_min_d) if sat_min_d else q_max
+                sat_parts = []
+                for n in range(1, max_order + 1):
+                    sat_parts.append(hkl.astype(float) + n * q)
+                    sat_parts.append(hkl.astype(float) - n * q)
+                sat_hkl = np.vstack(sat_parts)
+                sat_q = np.linalg.norm(sat_hkl @ B.T, axis=1)
+                sat_hkl = sat_hkl[sat_q <= sat_q_max]
+                if len(sat_hkl) == 0:
+                    continue
+                if len(sat_hkl) > 5000:
+                    sat_hkl = sat_hkl[:5000]
+                sat_pos = (P @ sat_hkl.T).T
+                sat_pd = pv.PolyData(sat_pos)
+                self.plotter.add_mesh(
+                    sat_pd,
+                    color=peak_colors[(mv_i + 1) % len(peak_colors)],
+                    point_size=5,
+                    render_points_as_spheres=True,
+                    opacity=0.7,
+                )
+
+        lims = [h_max, k_max, l_max]
+
+        bounds_arr = np.array(
+            [[-lims[i] * S[i], lims[i] * S[i]] for i in range(3)]
+        )
+        limits = np.array([[-lims[i], lims[i]] for i in range(3)], dtype=float)
+
+        actor = self.plotter.show_grid(
+            xtitle="[h,0,0]",
+            ytitle="[k,0,0]",
+            ztitle="[0,0,l]",
+            font_size=8,
+            minor_ticks=True,
+        )
+        actor.SetAxisBaseForX(*T[:, 0])
+        actor.SetAxisBaseForY(*T[:, 1])
+        actor.SetAxisBaseForZ(*T[:, 2])
+        actor.bounds = bounds_arr.ravel()
+        actor.SetXAxisRange(limits[0])
+        actor.SetYAxisRange(limits[1])
+        actor.SetZAxisRange(limits[2])
+        for ax_i, (vmin, vmax) in enumerate(limits):
+            n = [actor.n_xlabels, actor.n_ylabels, actor.n_zlabels][ax_i]
+            fmt = [
+                actor.x_label_format,
+                actor.y_label_format,
+                actor.z_label_format,
+            ][ax_i]
+            lbl = pv.plotting.cube_axes_actor.make_axis_labels(
+                vmin=vmin, vmax=vmax, n=n, fmt=fmt
+            )
+            actor.SetAxisLabels(ax_i, lbl)
+
+        self.plotter.reset_camera()
+        self._show_compass()
+        self.plotter.render()
+
 
 class FormPresenter:
     def __init__(self, view, model):
@@ -1846,6 +2563,71 @@ class FormPresenter:
 
         self.view.connect_auto_binning(self.auto_bin)
         self.view.connect_auto_projection(self.auto_proj)
+
+        self.view.connect_plan_tab_changed(self.update_preview)
+        self.view.connect_preview_update(self.update_preview)
+
+    def _projection_labels(self, W):
+        if W is None:
+            return ["P₁", "P₂", "P₃"]
+        labels = []
+        for row in W:
+            vals = [
+                int(v) if float(v) == int(float(v)) else round(float(v), 2)
+                for v in row
+            ]
+            labels.append("[{},{},{}]".format(*vals))
+        return labels
+
+    def update_preview(self):
+        tab = self.view.get_plan_tab_index()
+        UB_file = self.view.get_UB()
+        try:
+            UB = self.model.load_UB_matrix(UB_file) if UB_file else None
+        except Exception:
+            UB = None
+
+        if tab == 0:
+            W = self.view.get_norm_projections()
+            extents = [
+                self.view.get_norm_limits_1(),
+                self.view.get_norm_limits_2(),
+                self.view.get_norm_limits_3(),
+            ]
+            labels = self._projection_labels(W)
+            self.view.update_norm_preview(UB, W, extents, labels)
+        elif tab == 1:
+            W = self.view.get_param_projections()
+            extents = [
+                self.view.get_param_limits_1(),
+                self.view.get_param_limits_2(),
+                self.view.get_param_limits_3(),
+            ]
+            bins = [
+                self.view.get_param_bins_1(),
+                self.view.get_param_bins_2(),
+                self.view.get_param_bins_3(),
+            ]
+            log_extents = self.view.get_param_limits_4()
+            log_bins = self.view.get_param_bins_4()
+            log_name = self.view.get_log_name()
+            labels = self._projection_labels(W)
+            self.view.update_param_preview(
+                UB, W, extents, bins, labels, log_extents, log_bins, log_name
+            )
+        else:
+            centering = self.view.get_centering()
+            d_min = self.view.get_min_d()
+            mod_vecs = [
+                self.view.get_mod_vec_1(),
+                self.view.get_mod_vec_2(),
+                self.view.get_mod_vec_3(),
+            ]
+            max_order = self.view.get_max_order()
+            sat_min_d = self.view.get_sat_min_d()
+            self.view.update_int_preview(
+                UB, centering, d_min, mod_vecs, max_order, sat_min_d
+            )
 
     def run_integration(self):
         self.run_command("i")
@@ -2011,6 +2793,7 @@ class FormPresenter:
 
         if filename:
             self.view.set_UB(filename)
+            self.update_preview()
 
     def load_mask(self):
         ipts = self.view.get_IPTS()
@@ -2818,7 +3601,7 @@ def handle_exception(exc_type, exc_value, exc_traceback):
     msg_box.setText("An unexpected error occurred. Please see details below:")
     msg_box.setDetailedText(error_message)
     msg_box.setIcon(QMessageBox.Critical)
-    msg_box.exec_()
+    msg_box.exec()
 
 
 def gui():
@@ -2827,7 +3610,7 @@ def gui():
     app.setStyleSheet(qdarkstyle.load_stylesheet(palette=LightPalette))
     window = Garnet()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 name: garnet
 channels:
   - conda-forge
-  - mantid
+  - mantid/label/nightly
   - oncat
 dependencies:
   - python
@@ -14,9 +14,15 @@ dependencies:
   - mantidworkbench
   - pytest
   - conda
+  - qtpy
+  - pyqt6
   - pyvista
   - scikit-learn
   - scikit-image
   - gemmi
+  - qtawesome
+  - qdarkstyle
+  - pre-commit
+  - black
   - pip:
     - pyoncat

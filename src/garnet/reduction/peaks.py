@@ -237,7 +237,7 @@ class PeaksModel:
         peak_radius : float
             Integration region radius.
         radius_scale : float, optional
-            Radius scale factor with |Q|. The default is 0.
+            Radius scale factor with \|Q\|. The default is 0.
         background_inner_fact : float, optional
             Factor of peak radius for background shell. The default is 1.
         background_outer_fact : float, optional

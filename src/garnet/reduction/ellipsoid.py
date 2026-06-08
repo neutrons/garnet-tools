@@ -14,11 +14,11 @@ class PeakEllipsoid:
     def __init__(self):
         self.params = Parameters()
 
-        self.lamda_center = 0.01
-        self.lamda_cov = 0.01
+        self.lamda_center = 1.0
+        self.lamda_cov = 1.0
 
-        self.mode_weights_1d = 0.25
-        self.mode_weights_2d = 0.5
+        self.mode_weights_1d = 1.0
+        self.mode_weights_2d = 1.0
         self.mode_weights_3d = 1.0
 
         self.prior_center_sigma = 1.0
@@ -203,6 +203,10 @@ class PeakEllipsoid:
 
         return c, inv_S
 
+    def set_resolution_sigma(self, prior_center_sigma, prior_cov_sigma):
+        self.prior_center_sigma = prior_center_sigma
+        self.prior_cov_sigma = prior_cov_sigma
+
     def data_norm(self, d, n, v, rel_err=30):
         mask = (n > 0) & np.isfinite(n)
 
@@ -215,9 +219,7 @@ class PeakEllipsoid:
 
         return y_int, e_int
 
-    def profile_project(
-        self, x0, x1, x2, d, n, w, c=None, inv_S=None, mode="3d"
-    ):
+    def profile_project(self, x0, x1, x2, d, n, w, mode="3d"):
         dx0, dx1, dx2 = self.voxels(x0, x1, x2)
 
         d0 = np.asarray(d, dtype=float).copy()
@@ -275,9 +277,9 @@ class PeakEllipsoid:
 
         return d_int, n_int, v_int, w_int
 
-    def normalize(self, x0, x1, x2, d, n, w, c, inv_S, mode="3d"):
+    def normalize(self, x0, x1, x2, d, n, w, mode="3d"):
         d_int, n_int, v_int, w_int = self.profile_project(
-            x0, x1, x2, d, n, w, c, inv_S, mode=mode
+            x0, x1, x2, d, n, w, mode=mode
         )
 
         y_int, e_int = self.data_norm(d_int, n_int, v_int)
@@ -1241,7 +1243,7 @@ class PeakEllipsoid:
 
         return i
 
-    def quick_gaussian(self, x0, x1, x2, d, n, c, inv_S, mode="3d"):
+    def quick_gaussian(self, x0, x1, x2, d, n, mode="3d"):
         mask = n > 0
 
         if mask.sum() <= 3:
@@ -1249,9 +1251,7 @@ class PeakEllipsoid:
 
         w = np.ones_like(n)
 
-        d_int, n_int, *_ = self.profile_project(
-            x0, x1, x2, d, n, w, c, inv_S, mode=mode
-        )
+        d_int, n_int, *_ = self.profile_project(x0, x1, x2, d, n, w, mode=mode)
 
         y = d / n
         y[~mask] = np.nan
@@ -1305,18 +1305,18 @@ class PeakEllipsoid:
         )
 
         d1d_0, n1d_0, _, _ = self.profile_project(
-            x0, x1, x2, d, n, wgt, c, inv_S, mode="1d_0"
+            x0, x1, x2, d, n, wgt, mode="1d_0"
         )
         d1d_1, n1d_1, _, _ = self.profile_project(
-            x0, x1, x2, d, n, wgt, c, inv_S, mode="1d_1"
+            x0, x1, x2, d, n, wgt, mode="1d_1"
         )
         d1d_2, n1d_2, _, _ = self.profile_project(
-            x0, x1, x2, d, n, wgt, c, inv_S, mode="1d_2"
+            x0, x1, x2, d, n, wgt, mode="1d_2"
         )
 
-        est1d_0 = self.quick_gaussian(x0, x1, x2, d, n, c, inv_S, mode="1d_0")
-        est1d_1 = self.quick_gaussian(x0, x1, x2, d, n, c, inv_S, mode="1d_1")
-        est1d_2 = self.quick_gaussian(x0, x1, x2, d, n, c, inv_S, mode="1d_2")
+        est1d_0 = self.quick_gaussian(x0, x1, x2, d, n, mode="1d_0")
+        est1d_1 = self.quick_gaussian(x0, x1, x2, d, n, mode="1d_1")
+        est1d_2 = self.quick_gaussian(x0, x1, x2, d, n, mode="1d_2")
 
         if est1d_0 is None or est1d_1 is None or est1d_2 is None:
             return None
@@ -1336,18 +1336,18 @@ class PeakEllipsoid:
         )
 
         d2d_0, n2d_0, _, _ = self.profile_project(
-            x0, x1, x2, d, n, wgt, c, inv_S, mode="2d_0"
+            x0, x1, x2, d, n, wgt, mode="2d_0"
         )
         d2d_1, n2d_1, _, _ = self.profile_project(
-            x0, x1, x2, d, n, wgt, c, inv_S, mode="2d_1"
+            x0, x1, x2, d, n, wgt, mode="2d_1"
         )
         d2d_2, n2d_2, _, _ = self.profile_project(
-            x0, x1, x2, d, n, wgt, c, inv_S, mode="2d_2"
+            x0, x1, x2, d, n, wgt, mode="2d_2"
         )
 
-        est2d_0 = self.quick_gaussian(x0, x1, x2, d, n, c, inv_S, mode="2d_0")
-        est2d_1 = self.quick_gaussian(x0, x1, x2, d, n, c, inv_S, mode="2d_1")
-        est2d_2 = self.quick_gaussian(x0, x1, x2, d, n, c, inv_S, mode="2d_2")
+        est2d_0 = self.quick_gaussian(x0, x1, x2, d, n, mode="2d_0")
+        est2d_1 = self.quick_gaussian(x0, x1, x2, d, n, mode="2d_1")
+        est2d_2 = self.quick_gaussian(x0, x1, x2, d, n, mode="2d_2")
 
         if est2d_0 is None or est2d_1 is None or est2d_2 is None:
             return None
@@ -1358,12 +1358,10 @@ class PeakEllipsoid:
 
         args_2d = [x0, x1, x2, d2d, n2d, w2d]
 
-        d3d, n3d, _, _ = self.profile_project(
-            x0, x1, x2, d, n, wgt, c, inv_S, mode="3d"
-        )
+        d3d, n3d, _, _ = self.profile_project(x0, x1, x2, d, n, wgt, mode="3d")
         w3d = self.uniform_mode_weights([d3d], [n3d], self.mode_weights_3d)[0]
 
-        est3d = self.quick_gaussian(x0, x1, x2, d, n, c, inv_S, mode="3d")
+        est3d = self.quick_gaussian(x0, x1, x2, d, n, mode="3d")
 
         if est3d is None:
             return None
@@ -1853,12 +1851,10 @@ class PeakEllipsoid:
 
         sigma = np.sqrt(C[0, 0]) / scale
 
-        S_inv = np.linalg.inv(C)
-
         weights = np.ones_like(n)
 
         d_int, n_int, v_int, _ = self.profile_project(
-            x0, x1, x2, d, n, weights, c, S_inv, mode="1d_0"
+            x0, x1, x2, d, n, weights, mode="1d_0"
         )
 
         y = d_int / n_int

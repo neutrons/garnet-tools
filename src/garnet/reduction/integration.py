@@ -283,6 +283,9 @@ class Integration(SubPlan):
 
             res.fit()
             res.plot_diagnostics(res_file)
+
+            self.res_sigma = res.estimate_prior_sigmas()
+
             res.apply()
 
             pk_file = self.get_diagnostic_file("run#{}_peaks".format(run))
@@ -555,6 +558,7 @@ class Integration(SubPlan):
             ellipsoid = PeakEllipsoid()
             ellipsoid.update_constraints(Q0, Q1, Q2, dQ)
             ellipsoid.update_estimate(shape)
+            ellipsoid.set_resolution_sigma(*self.res_sigma)
 
             args = (Q0, Q1, Q2, d, n, dQ, Q, weights)
             fit_params = ellipsoid.fit(*args)

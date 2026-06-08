@@ -7,9 +7,11 @@ dependencies = [
     "mantidworkbench >= 6.7.20230830",
   "pyoncat ~= 1.6",
   "qtpy",
-  "pyqt6"
 ]
 license = { text = "GPL3.0" }
+
+[project.gui-scripts]
+garnet = "garnet.application:gui"
 
 [build-system]
 requires = [

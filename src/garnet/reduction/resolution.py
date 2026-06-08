@@ -23,6 +23,8 @@ class ResolutionEllipsoid:
         self.min_peaks = min_peaks
         self.scale_bounds = scale_bounds
         self.model = None
+        self.prior_cov_sigma = None
+        self.prior_center_sigma = None
         self.lamda_min = np.inf
         self.lamda_max = 0
         self.two_theta_min = np.inf
@@ -53,6 +55,33 @@ class ResolutionEllipsoid:
         M = np.outer(a, a)
         return self._vech6(M)
 
+    def _get_peak_offset(self, ws, no):
+        shape = ws.getPeak(no).getPeakShape()
+
+        UB = ws.sample().getOrientedLattice().getUB()
+
+        hkl = ws.getPeak(no).getHKL()
+        R = ws.getPeak(no).getGoniometerMatrix()
+
+        Qobs = ws.getPeak(no).getQLabFrame()
+        Qcalc = 2 * np.pi * R @ UB @ hkl
+
+        d0, d1, d2 = Qobs - Qcalc
+
+        if shape.shapeName() == "ellipsoid":
+            try:
+                d = eval(shape.toJSON())
+            except:
+                d = None
+
+            if d is not None:
+                if "translation0" in d.keys():
+                    d0 += d["translation0"]
+                    d1 += d["translation1"]
+                    d2 += d["translation2"]
+
+        return np.array([d0, d1, d2])
+
     def _get_peak_shape(self, ws, no, r_cut):
         shape = ws.getPeak(no).getPeakShape()
 
@@ -77,6 +106,12 @@ class ResolutionEllipsoid:
                         float(d["radius2"]),
                     ]
                 )
+
+                d0, d1, d2 = 0, 0, 0
+                if "translation0" in d.keys():
+                    d0 = d["translation0"]
+                    d1 = d["translation1"]
+                    d2 = d["translation2"]
 
         V = np.column_stack([v0, v1, v2])
         V = self._normalize_columns(V)
@@ -389,6 +424,44 @@ class ResolutionEllipsoid:
 
             self._set_peak_shape(ws, i, radii, V_sample)
 
+    def predict_sample_cov(self, peak_index):
+        ws = mtd[self.peaks_ws]
+        peak = ws.getPeak(peak_index)
+        R = peak.getGoniometerMatrix()
+        cov_lab = self._predict_cov_lab(peak)
+        cov_s = R.T @ cov_lab @ R
+        return 0.5 * (cov_s + cov_s.T)
+
+    def estimate_prior_sigmas(self):
+        if self.model is None:
+            raise RuntimeError("Call fit() before estimate_prior_sigmas().")
+
+        ws = mtd[self.peaks_ws]
+        cov_devs, offset_norms = [], []
+
+        for i in self.model["used_peaks"]:
+            peak = ws.getPeak(i)
+            R = peak.getGoniometerMatrix()
+
+            radii, V_s = self._get_peak_shape(ws, i, self.r_cut)
+            V_lab = self._sample_axes_to_lab(R, V_s)
+            cov_obs = self._covariance_from_ellipsoid(radii, V_lab)
+            cov_pred = self._predict_cov_lab(peak)
+
+            dC = cov_obs - cov_pred
+            cov_devs.append(np.sqrt(np.trace(dC @ dC)))
+
+            offset_s = self._get_peak_offset(ws, i)
+            offset_norms.append(np.linalg.norm(R @ offset_s))
+
+        cov_devs = np.array(cov_devs)
+        offset_norms = np.array(offset_norms)
+
+        self.prior_cov_sigma = float(np.sqrt(np.mean(cov_devs**2)))
+        self.prior_center_sigma = float(np.sqrt(np.mean(offset_norms**2)))
+
+        return self.prior_cov_sigma, self.prior_center_sigma
+
     def diagnostics(self):
         if self.model is None:
             raise RuntimeError("Call fit() before diagnostics().")
@@ -414,6 +487,17 @@ class ResolutionEllipsoid:
             cov_w_obs = T @ cov_lab_obs @ T.T
             cov_w_pred = T @ cov_lab_pred @ T.T
 
+            # Project translation offset along predicted ellipsoid axes
+            offset_s = self._get_peak_offset(ws, i)
+            offset_lab = R @ offset_s
+            radii_pred, V_lab_pred = self._ellipsoid_from_covariance(
+                cov_lab_pred
+            )
+            projs = [
+                float(np.dot(offset_lab, V_lab_pred[:, k])) for k in range(3)
+            ]
+            norms = [projs[k] / max(radii_pred[k], 1e-12) for k in range(3)]
+
             two_theta = peak.getScattering()
             phi = peak.getAzimuthal()
 
@@ -438,6 +522,12 @@ class ResolutionEllipsoid:
                     "pred_x0": cov_w_pred[0, 0],
                     "pred_x1": cov_w_pred[1, 1],
                     "pred_x2": cov_w_pred[2, 2],
+                    "offset_x0": projs[0],
+                    "offset_x1": projs[1],
+                    "offset_x2": projs[2],
+                    "offset_norm_x0": norms[0],
+                    "offset_norm_x1": norms[1],
+                    "offset_norm_x2": norms[2],
                 }
             )
 
@@ -453,127 +543,151 @@ class ResolutionEllipsoid:
         signal_noise = np.array([r["signal_noise"] for r in rows])
 
         obs = {
-            "x0": np.array([r["obs_x0"] for r in rows]),
-            "x1": np.array([r["obs_x1"] for r in rows]),
-            "x2": np.array([r["obs_x2"] for r in rows]),
+            k: np.array([r[f"obs_{k}"] for r in rows])
+            for k in ["x0", "x1", "x2"]
         }
-
         pred = {
-            "x0": np.array([r["pred_x0"] for r in rows]),
-            "x1": np.array([r["pred_x1"] for r in rows]),
-            "x2": np.array([r["pred_x2"] for r in rows]),
+            k: np.array([r[f"pred_{k}"] for r in rows])
+            for k in ["x0", "x1", "x2"]
+        }
+        offset = {
+            k: np.array([r[f"offset_{k}"] for r in rows])
+            for k in ["x0", "x1", "x2"]
         }
 
-        hi_obs = max([obs[key].max() for key in obs.keys()])
-        hi_pred = max([pred[key].max() for key in pred.keys()])
+        hi = np.sqrt(
+            max(
+                max(obs[k].max() for k in obs),
+                max(pred[k].max() for k in pred),
+            )
+        )
 
-        hi = np.sqrt(max([hi_obs, hi_pred]))
+        max_res = max((abs(obs[k] - pred[k]) / Q).max() for k in obs) * 100
+
+        max_trans = max(abs(offset[k]).max() for k in offset)
 
         names = {
             "x0": "{|Q|}",
-            "x1": "{\Delta{Q}_1}",
-            "x2": "{\Delta{Q}_2}",
+            "x1": "{\\Delta{Q}_1}",
+            "x2": "{\\Delta{Q}_2}",
         }
 
         fig, axes = plt.subplots(
-            3,
-            3,
-            figsize=(10, 10),
-            constrained_layout=True,
-            sharex="row",
-            sharey="row",
+            2, 6, figsize=(18, 7), constrained_layout=True
         )
 
-        for j, lab in enumerate(["x0", "x1", "x2"]):
-            ax = axes[0, j]
+        sc_lambda = sc_sn = sc_resid = None
 
+        for k, lab in enumerate(["x0", "x1", "x2"]):
+            c0 = k
+            c1 = k + 3
             name = names[lab]
 
             sig_obs = np.sqrt(np.maximum(obs[lab], 0.0))
             sig_pred = np.sqrt(np.maximum(pred[lab], 0.0))
 
-            sc = ax.scatter(
+            # [0, c0] obs vs calc – lambda color
+            ax = axes[0, c0]
+            sc_lambda = ax.scatter(
                 sig_pred,
                 sig_obs,
                 c=lamda,
+                s=1,
                 cmap="viridis",
                 marker=".",
                 rasterized=True,
             )
-
             ax.plot([0, hi], [0, hi], "k--", lw=1)
-
-            ax.set_xlabel("$r(\\mathrm{{calc}})$ [$\AA^{{-1}}$]")
-            if j == 0:
-                ax.set_ylabel("$r(\\mathrm{{obs}})$ [$\AA^{{-1}}$]")
+            ax.set_xlabel("$r(\\mathrm{calc})$ [$\\AA^{-1}$]")
+            if k == 0:
+                ax.set_ylabel("$r(\\mathrm{obs})$ [$\\AA^{-1}$]")
+            else:
+                ax.tick_params(labelleft=False)
             ax.set_title(f"${name}$-axis")
             ax.set_aspect("equal", adjustable="box")
             ax.minorticks_on()
 
-        cb = fig.colorbar(sc, ax=axes[0, :], label="$\\lambda$ [$\\AA$]")
-        cb.ax.minorticks_on()
-
-        for j, lab in enumerate(["x0", "x1", "x2"]):
-            ax = axes[1, j]
-
-            name = names[lab]
-
-            sig_obs = np.sqrt(np.maximum(obs[lab], 0.0))
-            sig_pred = np.sqrt(np.maximum(pred[lab], 0.0))
-
+            # [0, c1] residual vs Q – S/N color
+            ax = axes[0, c1]
             resid = (sig_obs - sig_pred) / Q * 100
-
-            sc = ax.scatter(
+            sc_sn = ax.scatter(
                 Q,
                 resid,
                 c=signal_noise,
+                s=1,
                 cmap="plasma",
                 norm="log",
                 marker=".",
                 rasterized=True,
             )
-
             ax.axhline(0, color="k", lw=1, linestyle="--")
-            ax.set_xlabel("$|Q|$ [$\AA^{{-1}}$]")
-            if j == 0:
-                ax.set_ylabel(
-                    "$[r(\\mathrm{{obs}})-r(\\mathrm{{calc}})]/|Q|$ [%]"
-                )
+            ax.set_ylim(-max_res, max_res)
+            ax.tick_params(labelbottom=False)
+            if k == 0:
+                ax.set_ylabel("$[r_{\\rm obs}-r_{\\rm calc}]/|Q|$ [%]")
+            else:
+                ax.tick_params(labelleft=False)
+            ax.set_title(f"${name}$-axis")
             ax.minorticks_on()
 
-        cb = fig.colorbar(sc, ax=axes[1, :], label="$I/\\sigma$")
-        cb.ax.minorticks_on()
-
-        for j, lab in enumerate(["x0", "x1", "x2"]):
-            ax = axes[2, j]
-
-            name = names[lab]
-
-            sig_obs = np.sqrt(np.maximum(obs[lab], 0.0))
-            sig_pred = np.sqrt(np.maximum(pred[lab], 0.0))
-
-            resid = np.abs(sig_obs - sig_pred) / sig_pred * 100
-
-            sc = ax.scatter(
+            # [1, c0] gamma/nu map – relative residual % color
+            ax = axes[1, c0]
+            resid_map = (
+                np.abs(sig_obs - sig_pred) / np.maximum(sig_pred, 1e-12) * 100
+            )
+            sc_resid = ax.scatter(
                 np.rad2deg(gamma),
                 np.rad2deg(nu),
-                c=resid,
+                c=resid_map,
+                s=1,
                 cmap="binary",
                 norm="linear",
                 marker=".",
                 rasterized=True,
             )
-
             ax.set_xlabel("$\\gamma$ [$^\\circ$]")
-            if j == 0:
+            if k == 0:
                 ax.set_ylabel("$\\nu$ [$^\\circ$]")
-            ax.minorticks_on()
+            else:
+                ax.tick_params(labelleft=False)
             ax.set_aspect("equal", adjustable="box")
+            ax.minorticks_on()
+
+            # [1, c1] center offset vs Q – S/N color
+            ax = axes[1, c1]
+            sc_sn = ax.scatter(
+                Q,
+                offset[lab],
+                c=signal_noise,
+                s=1,
+                cmap="plasma",
+                norm="log",
+                marker=".",
+                rasterized=True,
+            )
+            ax.axhline(0, color="k", lw=1, linestyle="--")
+            ax.set_ylim(-max_trans, max_trans)
+            ax.set_xlabel("$|Q|$ [$\\AA^{-1}$]")
+            if k == 0:
+                ax.set_ylabel("$\Delta{c}$ [$\\AA^{-1}$]")
+            else:
+                ax.tick_params(labelleft=False)
+            ax.minorticks_on()
 
         cb = fig.colorbar(
-            sc,
-            ax=axes[2, :],
-            label="$|r(\\mathrm{{obs}})-r(\\mathrm{{calc}})|/r(\\mathrm{{calc}})$ [%]",
+            sc_lambda, ax=list(axes[0, [0, 1, 2]]), label="$\\lambda$ [$\\AA$]"
+        )
+        cb.ax.minorticks_on()
+        cb = fig.colorbar(
+            sc_sn,
+            ax=axes[:, [3, 4, 5]].ravel().tolist(),
+            label="$I/\\sigma$",
+        )
+        cb.ax.minorticks_on()
+        cb = fig.colorbar(
+            sc_resid,
+            ax=list(axes[1, [2]]),
+            label="$|r_{\\rm obs}/r_{\\rm calc}-1|$ [%]",
         )
         cb.ax.minorticks_on()
 

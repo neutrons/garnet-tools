@@ -15,8 +15,8 @@ dependencies:
   - pytest
   - conda
   - qtpy
-  - pyqt6
   - pyvista
+  - pyvistaqt
   - scikit-learn
   - scikit-image
   - gemmi
@@ -24,5 +24,9 @@ dependencies:
   - qdarkstyle
   - pre-commit
   - black
+  - sphinx
+  - sphinx-autodoc-typehints
+  - pydata-sphinx-theme
+  - numpydoc
   - pip:
     - pyoncat

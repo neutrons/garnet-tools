@@ -250,44 +250,19 @@ class View(QWidget):
                 ax1 = self.plot.figure.subplots()
                 ax_log = None
 
-            if self.get_instrument() != "DEMAND":
-                for val, lab, c in zip(gonio_values, gonio_names, colors):
-                    ax1.plot(run_numbers_list, val, ".", color=c, label=lab)
-            else:
-                for val, lab, c in zip(gonio_values, gonio_names, colors):
-                    v = val[:]
-                    for ii in range(len(run_numbers_list)):
-                        if ii == 0:
-                            ax1.errorbar(
-                                run_numbers_list[ii],
-                                v[0][ii],
-                                yerr=np.array(
-                                    [
-                                        abs(v[1][ii] - v[0][ii]),
-                                        abs(v[2][ii] - v[0][ii]),
-                                    ]
-                                ),
-                                fmt=".",
-                                color=c,
-                                label=lab,
-                                elinewidth=0.5,
-                                capsize=2,
-                            )
-                        else:
-                            ax1.errorbar(
-                                run_numbers_list[ii],
-                                v[0][ii],
-                                yerr=np.array(
-                                    [
-                                        abs(v[1][ii] - v[0][ii]),
-                                        abs(v[2][ii] - v[0][ii]),
-                                    ]
-                                ),
-                                fmt=".",
-                                color=c,
-                                elinewidth=0.5,
-                                capsize=2,
-                            )
+            for j, (val, lab, c) in enumerate(
+                zip(gonio_values, gonio_names, colors)
+            ):
+                arr = np.asarray(val)
+                y = arr[0].ravel() if arr.ndim == 3 else arr.ravel()
+                ax1.plot(
+                    run_numbers_list,
+                    y,
+                    ".",
+                    color=c,
+                    label=lab,
+                    zorder=len(gonio_names) - j,
+                )
 
             ax1.set_ylabel("Goniometer (degrees)")
             if not has_logs and self.get_instrument() != "DEMAND":
@@ -297,7 +272,10 @@ class View(QWidget):
                 ax1.set_title(f"exp{self.get_experiment()}")
             ax1.set_xlim(subplot_limits[0][0] - 1, subplot_limits[0][1] + 1)
             ax1.legend(
-                fontsize="x-small", loc="upper left", bbox_to_anchor=(0, 1.2)
+                fontsize="x-small",
+                loc="upper left",
+                bbox_to_anchor=(0, 1.2),
+                ncols=6,
             )
             ax1.xaxis.set_major_locator(MaxNLocator(integer=True))
             ax1.ticklabel_format(style="plain", axis="x", useOffset=False)
@@ -415,60 +393,37 @@ class View(QWidget):
                     f"exp{self.get_experiment()}", fontsize="medium"
                 )
 
+            _ys = np.concatenate(
+                [
+                    np.asarray(v)[0].ravel()
+                    if np.ndim(v) == 3
+                    else np.asarray(v).ravel()
+                    for v in gonio_values
+                ]
+            )
+            _ylim = (float(np.nanmin(_ys)) - 10, float(np.nanmax(_ys)) + 10)
+
             for i, ax1 in enumerate(gonio_axs):
                 lim = subplot_limits[i]
                 lim_range = 1
                 ax1.set_xlim(lim[0] - lim_range, lim[1] + lim_range)
-                ax1.set_ylim(
-                    np.min(gonio_values) - 10, np.max(gonio_values) + 10
-                )
+                ax1.set_ylim(*_ylim)
 
                 if i == 0:
                     ax1.set_ylabel("Goniometer (degrees)")
-                    if self.get_instrument() != "DEMAND":
-                        for val, lab, c in zip(
-                            gonio_values, gonio_names, colors
-                        ):
-                            ax1.plot(
-                                run_numbers_list, val, ".", color=c, label=lab
-                            )
-                    else:
-                        for val, lab, c in zip(
-                            gonio_values, gonio_names, colors
-                        ):
-                            v = val[:]
-                            for ii in range(len(run_numbers_list)):
-                                if ii == 0:
-                                    ax1.errorbar(
-                                        run_numbers_list[ii],
-                                        v[0][ii],
-                                        yerr=np.array(
-                                            [
-                                                abs(v[1][ii] - v[0][ii]),
-                                                abs(v[2][ii] - v[0][ii]),
-                                            ]
-                                        ),
-                                        fmt=".",
-                                        color=c,
-                                        label=lab,
-                                        elinewidth=0.5,
-                                        capsize=2,
-                                    )
-                                else:
-                                    ax1.errorbar(
-                                        run_numbers_list[ii],
-                                        v[0][ii],
-                                        yerr=np.array(
-                                            [
-                                                abs(v[1][ii] - v[0][ii]),
-                                                abs(v[2][ii] - v[0][ii]),
-                                            ]
-                                        ),
-                                        fmt=".",
-                                        color=c,
-                                        elinewidth=0.5,
-                                        capsize=2,
-                                    )
+                    for j, (val, lab, c) in enumerate(
+                        zip(gonio_values, gonio_names, colors)
+                    ):
+                        arr = np.asarray(val)
+                        y = arr[0].ravel() if arr.ndim == 3 else arr.ravel()
+                        ax1.plot(
+                            run_numbers_list,
+                            y,
+                            ".",
+                            color=c,
+                            label=lab,
+                            zorder=len(gonio_names) - j,
+                        )
                     ax1.legend(
                         fontsize="x-small",
                         loc="upper left",
@@ -479,31 +434,16 @@ class View(QWidget):
                     )
                     ax1.spines.right.set_visible(False)
                 else:
-                    if self.get_instrument() != "DEMAND":
-                        for val, lab, c in zip(
-                            gonio_values, gonio_names, colors
-                        ):
-                            ax1.plot(run_numbers_list, val, ".", color=c)
-                    else:
-                        for val, lab, c in zip(
-                            gonio_values, gonio_names, colors
-                        ):
-                            v = val[:]
-                            for ii in range(len(run_numbers_list)):
-                                ax1.errorbar(
-                                    run_numbers_list[ii],
-                                    v[0][ii],
-                                    yerr=np.array(
-                                        [
-                                            abs(v[1][ii] - v[0][ii]),
-                                            abs(v[2][ii] - v[0][ii]),
-                                        ]
-                                    ),
-                                    fmt=".",
-                                    color=c,
-                                    elinewidth=0.5,
-                                    capsize=2,
-                                )
+                    for j, (val, c) in enumerate(zip(gonio_values, colors)):
+                        arr = np.asarray(val)
+                        y = arr[0].ravel() if arr.ndim == 3 else arr.ravel()
+                        ax1.plot(
+                            run_numbers_list,
+                            y,
+                            ".",
+                            color=c,
+                            zorder=len(gonio_names) - j,
+                        )
                     ax1.ticklabel_format(
                         style="plain", axis="x", useOffset=False
                     )

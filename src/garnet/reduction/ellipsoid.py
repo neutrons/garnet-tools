@@ -1508,8 +1508,8 @@ class PeakEllipsoid:
         sn_eff,
         sn0=10.0,
         power=2.0,
-        lam_min=0.25,
-        lam_max=1.0,
+        lam_min=1.0,
+        lam_max=10.0,
     ):
         sn_eff = self.safe_sn(sn_eff)
 

@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import traceback
 
 import numpy as np
@@ -41,7 +42,15 @@ from qtpy.QtGui import (
     QPainter,
     QColor,
 )
-from qtpy.QtCore import Qt, QProcess, QElapsedTimer
+from qtpy.QtCore import Qt, QProcess, QElapsedTimer, QSettings
+
+_local_cfg = os.path.join(
+    tempfile.gettempdir(), os.environ.get("USER", "user"), "qt"
+)
+os.makedirs(_local_cfg, exist_ok=True)
+QSettings.setPath(
+    QSettings.Format.NativeFormat, QSettings.Scope.UserScope, _local_cfg
+)
 
 from qdarkstyle.light.palette import LightPalette
 import qdarkstyle

@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import traceback
 import csv
 import re
@@ -22,7 +23,15 @@ from qtpy.QtWidgets import (
     QFileDialog,
 )
 from qtpy.QtGui import QIcon
-from qtpy.QtCore import Qt
+from qtpy.QtCore import Qt, QSettings
+
+_local_cfg = os.path.join(
+    tempfile.gettempdir(), os.environ.get("USER", "user"), "qt"
+)
+os.makedirs(_local_cfg, exist_ok=True)
+QSettings.setPath(
+    QSettings.Format.NativeFormat, QSettings.Scope.UserScope, _local_cfg
+)
 
 import matplotlib
 

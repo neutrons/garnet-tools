@@ -1,0 +1,53 @@
+garnet.plots package
+====================
+
+Submodules
+----------
+
+garnet.plots.base module
+------------------------
+
+.. automodule:: garnet.plots.base
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+garnet.plots.colors module
+--------------------------
+
+.. automodule:: garnet.plots.colors
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+garnet.plots.crystal module
+---------------------------
+
+.. automodule:: garnet.plots.crystal
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+garnet.plots.peaks module
+-------------------------
+
+.. automodule:: garnet.plots.peaks
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+garnet.plots.volume module
+--------------------------
+
+.. automodule:: garnet.plots.volume
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Module contents
+---------------
+
+.. automodule:: garnet.plots
+   :members:
+   :show-inheritance:
+   :undoc-members:

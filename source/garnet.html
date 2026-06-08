@@ -1,0 +1,1219 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>garnet package &#8212; garnet  documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=0790524f97105ba85085" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=0790524f97105ba85085" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/plot_directive.css" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=0790524f97105ba85085"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=0790524f97105ba85085" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=0790524f97105ba85085" />
+
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'source/garnet';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="garnet.reduction package" href="garnet.reduction.html" />
+    <link rel="prev" title="garnet documentation" href="../index.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/garnet_logo.svg" class="logo__image only-light" alt="garnet  documentation - Home"/>
+    <img src="../_static/garnet_logo.svg" class="logo__image only-dark pst-js-only" alt="garnet  documentation - Home"/>
+  
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="#">
+    garnet package
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="garnet.tutorials.html">
+    garnet tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://single-crystal.ornl.gov">
+    Single Crystal Diffraction
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/neutrons/garnet-tools" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fab fa-github-square fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="#">
+    garnet package
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="garnet.tutorials.html">
+    garnet tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://single-crystal.ornl.gov">
+    Single Crystal Diffraction
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/neutrons/garnet-tools" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fab fa-github-square fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item pst-sidebar-collapse"><button id="pst-collapse-sidebar-button" aria-expanded="true" aria-controls="pst-primary-sidebar"><svg class="pst-icon svg-inline--fa" role="img" aria-hidden="true" focusable="false" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M3 15.5C2.36232 15.5 1.74874 15.2564 1.28478 14.8189C0.820828 14.3815 0.541576 13.7832 0.504167 13.1467L0.5 13L0.5 3C0.499965 2.36232 0.743605 1.74874 1.18107 1.28478C1.61854 0.820828 2.21676 0.541576 2.85333 0.504167L3 0.5L13 0.5C13.6377 0.499965 14.2513 0.743605 14.7152 1.18107C15.1792 1.61854 15.4584 2.21676 15.4958 2.85333L15.5 3L15.5 13C15.5 13.6377 15.2564 14.2513 14.8189 14.7152C14.3815 15.1792 13.7832 15.4584 13.1467 15.4958L13 15.5L3 15.5ZM3 13.8333L10.5 13.8333L10.5 2.16667L3 2.16667C2.79589 2.16669 2.59889 2.24163 2.44636 2.37726C2.29383 2.5129 2.19638 2.69979 2.1725 2.9025L2.16667 3L2.16667 13C2.16669 13.2041 2.24163 13.4011 2.37726 13.5536C2.5129 13.7062 2.69979 13.8036 2.9025 13.8275L3 13.8333ZM6.65583 10.325L6.5775 10.2558L4.91083 8.58917C4.76735 8.44567 4.68116 8.25476 4.66843 8.05223C4.65569 7.84971 4.71729 7.6495 4.84167 7.48917L4.91083 7.41083L6.5775 5.74417C6.72747 5.59471 6.9287 5.50794 7.14032 5.50148C7.35194 5.49502 7.55809 5.56935 7.7169 5.70937C7.8757 5.8494 7.97525 6.04463 7.99533 6.25539C8.01541 6.46616 7.95451 6.67667 7.825 6.84417L7.75583 6.9225L6.67917 8L7.75583 9.0775C7.89931 9.22099 7.98551 9.41191 7.99824 9.61443C8.01097 9.81695 7.94938 10.0172 7.825 10.1775L7.75583 10.2558C7.61234 10.3993 7.42142 10.4855 7.2189 10.4982C7.01638 10.511 6.81617 10.4494 6.65583 10.325Z"/>
+  </svg>
+  <span class="pst-collapse-sidebar-label">Collapse Sidebar</span>
+  <span class="pst-expand-sidebar-label">Expand Sidebar</span>
+</button></div>
+        <div class="sidebar-primary-item">
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="garnet.reduction.html">garnet.reduction package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="garnet.utilities.html">garnet.utilities package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="garnet.config.html">garnet.config package</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">garnet package</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="garnet-package">
+<h1>garnet package<a class="headerlink" href="#garnet-package" title="Link to this heading">#</a></h1>
+<p><em>garnet</em> is a toolkit for automated reduction and analysis of single-crystal
+neutron diffraction data.</p>
+<section id="features">
+<h2>Features<a class="headerlink" href="#features" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>Automated normalization of diffraction data</p></li>
+<li><p>Parametrization of peak shapes</p></li>
+<li><p>Peak integration using ellipsoidal methods</p></li>
+<li><p>Experiment browser for IPTS navigation</p></li>
+<li><p>Configurable YAML-driven reduction plans</p></li>
+</ul>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="garnet.reduction.html">garnet.reduction package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="garnet.reduction.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.reduction.html#module-garnet.reduction.background">garnet.reduction.background module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.background.Normalization"><code class="docutils literal notranslate"><span class="pre">Normalization</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.background.Normalization.combine"><code class="docutils literal notranslate"><span class="pre">Normalization.combine()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.background.Normalization.combine_parallel"><code class="docutils literal notranslate"><span class="pre">Normalization.combine_parallel()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.background.Normalization.get_file"><code class="docutils literal notranslate"><span class="pre">Normalization.get_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.background.Normalization.normalize"><code class="docutils literal notranslate"><span class="pre">Normalization.normalize()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.background.Normalization.normalize_parallel"><code class="docutils literal notranslate"><span class="pre">Normalization.normalize_parallel()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.background.Normalization.symmetry_name"><code class="docutils literal notranslate"><span class="pre">Normalization.symmetry_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.background.Normalization.validate_params"><code class="docutils literal notranslate"><span class="pre">Normalization.validate_params()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.reduction.html#module-garnet.reduction.crystallography">garnet.reduction.crystallography module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.reduction.html#module-garnet.reduction.data">garnet.reduction.data module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel"><code class="docutils literal notranslate"><span class="pre">BaseDataModel</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.add_UBW"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.add_UBW()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.bin_in_Q"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.bin_in_Q()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.calculate_binning_from_bins"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.calculate_binning_from_bins()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.calculate_binning_from_step"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.calculate_binning_from_step()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.check_volume_preservation"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.check_volume_preservation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.clear_norm"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.clear_norm()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.combine_Q_sample"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.combine_Q_sample()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.combine_files"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.combine_files()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.combine_histograms"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.combine_histograms()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.combine_splits"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.combine_splits()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.delete_workspace"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.delete_workspace()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.divide_histograms"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.divide_histograms()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.extract_axis_info"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.extract_axis_info()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.extract_bin_info"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.extract_bin_info()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.extract_counts"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.extract_counts()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.file_names"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.file_names()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.get_counting_rate"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.get_counting_rate()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.get_file_name_list"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.get_file_name_list()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.get_min_max_values"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.get_min_max_values()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.get_resolution_in_Q"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.get_resolution_in_Q()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.load_clear_UB"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.load_clear_UB()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.load_histograms"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.load_histograms()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.log_split_info"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.log_split_info()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.merge_Q_sample"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.merge_Q_sample()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.save_UB"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.save_UB()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.save_histograms"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.save_histograms()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.set_goniometer"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.set_goniometer()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.slice_extents"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.slice_extents()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.slice_roi"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.slice_roi()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.subtract_histograms"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.subtract_histograms()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.update_logs_for_time"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.update_logs_for_time()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.update_raw_path"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.update_raw_path()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.update_wavelength"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.update_wavelength()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.BaseDataModel.workspace_exists"><code class="docutils literal notranslate"><span class="pre">BaseDataModel.workspace_exists()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.DataModel"><code class="docutils literal notranslate"><span class="pre">DataModel()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData"><code class="docutils literal notranslate"><span class="pre">LaueData</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.absorption_correction"><code class="docutils literal notranslate"><span class="pre">LaueData.absorption_correction()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.apply_calibration"><code class="docutils literal notranslate"><span class="pre">LaueData.apply_calibration()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.apply_mask"><code class="docutils literal notranslate"><span class="pre">LaueData.apply_mask()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.approximate_norm"><code class="docutils literal notranslate"><span class="pre">LaueData.approximate_norm()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.calculate_maximum_Q"><code class="docutils literal notranslate"><span class="pre">LaueData.calculate_maximum_Q()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.convert_to_Q_lab"><code class="docutils literal notranslate"><span class="pre">LaueData.convert_to_Q_lab()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.convert_to_Q_sample"><code class="docutils literal notranslate"><span class="pre">LaueData.convert_to_Q_sample()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.crop_for_normalization"><code class="docutils literal notranslate"><span class="pre">LaueData.crop_for_normalization()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.filter_events"><code class="docutils literal notranslate"><span class="pre">LaueData.filter_events()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.get_counting_rate"><code class="docutils literal notranslate"><span class="pre">LaueData.get_counting_rate()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.get_volume_in_Q"><code class="docutils literal notranslate"><span class="pre">LaueData.get_volume_in_Q()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.grouping_list"><code class="docutils literal notranslate"><span class="pre">LaueData.grouping_list()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.load_background"><code class="docutils literal notranslate"><span class="pre">LaueData.load_background()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.load_data"><code class="docutils literal notranslate"><span class="pre">LaueData.load_data()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.load_generate_normalization"><code class="docutils literal notranslate"><span class="pre">LaueData.load_generate_normalization()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.mask_to_bank"><code class="docutils literal notranslate"><span class="pre">LaueData.mask_to_bank()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.normalize_to_hkl"><code class="docutils literal notranslate"><span class="pre">LaueData.normalize_to_hkl()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.preprocess_detector_banks"><code class="docutils literal notranslate"><span class="pre">LaueData.preprocess_detector_banks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.LaueData.preprocess_detectors"><code class="docutils literal notranslate"><span class="pre">LaueData.preprocess_detectors()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.MonochromaticData"><code class="docutils literal notranslate"><span class="pre">MonochromaticData</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.MonochromaticData.convert_to_Q_sample"><code class="docutils literal notranslate"><span class="pre">MonochromaticData.convert_to_Q_sample()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.MonochromaticData.load_background"><code class="docutils literal notranslate"><span class="pre">MonochromaticData.load_background()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.MonochromaticData.load_data"><code class="docutils literal notranslate"><span class="pre">MonochromaticData.load_data()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.MonochromaticData.load_generate_normalization"><code class="docutils literal notranslate"><span class="pre">MonochromaticData.load_generate_normalization()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.data.MonochromaticData.normalize_to_hkl"><code class="docutils literal notranslate"><span class="pre">MonochromaticData.normalize_to_hkl()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.reduction.html#module-garnet.reduction.ellipsoid">garnet.reduction.ellipsoid module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.S_matrix"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.S_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.U_deriv_u"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.U_deriv_u()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.U_matrix"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.U_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.calculate_intensity"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.calculate_intensity()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.centroid_inverse_covariance"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.centroid_inverse_covariance()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.chi_2_fit"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.chi_2_fit()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.coerce_weight"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.coerce_weight()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.coerce_weights"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.coerce_weights()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.collect_mode_fit_metrics"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.collect_mode_fit_metrics()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.copy_combine"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.copy_combine()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.counts_to_intensity_uncertainty"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.counts_to_intensity_uncertainty()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.data_norm"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.data_norm()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.det_S"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.det_S()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.ellipsoid_covariance"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.ellipsoid_covariance()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.estimate_center_weighted"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.estimate_center_weighted()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.estimate_envelope"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.estimate_envelope()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.estimate_intensity"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.estimate_intensity()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.estimate_peak_strength"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.estimate_peak_strength()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.extract_amplitude_background"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.extract_amplitude_background()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.extract_intensity"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.extract_intensity()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.extract_raw_intensity"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.extract_raw_intensity()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.extract_result"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.extract_result()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.fit"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.fit()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.fitted_profile"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.fitted_profile()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.gaussian"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.gaussian()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.gaussian_integral"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.gaussian_integral()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.gaussian_integral_jac_S"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.gaussian_integral_jac_S()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.gaussian_jac_S"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.gaussian_jac_S()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.gaussian_jac_c"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.gaussian_jac_c()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.integrate"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.integrate()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.inv_S_deriv_r"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.inv_S_deriv_r()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.inv_S_deriv_u"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.inv_S_deriv_u()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.inv_S_matrix"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.inv_S_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.jacobian"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.jacobian()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.jacobian_1d"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.jacobian_1d()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.jacobian_2d"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.jacobian_2d()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.jacobian_3d"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.jacobian_3d()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.jacobian_mode_poisson"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.jacobian_mode_poisson()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.matched_filter"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.matched_filter()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.mode_model_counts"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.mode_model_counts()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.normalize"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.normalize()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.peak_roi"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.peak_roi()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.poisson_deviance_residual_factor"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.poisson_deviance_residual_factor()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.prior_jacobian"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.prior_jacobian()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.prior_residual"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.prior_residual()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.prior_strength_from_sn"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.prior_strength_from_sn()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.profile_project"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.profile_project()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.quick_gaussian"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.quick_gaussian()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.residual"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.residual()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.residual_1d"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.residual_1d()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.residual_2d"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.residual_2d()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.residual_3d"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.residual_3d()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.residual_mode_poisson"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.residual_mode_poisson()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.safe_sn"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.safe_sn()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.set_resolution_sigma"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.set_resolution_sigma()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.sweep"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.sweep()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.uniform_mode_weights"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.uniform_mode_weights()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.update_adaptive_prior"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.update_adaptive_prior()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.update_constraints"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.update_constraints()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.update_estimate"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.update_estimate()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.vech6"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.vech6()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.voxel_volume"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.voxel_volume()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.voxels"><code class="docutils literal notranslate"><span class="pre">PeakEllipsoid.voxels()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.reduction.html#module-garnet.reduction.integration">garnet.reduction.integration module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration"><code class="docutils literal notranslate"><span class="pre">Integration</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.add_with_padding"><code class="docutils literal notranslate"><span class="pre">Integration.add_with_padding()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.append_name"><code class="docutils literal notranslate"><span class="pre">Integration.append_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.bin_axes"><code class="docutils literal notranslate"><span class="pre">Integration.bin_axes()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.bin_extent"><code class="docutils literal notranslate"><span class="pre">Integration.bin_extent()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.cell_centering_name"><code class="docutils literal notranslate"><span class="pre">Integration.cell_centering_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.combine"><code class="docutils literal notranslate"><span class="pre">Integration.combine()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.combine_parallel"><code class="docutils literal notranslate"><span class="pre">Integration.combine_parallel()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.extract_peak_info"><code class="docutils literal notranslate"><span class="pre">Integration.extract_peak_info()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.get_file"><code class="docutils literal notranslate"><span class="pre">Integration.get_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.integrate"><code class="docutils literal notranslate"><span class="pre">Integration.integrate()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.integrate_parallel"><code class="docutils literal notranslate"><span class="pre">Integration.integrate_parallel()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.integrate_peaks"><code class="docutils literal notranslate"><span class="pre">Integration.integrate_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.modulation_name"><code class="docutils literal notranslate"><span class="pre">Integration.modulation_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.pad_to_shape"><code class="docutils literal notranslate"><span class="pre">Integration.pad_to_shape()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.predict_add_satellite_peaks"><code class="docutils literal notranslate"><span class="pre">Integration.predict_add_satellite_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.project_ellipsoid_parameters"><code class="docutils literal notranslate"><span class="pre">Integration.project_ellipsoid_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.resolution_name"><code class="docutils literal notranslate"><span class="pre">Integration.resolution_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.revert_ellipsoid_parameters"><code class="docutils literal notranslate"><span class="pre">Integration.revert_ellipsoid_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.transform_Q"><code class="docutils literal notranslate"><span class="pre">Integration.transform_Q()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.unit_key"><code class="docutils literal notranslate"><span class="pre">Integration.unit_key()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.update_peak_info"><code class="docutils literal notranslate"><span class="pre">Integration.update_peak_info()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.update_peak_offsets"><code class="docutils literal notranslate"><span class="pre">Integration.update_peak_offsets()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.validate_params"><code class="docutils literal notranslate"><span class="pre">Integration.validate_params()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.voxel_weights"><code class="docutils literal notranslate"><span class="pre">Integration.voxel_weights()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.integration.Integration.write"><code class="docutils literal notranslate"><span class="pre">Integration.write()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.reduction.html#module-garnet.reduction.normalization">garnet.reduction.normalization module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.normalization.Normalization"><code class="docutils literal notranslate"><span class="pre">Normalization</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.normalization.Normalization.append_name"><code class="docutils literal notranslate"><span class="pre">Normalization.append_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.normalization.Normalization.binning_name"><code class="docutils literal notranslate"><span class="pre">Normalization.binning_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.normalization.Normalization.combine"><code class="docutils literal notranslate"><span class="pre">Normalization.combine()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.normalization.Normalization.combine_parallel"><code class="docutils literal notranslate"><span class="pre">Normalization.combine_parallel()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.normalization.Normalization.elastic_name"><code class="docutils literal notranslate"><span class="pre">Normalization.elastic_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.normalization.Normalization.extents_name"><code class="docutils literal notranslate"><span class="pre">Normalization.extents_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.normalization.Normalization.get_file"><code class="docutils literal notranslate"><span class="pre">Normalization.get_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.normalization.Normalization.normalize"><code class="docutils literal notranslate"><span class="pre">Normalization.normalize()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.normalization.Normalization.normalize_parallel"><code class="docutils literal notranslate"><span class="pre">Normalization.normalize_parallel()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.normalization.Normalization.projection_name"><code class="docutils literal notranslate"><span class="pre">Normalization.projection_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.normalization.Normalization.symmetry_name"><code class="docutils literal notranslate"><span class="pre">Normalization.symmetry_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.normalization.Normalization.validate_params"><code class="docutils literal notranslate"><span class="pre">Normalization.validate_params()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.normalization.Normalization.view"><code class="docutils literal notranslate"><span class="pre">Normalization.view()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.reduction.html#garnet-reduction-parallel-module">garnet.reduction.parallel module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.reduction.html#module-garnet.reduction.parametrization">garnet.reduction.parametrization module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.parametrization.Parametrization"><code class="docutils literal notranslate"><span class="pre">Parametrization</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.parametrization.Parametrization.append_name"><code class="docutils literal notranslate"><span class="pre">Parametrization.append_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.parametrization.Parametrization.binning_name"><code class="docutils literal notranslate"><span class="pre">Parametrization.binning_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.parametrization.Parametrization.combine"><code class="docutils literal notranslate"><span class="pre">Parametrization.combine()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.parametrization.Parametrization.combine_parallel"><code class="docutils literal notranslate"><span class="pre">Parametrization.combine_parallel()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.parametrization.Parametrization.elastic_name"><code class="docutils literal notranslate"><span class="pre">Parametrization.elastic_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.parametrization.Parametrization.extents_name"><code class="docutils literal notranslate"><span class="pre">Parametrization.extents_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.parametrization.Parametrization.get_file"><code class="docutils literal notranslate"><span class="pre">Parametrization.get_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.parametrization.Parametrization.log_name"><code class="docutils literal notranslate"><span class="pre">Parametrization.log_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.parametrization.Parametrization.parametrize"><code class="docutils literal notranslate"><span class="pre">Parametrization.parametrize()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.parametrization.Parametrization.parametrize_parallel"><code class="docutils literal notranslate"><span class="pre">Parametrization.parametrize_parallel()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.parametrization.Parametrization.projection_name"><code class="docutils literal notranslate"><span class="pre">Parametrization.projection_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.parametrization.Parametrization.validate_params"><code class="docutils literal notranslate"><span class="pre">Parametrization.validate_params()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.parametrization.Parametrization.view"><code class="docutils literal notranslate"><span class="pre">Parametrization.view()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.reduction.html#module-garnet.reduction.peaks">garnet.reduction.peaks module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel"><code class="docutils literal notranslate"><span class="pre">PeakModel</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.add_diagonstic_info"><code class="docutils literal notranslate"><span class="pre">PeakModel.add_diagonstic_info()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_UB"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_UB()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_angles"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_angles()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_bank_name"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_bank_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_d_spacing"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_d_spacing()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_detector_id"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_detector_id()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_goniometer_angles"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_goniometer_angles()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_goniometer_matrix"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_goniometer_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_hkl"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_hkl()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_hklmnp"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_hklmnp()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_number_peaks"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_number_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_peak_name"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_peak_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_peak_shape"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_peak_shape()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_projection_matrix"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_projection_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_projection_peak_origin"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_projection_peak_origin()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_sample_Q"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_sample_Q()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_signal_to_noise"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_signal_to_noise()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.get_wavelength"><code class="docutils literal notranslate"><span class="pre">PeakModel.get_wavelength()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.set_hklmnp"><code class="docutils literal notranslate"><span class="pre">PeakModel.set_hklmnp()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.set_peak_center"><code class="docutils literal notranslate"><span class="pre">PeakModel.set_peak_center()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.set_peak_intensity"><code class="docutils literal notranslate"><span class="pre">PeakModel.set_peak_intensity()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.set_peak_shape"><code class="docutils literal notranslate"><span class="pre">PeakModel.set_peak_shape()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.set_scale_factor"><code class="docutils literal notranslate"><span class="pre">PeakModel.set_scale_factor()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeakModel.set_wavelength"><code class="docutils literal notranslate"><span class="pre">PeakModel.set_wavelength()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel"><code class="docutils literal notranslate"><span class="pre">PeaksModel</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.add_peak"><code class="docutils literal notranslate"><span class="pre">PeaksModel.add_peak()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.centroid_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.centroid_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.combine_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.combine_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.convert_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.convert_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.create_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.create_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.delete_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.delete_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.extract_peaks_roi"><code class="docutils literal notranslate"><span class="pre">PeaksModel.extract_peaks_roi()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.find_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.find_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.get_UB"><code class="docutils literal notranslate"><span class="pre">PeaksModel.get_UB()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.get_all_goniometer_matrices"><code class="docutils literal notranslate"><span class="pre">PeaksModel.get_all_goniometer_matrices()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.get_bank_names"><code class="docutils literal notranslate"><span class="pre">PeaksModel.get_bank_names()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.get_max_d_spacing"><code class="docutils literal notranslate"><span class="pre">PeaksModel.get_max_d_spacing()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.get_number_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.get_number_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.get_peaks_name"><code class="docutils literal notranslate"><span class="pre">PeaksModel.get_peaks_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.integrate_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.integrate_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.intensity_profile"><code class="docutils literal notranslate"><span class="pre">PeaksModel.intensity_profile()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.intensity_projection"><code class="docutils literal notranslate"><span class="pre">PeaksModel.intensity_projection()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.intensity_vs_radius"><code class="docutils literal notranslate"><span class="pre">PeaksModel.intensity_vs_radius()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.load_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.load_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.predict_modulated_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.predict_modulated_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.predict_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.predict_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.predict_satellite_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.predict_satellite_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.remove_aluminum_contamination"><code class="docutils literal notranslate"><span class="pre">PeaksModel.remove_aluminum_contamination()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.remove_duplicate_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.remove_duplicate_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.remove_peaks_by_d_tolerance"><code class="docutils literal notranslate"><span class="pre">PeaksModel.remove_peaks_by_d_tolerance()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.remove_unindexed_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.remove_unindexed_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.remove_weak_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.remove_weak_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.renumber_runs_by_index"><code class="docutils literal notranslate"><span class="pre">PeaksModel.renumber_runs_by_index()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.reset_satellites"><code class="docutils literal notranslate"><span class="pre">PeaksModel.reset_satellites()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.save_peaks"><code class="docutils literal notranslate"><span class="pre">PeaksModel.save_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.set_goniometer"><code class="docutils literal notranslate"><span class="pre">PeaksModel.set_goniometer()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.sort_peaks_by_bank"><code class="docutils literal notranslate"><span class="pre">PeaksModel.sort_peaks_by_bank()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.sort_peaks_by_d"><code class="docutils literal notranslate"><span class="pre">PeaksModel.sort_peaks_by_d()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.sort_peaks_by_hkl"><code class="docutils literal notranslate"><span class="pre">PeaksModel.sort_peaks_by_hkl()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.peaks.PeaksModel.update_scale_factor"><code class="docutils literal notranslate"><span class="pre">PeaksModel.update_scale_factor()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.reduction.html#module-garnet.reduction.plan">garnet.reduction.plan module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.Dumper"><code class="docutils literal notranslate"><span class="pre">Dumper</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.Dumper.represent_list"><code class="docutils literal notranslate"><span class="pre">Dumper.represent_list()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.Dumper.yaml_representers"><code class="docutils literal notranslate"><span class="pre">Dumper.yaml_representers</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.ReductionPlan"><code class="docutils literal notranslate"><span class="pre">ReductionPlan</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.ReductionPlan.check"><code class="docutils literal notranslate"><span class="pre">ReductionPlan.check()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.ReductionPlan.generate_plan"><code class="docutils literal notranslate"><span class="pre">ReductionPlan.generate_plan()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.ReductionPlan.load_plan"><code class="docutils literal notranslate"><span class="pre">ReductionPlan.load_plan()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.ReductionPlan.runs_list_to_string"><code class="docutils literal notranslate"><span class="pre">ReductionPlan.runs_list_to_string()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.ReductionPlan.runs_string_to_list"><code class="docutils literal notranslate"><span class="pre">ReductionPlan.runs_string_to_list()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.ReductionPlan.save_plan"><code class="docutils literal notranslate"><span class="pre">ReductionPlan.save_plan()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.ReductionPlan.set_output"><code class="docutils literal notranslate"><span class="pre">ReductionPlan.set_output()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.ReductionPlan.template_integration"><code class="docutils literal notranslate"><span class="pre">ReductionPlan.template_integration()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.ReductionPlan.template_normalization"><code class="docutils literal notranslate"><span class="pre">ReductionPlan.template_normalization()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.ReductionPlan.template_parametrization"><code class="docutils literal notranslate"><span class="pre">ReductionPlan.template_parametrization()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.ReductionPlan.validate_file"><code class="docutils literal notranslate"><span class="pre">ReductionPlan.validate_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.ReductionPlan.validate_plan"><code class="docutils literal notranslate"><span class="pre">ReductionPlan.validate_plan()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.SubPlan"><code class="docutils literal notranslate"><span class="pre">SubPlan</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.SubPlan.append_name"><code class="docutils literal notranslate"><span class="pre">SubPlan.append_name()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.SubPlan.check"><code class="docutils literal notranslate"><span class="pre">SubPlan.check()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.SubPlan.cleanup"><code class="docutils literal notranslate"><span class="pre">SubPlan.cleanup()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.SubPlan.create_directories"><code class="docutils literal notranslate"><span class="pre">SubPlan.create_directories()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.SubPlan.get_diagnostic_file"><code class="docutils literal notranslate"><span class="pre">SubPlan.get_diagnostic_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.SubPlan.get_diagnostic_path"><code class="docutils literal notranslate"><span class="pre">SubPlan.get_diagnostic_path()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.SubPlan.get_output_file"><code class="docutils literal notranslate"><span class="pre">SubPlan.get_output_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.SubPlan.get_output_path"><code class="docutils literal notranslate"><span class="pre">SubPlan.get_output_path()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.SubPlan.get_plot_file"><code class="docutils literal notranslate"><span class="pre">SubPlan.get_plot_file()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.SubPlan.get_plot_path"><code class="docutils literal notranslate"><span class="pre">SubPlan.get_plot_path()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.check"><code class="docutils literal notranslate"><span class="pre">check()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.delete_directory"><code class="docutils literal notranslate"><span class="pre">delete_directory()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.load_YAML"><code class="docutils literal notranslate"><span class="pre">load_YAML()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.save_JSON"><code class="docutils literal notranslate"><span class="pre">save_JSON()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.plan.save_YAML"><code class="docutils literal notranslate"><span class="pre">save_YAML()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.reduction.html#module-garnet.reduction.resolution">garnet.reduction.resolution module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.resolution.ResolutionEllipsoid"><code class="docutils literal notranslate"><span class="pre">ResolutionEllipsoid</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.resolution.ResolutionEllipsoid.apply"><code class="docutils literal notranslate"><span class="pre">ResolutionEllipsoid.apply()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.resolution.ResolutionEllipsoid.diagnostics"><code class="docutils literal notranslate"><span class="pre">ResolutionEllipsoid.diagnostics()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.resolution.ResolutionEllipsoid.estimate_prior_sigmas"><code class="docutils literal notranslate"><span class="pre">ResolutionEllipsoid.estimate_prior_sigmas()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.resolution.ResolutionEllipsoid.fit"><code class="docutils literal notranslate"><span class="pre">ResolutionEllipsoid.fit()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.resolution.ResolutionEllipsoid.plot_diagnostics"><code class="docutils literal notranslate"><span class="pre">ResolutionEllipsoid.plot_diagnostics()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.resolution.ResolutionEllipsoid.predict_sample_cov"><code class="docutils literal notranslate"><span class="pre">ResolutionEllipsoid.predict_sample_cov()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.resolution.ResolutionEllipsoid.robust_nnls"><code class="docutils literal notranslate"><span class="pre">ResolutionEllipsoid.robust_nnls()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.reduction.html#module-garnet.reduction.sample">garnet.reduction.sample module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.sample.SampleMaterial"><code class="docutils literal notranslate"><span class="pre">SampleMaterial</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.sample.SampleMaterial.get_material"><code class="docutils literal notranslate"><span class="pre">SampleMaterial.get_material()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.sample.SampleMaterial.get_sample_material"><code class="docutils literal notranslate"><span class="pre">SampleMaterial.get_sample_material()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.sample.SampleMaterial.get_shape"><code class="docutils literal notranslate"><span class="pre">SampleMaterial.get_shape()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.sample.SampleMaterial.save_ellipsoid_stl"><code class="docutils literal notranslate"><span class="pre">SampleMaterial.save_ellipsoid_stl()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.sample.SampleMaterial.set_material"><code class="docutils literal notranslate"><span class="pre">SampleMaterial.set_material()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.sample.SampleMaterial.set_sample"><code class="docutils literal notranslate"><span class="pre">SampleMaterial.set_sample()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.sample.SampleMaterial.set_shape"><code class="docutils literal notranslate"><span class="pre">SampleMaterial.set_shape()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.sample.SampleMaterial.verify_chemical_formula"><code class="docutils literal notranslate"><span class="pre">SampleMaterial.verify_chemical_formula()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.reduction.html#module-garnet.reduction.ub">garnet.reduction.ub module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.FindUB"><code class="docutils literal notranslate"><span class="pre">FindUB</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.FindUB.cost"><code class="docutils literal notranslate"><span class="pre">FindUB.cost()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.FindUB.get_UB"><code class="docutils literal notranslate"><span class="pre">FindUB.get_UB()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.FindUB.metric_tensor"><code class="docutils literal notranslate"><span class="pre">FindUB.metric_tensor()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.FindUB.objective"><code class="docutils literal notranslate"><span class="pre">FindUB.objective()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.FindUB.orientation_matrix"><code class="docutils literal notranslate"><span class="pre">FindUB.orientation_matrix()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization"><code class="docutils literal notranslate"><span class="pre">Optimization</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.B_matrix"><code class="docutils literal notranslate"><span class="pre">Optimization.B_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.U_matrix"><code class="docutils literal notranslate"><span class="pre">Optimization.U_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.cubic"><code class="docutils literal notranslate"><span class="pre">Optimization.cubic()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.fixed"><code class="docutils literal notranslate"><span class="pre">Optimization.fixed()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.get_UB"><code class="docutils literal notranslate"><span class="pre">Optimization.get_UB()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.get_lattice_parameters"><code class="docutils literal notranslate"><span class="pre">Optimization.get_lattice_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.get_orientation_angles"><code class="docutils literal notranslate"><span class="pre">Optimization.get_orientation_angles()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.hexagonal"><code class="docutils literal notranslate"><span class="pre">Optimization.hexagonal()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.monoclinic"><code class="docutils literal notranslate"><span class="pre">Optimization.monoclinic()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.optimize_lattice"><code class="docutils literal notranslate"><span class="pre">Optimization.optimize_lattice()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.orthorhombic"><code class="docutils literal notranslate"><span class="pre">Optimization.orthorhombic()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.residual"><code class="docutils literal notranslate"><span class="pre">Optimization.residual()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.rhombohedral"><code class="docutils literal notranslate"><span class="pre">Optimization.rhombohedral()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.tetragonal"><code class="docutils literal notranslate"><span class="pre">Optimization.tetragonal()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.triclinic"><code class="docutils literal notranslate"><span class="pre">Optimization.triclinic()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Optimization.whiten_weight_matrix"><code class="docutils literal notranslate"><span class="pre">Optimization.whiten_weight_matrix()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.B_matrix"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer.B_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.U_matrix"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer.U_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.calculate_goniometer"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer.calculate_goniometer()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.cubic"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer.cubic()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.fixed"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer.fixed()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.get_lattice_parameters"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer.get_lattice_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.get_orientation_angles"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer.get_orientation_angles()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.hexagonal"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer.hexagonal()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.monoclinic"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer.monoclinic()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.optimize_lattice"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer.optimize_lattice()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.orthorhombic"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer.orthorhombic()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.residual"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer.residual()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.rhombohedral"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer.rhombohedral()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.tetragonal"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer.tetragonal()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.triclinic"><code class="docutils literal notranslate"><span class="pre">RefineSingleCrystalGoniometer.triclinic()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Reorient"><code class="docutils literal notranslate"><span class="pre">Reorient</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Reorient.cell_symmetry_matrices"><code class="docutils literal notranslate"><span class="pre">Reorient.cell_symmetry_matrices()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.Reorient.minimize"><code class="docutils literal notranslate"><span class="pre">Reorient.minimize()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel"><code class="docutils literal notranslate"><span class="pre">UBModel</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.calculate_hkl"><code class="docutils literal notranslate"><span class="pre">UBModel.calculate_hkl()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.calculate_transform_extents"><code class="docutils literal notranslate"><span class="pre">UBModel.calculate_transform_extents()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.centering_matrix"><code class="docutils literal notranslate"><span class="pre">UBModel.centering_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.convert_conventional_to_primitive"><code class="docutils literal notranslate"><span class="pre">UBModel.convert_conventional_to_primitive()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.copy_UB"><code class="docutils literal notranslate"><span class="pre">UBModel.copy_UB()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.determine_UB_with_lattice_parameters"><code class="docutils literal notranslate"><span class="pre">UBModel.determine_UB_with_lattice_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.determine_UB_with_primitive_cell"><code class="docutils literal notranslate"><span class="pre">UBModel.determine_UB_with_primitive_cell()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.generate_lattice_transforms"><code class="docutils literal notranslate"><span class="pre">UBModel.generate_lattice_transforms()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.get_lattice_parameters"><code class="docutils literal notranslate"><span class="pre">UBModel.get_lattice_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.get_max_d_spacing"><code class="docutils literal notranslate"><span class="pre">UBModel.get_max_d_spacing()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.get_primitive_cell_length_range"><code class="docutils literal notranslate"><span class="pre">UBModel.get_primitive_cell_length_range()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.has_UB"><code class="docutils literal notranslate"><span class="pre">UBModel.has_UB()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.index_peaks"><code class="docutils literal notranslate"><span class="pre">UBModel.index_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.load_UB"><code class="docutils literal notranslate"><span class="pre">UBModel.load_UB()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.possible_conventional_cells"><code class="docutils literal notranslate"><span class="pre">UBModel.possible_conventional_cells()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.refine_UB_with_constraints"><code class="docutils literal notranslate"><span class="pre">UBModel.refine_UB_with_constraints()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.refine_UB_without_constraints"><code class="docutils literal notranslate"><span class="pre">UBModel.refine_UB_without_constraints()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.refine_U_only"><code class="docutils literal notranslate"><span class="pre">UBModel.refine_U_only()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.save_UB"><code class="docutils literal notranslate"><span class="pre">UBModel.save_UB()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.select_cell"><code class="docutils literal notranslate"><span class="pre">UBModel.select_cell()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.select_type"><code class="docutils literal notranslate"><span class="pre">UBModel.select_type()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.transform_lattice"><code class="docutils literal notranslate"><span class="pre">UBModel.transform_lattice()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.reduction.html#garnet.reduction.ub.UBModel.transform_primitive_to_conventional"><code class="docutils literal notranslate"><span class="pre">UBModel.transform_primitive_to_conventional()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.reduction.html#module-garnet.reduction">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="garnet.utilities.html">garnet.utilities package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#module-garnet.utilities.autoreduce">garnet.utilities.autoreduce module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.autoreduce.AutoReduce"><code class="docutils literal notranslate"><span class="pre">AutoReduce</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.autoreduce.AutoReduce.compress"><code class="docutils literal notranslate"><span class="pre">AutoReduce.compress()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.autoreduce.AutoReduce.elastic"><code class="docutils literal notranslate"><span class="pre">AutoReduce.elastic()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.autoreduce.AutoReduce.plot_instrument"><code class="docutils literal notranslate"><span class="pre">AutoReduce.plot_instrument()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.autoreduce.AutoReduce.publish_plots"><code class="docutils literal notranslate"><span class="pre">AutoReduce.publish_plots()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#module-garnet.utilities.calculate">garnet.utilities.calculate module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB"><code class="docutils literal notranslate"><span class="pre">CalculateUB</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.UB_matrix"><code class="docutils literal notranslate"><span class="pre">CalculateUB.UB_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.cartesian_matrix_metric_tensor"><code class="docutils literal notranslate"><span class="pre">CalculateUB.cartesian_matrix_metric_tensor()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.cost"><code class="docutils literal notranslate"><span class="pre">CalculateUB.cost()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.cubic"><code class="docutils literal notranslate"><span class="pre">CalculateUB.cubic()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.get_lattice_constants"><code class="docutils literal notranslate"><span class="pre">CalculateUB.get_lattice_constants()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.get_orientation_parameters"><code class="docutils literal notranslate"><span class="pre">CalculateUB.get_orientation_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.hexagonal"><code class="docutils literal notranslate"><span class="pre">CalculateUB.hexagonal()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.index"><code class="docutils literal notranslate"><span class="pre">CalculateUB.index()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.indexer"><code class="docutils literal notranslate"><span class="pre">CalculateUB.indexer()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.metric_G_star_tensor"><code class="docutils literal notranslate"><span class="pre">CalculateUB.metric_G_star_tensor()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.metric_G_tensor"><code class="docutils literal notranslate"><span class="pre">CalculateUB.metric_G_tensor()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.minimize"><code class="docutils literal notranslate"><span class="pre">CalculateUB.minimize()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.monoclinic"><code class="docutils literal notranslate"><span class="pre">CalculateUB.monoclinic()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.objective"><code class="docutils literal notranslate"><span class="pre">CalculateUB.objective()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.orientation_U"><code class="docutils literal notranslate"><span class="pre">CalculateUB.orientation_U()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.orthorhombic"><code class="docutils literal notranslate"><span class="pre">CalculateUB.orthorhombic()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.reciprocal_lattice_B"><code class="docutils literal notranslate"><span class="pre">CalculateUB.reciprocal_lattice_B()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.refine"><code class="docutils literal notranslate"><span class="pre">CalculateUB.refine()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.residual"><code class="docutils literal notranslate"><span class="pre">CalculateUB.residual()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.rhombohedral"><code class="docutils literal notranslate"><span class="pre">CalculateUB.rhombohedral()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.set_lattice_constants"><code class="docutils literal notranslate"><span class="pre">CalculateUB.set_lattice_constants()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.set_orientation_parameters"><code class="docutils literal notranslate"><span class="pre">CalculateUB.set_orientation_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.softplus"><code class="docutils literal notranslate"><span class="pre">CalculateUB.softplus()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.tetragonal"><code class="docutils literal notranslate"><span class="pre">CalculateUB.tetragonal()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calculate.CalculateUB.triclinic"><code class="docutils literal notranslate"><span class="pre">CalculateUB.triclinic()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#module-garnet.utilities.calibration">garnet.utilities.calibration module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration"><code class="docutils literal notranslate"><span class="pre">Calibration</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.calculate_goniometer_angles"><code class="docutils literal notranslate"><span class="pre">Calibration.calculate_goniometer_angles()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.calculate_goniometer_matrix"><code class="docutils literal notranslate"><span class="pre">Calibration.calculate_goniometer_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.calculate_orientation_matrix"><code class="docutils literal notranslate"><span class="pre">Calibration.calculate_orientation_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.calculate_orientation_vector"><code class="docutils literal notranslate"><span class="pre">Calibration.calculate_orientation_vector()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.calculate_tilt_matrices"><code class="docutils literal notranslate"><span class="pre">Calibration.calculate_tilt_matrices()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.calculate_tilt_matrix"><code class="docutils literal notranslate"><span class="pre">Calibration.calculate_tilt_matrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.calibrate_goniometer"><code class="docutils literal notranslate"><span class="pre">Calibration.calibrate_goniometer()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.calibrate_instrument"><code class="docutils literal notranslate"><span class="pre">Calibration.calibrate_instrument()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.cell_symmetry_matrices"><code class="docutils literal notranslate"><span class="pre">Calibration.cell_symmetry_matrices()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.fix_offsets"><code class="docutils literal notranslate"><span class="pre">Calibration.fix_offsets()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.generate_diagnostic"><code class="docutils literal notranslate"><span class="pre">Calibration.generate_diagnostic()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.gravity_angle"><code class="docutils literal notranslate"><span class="pre">Calibration.gravity_angle()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.initialize_peaks"><code class="docutils literal notranslate"><span class="pre">Calibration.initialize_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.load_instrument"><code class="docutils literal notranslate"><span class="pre">Calibration.load_instrument()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.load_peaks"><code class="docutils literal notranslate"><span class="pre">Calibration.load_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.optimize_goniometer"><code class="docutils literal notranslate"><span class="pre">Calibration.optimize_goniometer()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.refine_goniometer"><code class="docutils literal notranslate"><span class="pre">Calibration.refine_goniometer()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.refine_offsets"><code class="docutils literal notranslate"><span class="pre">Calibration.refine_offsets()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.reindex_peaks"><code class="docutils literal notranslate"><span class="pre">Calibration.reindex_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.residual"><code class="docutils literal notranslate"><span class="pre">Calibration.residual()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.calibration.Calibration.run"><code class="docutils literal notranslate"><span class="pre">Calibration.run()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#module-garnet.utilities.combine">garnet.utilities.combine module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.combine.combine"><code class="docutils literal notranslate"><span class="pre">combine()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.combine.find_partial_files"><code class="docutils literal notranslate"><span class="pre">find_partial_files()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.combine.parse_args"><code class="docutils literal notranslate"><span class="pre">parse_args()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#module-garnet.utilities.confirm">garnet.utilities.confirm module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.confirm.confirm_autoreduce"><code class="docutils literal notranslate"><span class="pre">confirm_autoreduce()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#module-garnet.utilities.crystal">garnet.utilities.crystal module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.crystal.CrystalStructure"><code class="docutils literal notranslate"><span class="pre">CrystalStructure</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.crystal.CrystalStructure.add_material_info"><code class="docutils literal notranslate"><span class="pre">CrystalStructure.add_material_info()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.crystal.CrystalStructure.get_chemical_formula_z_parameter"><code class="docutils literal notranslate"><span class="pre">CrystalStructure.get_chemical_formula_z_parameter()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.crystal.CrystalStructure.get_lattice_constants"><code class="docutils literal notranslate"><span class="pre">CrystalStructure.get_lattice_constants()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.crystal.CrystalStructure.get_scatterers"><code class="docutils literal notranslate"><span class="pre">CrystalStructure.get_scatterers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.crystal.CrystalStructure.get_space_group"><code class="docutils literal notranslate"><span class="pre">CrystalStructure.get_space_group()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.crystal.CrystalStructure.get_unit_cell_volume"><code class="docutils literal notranslate"><span class="pre">CrystalStructure.get_unit_cell_volume()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.crystal.SampleParameters"><code class="docutils literal notranslate"><span class="pre">SampleParameters</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.crystal.SampleParameters.add_sample_info"><code class="docutils literal notranslate"><span class="pre">SampleParameters.add_sample_info()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#garnet-utilities-ipts-module">garnet.utilities.ipts module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#module-garnet.utilities.macromolecular">garnet.utilities.macromolecular module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.macromolecular.Macromolecular"><code class="docutils literal notranslate"><span class="pre">Macromolecular</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.macromolecular.Macromolecular.write_mtz"><code class="docutils literal notranslate"><span class="pre">Macromolecular.write_mtz()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#module-garnet.utilities.peaks">garnet.utilities.peaks module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.peaks.Laue"><code class="docutils literal notranslate"><span class="pre">Laue</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.peaks.Laue.calculate_transform"><code class="docutils literal notranslate"><span class="pre">Laue.calculate_transform()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.peaks.Laue.convert_conventional_to_primitive"><code class="docutils literal notranslate"><span class="pre">Laue.convert_conventional_to_primitive()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.peaks.Laue.find_UB"><code class="docutils literal notranslate"><span class="pre">Laue.find_UB()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.peaks.Laue.refine_UB"><code class="docutils literal notranslate"><span class="pre">Laue.refine_UB()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.peaks.Laue.transform_lattice"><code class="docutils literal notranslate"><span class="pre">Laue.transform_lattice()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.peaks.Laue.uncertainty_line_segements"><code class="docutils literal notranslate"><span class="pre">Laue.uncertainty_line_segements()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.peaks.Laue.wavelengths"><code class="docutils literal notranslate"><span class="pre">Laue.wavelengths()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.peaks.Peaks"><code class="docutils literal notranslate"><span class="pre">Peaks</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.peaks.Peaks.calculate_limits"><code class="docutils literal notranslate"><span class="pre">Peaks.calculate_limits()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.peaks.Peaks.finalize_and_save"><code class="docutils literal notranslate"><span class="pre">Peaks.finalize_and_save()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.peaks.Peaks.load_convert_runs"><code class="docutils literal notranslate"><span class="pre">Peaks.load_convert_runs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.peaks.Peaks.load_instrument"><code class="docutils literal notranslate"><span class="pre">Peaks.load_instrument()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.peaks.Peaks.run"><code class="docutils literal notranslate"><span class="pre">Peaks.run()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#garnet-utilities-peakview-module">garnet.utilities.peakview module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#module-garnet.utilities.refinement">garnet.utilities.refinement module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.absorption_correction"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.absorption_correction()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.add_absorption_extinction_parameters"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.add_absorption_extinction_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.add_beam_parameters"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.add_beam_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.add_detector_run_scale_parameters"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.add_detector_run_scale_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.beam_weights"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.beam_weights()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.calculate_ellipsoid_surface"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.calculate_ellipsoid_surface()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.calculate_scale_factor"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.calculate_scale_factor()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.calculate_statistics"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.calculate_statistics()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.calculate_structure_amplitudes"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.calculate_structure_amplitudes()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.calculate_structure_factors"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.calculate_structure_factors()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.chemical_formula_z_parameter"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.chemical_formula_z_parameter()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.cost"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.cost()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.detector_bank_scale_factors"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.detector_bank_scale_factors()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.ellipsoid_parameters"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.ellipsoid_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.extinction_correction"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.extinction_correction()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.extinction_xp"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.extinction_xp()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.extinction_xs"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.extinction_xs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.extinction_xx"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.extinction_xx()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.extract_info"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.extract_info()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.extract_parameters"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.extract_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.generate_parameters"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.generate_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.generate_symmetry_transforms"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.generate_symmetry_transforms()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.initialize_correction"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.initialize_correction()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.initialize_crystal_structure"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.initialize_crystal_structure()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.initialize_material"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.initialize_material()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.initialize_unit_cell_atoms"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.initialize_unit_cell_atoms()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.load_hkls"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.load_hkls()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.normalization_correction"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.normalization_correction()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.objective_correction"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.objective_correction()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.objective_structure"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.objective_structure()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.plot_absorption_correction"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.plot_absorption_correction()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.plot_hkl_families"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.plot_hkl_families()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.plot_result"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.plot_result()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.plot_sample_shape"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.plot_sample_shape()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.plot_wobble_correction"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.plot_wobble_correction()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.prepare_absorption_table"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.prepare_absorption_table()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.refine"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.refine()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.report"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.report()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.run_angle_scale_factors"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.run_angle_scale_factors()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.save_corrected_peaks"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.save_corrected_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.save_detector_scales"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.save_detector_scales()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.spherical_absorption"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.spherical_absorption()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.spherical_absorption_correction"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.spherical_absorption_correction()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.spherical_extinction"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.spherical_extinction()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.update_sample"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.update_sample()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.wobble_correction"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.wobble_correction()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#module-garnet.utilities.reflections">garnet.utilities.reflections module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.AbsorptionCorrection"><code class="docutils literal notranslate"><span class="pre">AbsorptionCorrection</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.AbsorptionCorrection.apply_correction"><code class="docutils literal notranslate"><span class="pre">AbsorptionCorrection.apply_correction()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.AbsorptionCorrection.calculate_correction"><code class="docutils literal notranslate"><span class="pre">AbsorptionCorrection.calculate_correction()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.AbsorptionCorrection.save_ellipsoid_stl"><code class="docutils literal notranslate"><span class="pre">AbsorptionCorrection.save_ellipsoid_stl()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.AbsorptionCorrection.set_material"><code class="docutils literal notranslate"><span class="pre">AbsorptionCorrection.set_material()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.AbsorptionCorrection.set_orientation"><code class="docutils literal notranslate"><span class="pre">AbsorptionCorrection.set_orientation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.AbsorptionCorrection.set_shape"><code class="docutils literal notranslate"><span class="pre">AbsorptionCorrection.set_shape()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.AbsorptionCorrection.verify_chemical_formula"><code class="docutils literal notranslate"><span class="pre">AbsorptionCorrection.verify_chemical_formula()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.AbsorptionCorrection.write_absortion_parameters"><code class="docutils literal notranslate"><span class="pre">AbsorptionCorrection.write_absortion_parameters()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks"><code class="docutils literal notranslate"><span class="pre">Peaks</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.calculate_statistics"><code class="docutils literal notranslate"><span class="pre">Peaks.calculate_statistics()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.get_cell"><code class="docutils literal notranslate"><span class="pre">Peaks.get_cell()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.load_peaks"><code class="docutils literal notranslate"><span class="pre">Peaks.load_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.load_spectrum"><code class="docutils literal notranslate"><span class="pre">Peaks.load_spectrum()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.median_absolute_devation"><code class="docutils literal notranslate"><span class="pre">Peaks.median_absolute_devation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.merge_intensities"><code class="docutils literal notranslate"><span class="pre">Peaks.merge_intensities()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.peak_info"><code class="docutils literal notranslate"><span class="pre">Peaks.peak_info()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.refine_UB"><code class="docutils literal notranslate"><span class="pre">Peaks.refine_UB()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.refine_ellipsoids"><code class="docutils literal notranslate"><span class="pre">Peaks.refine_ellipsoids()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.remove_non_indexed"><code class="docutils literal notranslate"><span class="pre">Peaks.remove_non_indexed()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.remove_non_integrated"><code class="docutils literal notranslate"><span class="pre">Peaks.remove_non_integrated()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.remove_off_centered"><code class="docutils literal notranslate"><span class="pre">Peaks.remove_off_centered()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.renormalize_intensities"><code class="docutils literal notranslate"><span class="pre">Peaks.renormalize_intensities()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.renumber_peaks"><code class="docutils literal notranslate"><span class="pre">Peaks.renumber_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.rescale_intensities"><code class="docutils literal notranslate"><span class="pre">Peaks.rescale_intensities()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.reset_satellite"><code class="docutils literal notranslate"><span class="pre">Peaks.reset_satellite()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.resort_hkl"><code class="docutils literal notranslate"><span class="pre">Peaks.resort_hkl()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.save_peaks"><code class="docutils literal notranslate"><span class="pre">Peaks.save_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.Peaks.update_monitor"><code class="docutils literal notranslate"><span class="pre">Peaks.update_monitor()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.reflections.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#garnet-utilities-sliceview-module">garnet.utilities.sliceview module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#module-garnet.utilities.structure">garnet.utilities.structure module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.structure.StructureAnalysis"><code class="docutils literal notranslate"><span class="pre">StructureAnalysis</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.structure.StructureAnalysis.apply_correction"><code class="docutils literal notranslate"><span class="pre">StructureAnalysis.apply_correction()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.structure.StructureAnalysis.load_peaks"><code class="docutils literal notranslate"><span class="pre">StructureAnalysis.load_peaks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.structure.StructureAnalysis.refimenent"><code class="docutils literal notranslate"><span class="pre">StructureAnalysis.refimenent()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.structure.StructureAnalysis.save_mtz"><code class="docutils literal notranslate"><span class="pre">StructureAnalysis.save_mtz()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.structure.StructureAnalysis.save_peaks"><code class="docutils literal notranslate"><span class="pre">StructureAnalysis.save_peaks()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#module-garnet.utilities.vanadium">garnet.utilities.vanadium module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.vanadium.Vanadium"><code class="docutils literal notranslate"><span class="pre">Vanadium</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.vanadium.Vanadium.apply_absorption_correction"><code class="docutils literal notranslate"><span class="pre">Vanadium.apply_absorption_correction()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.vanadium.Vanadium.apply_calibration"><code class="docutils literal notranslate"><span class="pre">Vanadium.apply_calibration()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.vanadium.Vanadium.apply_masks"><code class="docutils literal notranslate"><span class="pre">Vanadium.apply_masks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.vanadium.Vanadium.finalize_and_save"><code class="docutils literal notranslate"><span class="pre">Vanadium.finalize_and_save()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.vanadium.Vanadium.load_instrument"><code class="docutils literal notranslate"><span class="pre">Vanadium.load_instrument()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.vanadium.Vanadium.load_runs"><code class="docutils literal notranslate"><span class="pre">Vanadium.load_runs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.vanadium.Vanadium.process_data"><code class="docutils literal notranslate"><span class="pre">Vanadium.process_data()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.vanadium.Vanadium.run"><code class="docutils literal notranslate"><span class="pre">Vanadium.run()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.vanadium.Vanadium.set_sample_geometry"><code class="docutils literal notranslate"><span class="pre">Vanadium.set_sample_geometry()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="garnet.utilities.html#garnet.utilities.vanadium.Vanadium.subtract_background"><code class="docutils literal notranslate"><span class="pre">Vanadium.subtract_background()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.utilities.html#module-garnet.utilities">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="garnet.config.html">garnet.config package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="garnet.config.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.config.html#module-garnet.config.instruments">garnet.config.instruments module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="garnet.config.html#module-garnet.config">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading">#</a></h2>
+</section>
+<section id="garnet-workflow-module">
+<h2>garnet.workflow module<a class="headerlink" href="#garnet-workflow-module" title="Link to this heading">#</a></h2>
+</section>
+<section id="module-garnet">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-garnet" title="Link to this heading">#</a></h2>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../index.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">garnet documentation</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="garnet.reduction.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">garnet.reduction package</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#features">Features</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#submodules">Submodules</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet-workflow-module">garnet.workflow module</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#module-garnet">Module contents</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=0790524f97105ba85085"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=0790524f97105ba85085"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.18.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

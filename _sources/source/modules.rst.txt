@@ -1,0 +1,7 @@
+garnet
+======
+
+.. toctree::
+   :maxdepth: 4
+
+   garnet

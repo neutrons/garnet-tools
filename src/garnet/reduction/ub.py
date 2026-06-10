@@ -242,6 +242,10 @@ class UBModel:
     def transform_primitive_to_conventional(self, centering):
         self.transform_lattice(self.calculate_transform_extents(centering))
 
+    def transform_conventional_to_primitive(self, centering):
+        T = np.linalg.inv(self.calculate_transform_extents(centering))
+        self.transform_lattice(T)
+
     def get_primitive_cell_length_range(self, centering):
         const = self.get_lattice_parameters()
         const = self.convert_conventional_to_primitive(*const, centering)

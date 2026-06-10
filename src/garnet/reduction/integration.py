@@ -18,7 +18,7 @@ os.environ["TBB_THREAD_ENABLED"] = "0"
 
 from garnet.plots.peaks import PeakPlot
 from garnet.config.instruments import beamlines
-from garnet.reduction.ub import UBModel, Optimization, Reorient, lattice_group
+from garnet.reduction.ub import UBModel, Optimization, lattice_group
 from garnet.reduction.peaks import PeaksModel, PeakModel, centering_reflection
 from garnet.reduction.ellipsoid import PeakEllipsoid
 from garnet.reduction.resolution import ResolutionEllipsoid
@@ -199,47 +199,55 @@ class Integration(SubPlan):
 
             self.cntrt = data.get_counting_rate("data")
 
+            # ---
+
+            peaks.predict_peaks(
+                "data",
+                "peaks",
+                centering,
+                d_min,
+                lamda_min,
+                lamda_max,
+            )
+
+            ub = UBModel("peaks")
+            ub.transform_conventional_to_primitive(centering)
+            ub.copy_UB("data")
+
+            data.convert_to_hkl("data", "md", lorentz_corr=True)
+
+            md_file = self.get_diagnostic_file("run#{}_hkl".format(run))
+            md_file = os.path.splitext(md_file)[0] + ".nxs"
+
+            data.save_histograms(md_file, "md")
+
+            peaks.integrate_peaks(
+                "md",
+                "peaks",
+                0.5 / np.cbrt(3),
+                method="sphere",
+                centroid=True,
+            )
+
+            # peaks.remove_weak_peaks("peaks", 20)
+
+            ub.calculate_hkl()
+            ub.transform_primitive_to_conventional(centering)
+            ub.refine_UB_with_constraints(cell, tol=0.1)
+            ub.copy_UB("data")
+
+            ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
+            ub_file = os.path.splitext(ub_file)[0] + ".mat"
+
+            ub.save_UB(ub_file)
+
+            data.load_clear_UB(ub_file, "data", run)
+
+            # ---
+
             data.convert_to_Q_sample("data", "md", lorentz_corr=True)
 
             r_cut = self.params["Radius"]
-
-            if self.params.get("Recalibrate"):
-                ub = UBModel("data")
-
-                const = ub.get_lattice_parameters()
-
-                min_d, max_d = ub.get_primitive_cell_length_range(centering)
-
-                const = ub.convert_conventional_to_primitive(*const, centering)
-
-                peaks.find_peaks("md", "peaks", max_d)
-
-                peaks.integrate_peaks(
-                    "md",
-                    "peaks",
-                    r_cut / np.cbrt(3),
-                    method="ellipsoid",
-                    centroid=False,
-                )
-
-                peaks.remove_weak_peaks("peaks", 20)
-
-                ub = UBModel("peaks")
-                ub.determine_UB_with_lattice_parameters(*const)
-                ub.index_peaks()
-                ub.transform_primitive_to_conventional(centering)
-                ub.refine_UB_with_constraints(cell)
-
-                Reorient("peaks", cell)
-
-                ub.copy_UB("data")
-
-                ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
-                ub_file = os.path.splitext(ub_file)[0] + ".mat"
-
-                ub.save_UB(ub_file)
-
-                data.load_clear_UB(ub_file, "data", run)
 
             peaks.predict_peaks(
                 "data",

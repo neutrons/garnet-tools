@@ -341,8 +341,18 @@ class FormView(QWidget):
         self.cpu_line.setValidator(validator)
         self.dev_box = QCheckBox("vDev", self)
 
+        self.mem_label = QLabel("~? GB")
+        self.mem_label.setToolTip(
+            "Estimated memory: instrument workspaces + task\n"
+            "Instrument: 6 ws × processes × banks × rows × cols × 8 B\n"
+            "Norm/Param: processes × 4 arrays × bins × 8 B\n"
+            "Integration: N_peaks(d_min, centering) × 21³ × 8 B"
+        )
+
         process_layout.addStretch(1)
+        process_layout.addWidget(QLabel("Processes:"))
         process_layout.addWidget(self.cpu_line)
+        process_layout.addWidget(self.mem_label)
         process_layout.addWidget(self.dev_box)
         process_layout.addWidget(self.stop_button)
 
@@ -381,10 +391,92 @@ class FormView(QWidget):
 
         self.stop_button.clicked.connect(self.stop_process)
 
+        self.cpu_line.editingFinished.connect(self.update_mem_estimate)
+        self.instrument_combo.activated.connect(
+            lambda *_: self.update_mem_estimate()
+        )
+        self.plan_widget.currentChanged.connect(
+            lambda *_: self.update_mem_estimate()
+        )
+        self.centering_combo.activated.connect(
+            lambda *_: self.update_mem_estimate()
+        )
+        self.min_d_line.editingFinished.connect(self.update_mem_estimate)
+        for _line in [
+            self.norm_bins_1_line,
+            self.norm_bins_2_line,
+            self.norm_bins_3_line,
+            self.param_bins_1_line,
+            self.param_bins_2_line,
+            self.param_bins_3_line,
+            self.param_bins_4_line,
+        ]:
+            _line.editingFinished.connect(self.update_mem_estimate)
+
+        self.update_mem_estimate()
+
     def stop_process(self):
         self.process.terminate()
         if not self.process.waitForFinished(3000):
             self.process.kill()
+
+    @staticmethod
+    def _format_bytes(n):
+        if n >= 1e12:
+            return f"~{n / 1e12:.1f} TB"
+        if n >= 1e9:
+            return f"~{n / 1e9:.1f} GB"
+        return f"~{n / 1e6:.1f} MB"
+
+    @staticmethod
+    def _estimate_n_peaks(d_min, centering):
+        """Estimate predicted peak count from d_min and centering.
+
+        Uses (4π/3)×(1/d_min)³×V_typical×f_centering with V_typical=500 Å³.
+        """
+        centering_frac = {
+            "P": 1.0,
+            "I": 0.5,
+            "F": 0.25,
+            "A": 0.5,
+            "B": 0.5,
+            "C": 0.5,
+            "R": 1 / 3,
+            "H": 2 / 3,
+        }.get(centering, 1.0)
+        V_typical = 500.0
+        return int(
+            (4 * np.pi / 3) * (1.0 / d_min) ** 3 * V_typical * centering_frac
+        )
+
+    def update_mem_estimate(self):
+        instrument = self.get_instrument()
+        bl = beamlines.get(instrument, {})
+        rows, cols = bl.get("BankPixels", [256, 256])
+        banks = bl.get("Banks", 1)
+        processes = self.get_processes()
+
+        inst_bytes = 12 * processes * banks * rows * cols * 8
+
+        tab = self.get_plan_tab_index()
+        if tab == 0:  # Normalization
+            b1 = self.get_norm_bins_1() or 1
+            b2 = self.get_norm_bins_2() or 1
+            b3 = self.get_norm_bins_3() or 1
+            task_bytes = processes * 4 * b1 * b2 * b3 * 8
+        elif tab == 1:  # Parametrization
+            b1 = self.get_param_bins_1() or 1
+            b2 = self.get_param_bins_2() or 1
+            b3 = self.get_param_bins_3() or 1
+            b4 = self.get_param_bins_4() or 1
+            task_bytes = processes * 4 * b1 * b2 * b3 * b4 * 8
+        else:  # Integration
+            d_min = self.get_min_d() or 0.7
+            centering = self.get_centering() or "P"
+            n_peaks = self._estimate_n_peaks(d_min, centering)
+            task_bytes = n_peaks * (21**3) * 16
+
+        self.mem_label.setText(self._format_bytes(inst_bytes + task_bytes))
 
     def int_plan(self):
         tab = QWidget()
@@ -1745,6 +1837,7 @@ class FormView(QWidget):
         index = self.instrument_combo.findText(instrument)
         if index != -1:
             self.instrument_combo.setCurrentIndex(index)
+            self.update_mem_estimate()
 
     def clear_run_info(self, filepath):
         self.exp_line.setText("")
@@ -2031,6 +2124,7 @@ class FormView(QWidget):
 
     def set_processes(self, cpu):
         self.cpu_line.setText(str(cpu))
+        self.update_mem_estimate()
 
     def get_development(self):
         return self.dev_box.isChecked()

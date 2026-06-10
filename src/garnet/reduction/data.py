@@ -1,6 +1,5 @@
 import os
 import itertools
-from collections import defaultdict
 
 import numpy as np
 
@@ -78,7 +77,6 @@ from mantid.simpleapi import (
     mtd,
 )
 
-from mantid.dataobjects import EventWorkspace
 from mantid.kernel import FloatTimeSeriesProperty
 
 from mantid import config
@@ -386,6 +384,33 @@ class BaseDataModel:
 
         filenames = self.get_file_name_list(IPTS, runs)
         return ",".join(filenames)
+
+    def get_hkl_limits(self, ws):
+        """
+        The minimum and maximum Q-values.
+
+        Returns
+        -------
+        hkl_min_vals: list
+            Minumum hkl.
+        hkl_max_vals: list
+            Maximum hkl.
+
+        """
+
+        if hasattr(mtd[ws], "sample"):
+            ol = mtd[ws].sample().getOrientedLattice()
+        else:
+            for i in range(mtd[ws].getNumExperimentInfo()):
+                sample = mtd[ws].getExperimentInfo(i).sample()
+                if sample.hasOrientedLattice():
+                    ol = sample.getOrientedLattice()
+
+        abcstar = np.array([ol.astar(), ol.bstar(), ol.cstar()])
+
+        hkl_max = self.Q_max / (2 * np.pi) / abcstar
+
+        return (-hkl_max).tolist(), hkl_max.tolist()
 
     def get_min_max_values(self):
         """
@@ -1778,6 +1803,49 @@ class LaueData(BaseDataModel):
         if mtd.doesExist("mask"):
             MaskDetectors(Workspace=event_name, MaskedWorkspace="mask")
 
+    def convert_to_hkl(
+        self, event_name, md_name, lorentz_corr=False, preproc_dets=None
+    ):
+        """
+        Convert raw data to hkl.
+
+        Parameters
+        ----------
+        event_name : str
+            Name of raw event name data.
+        md_name : str
+            Name of Q-sample workspace.
+        lorentz_corr : bool, optional
+            Apply Lorentz correction. The default is False.
+        preproc_dets: str, optional
+            Preprocess detector information workspace.
+
+        """
+
+        if preproc_dets is None:
+            self.preprocess_detectors(event_name)
+            preproc_dets = "detectors"
+
+        self.calculate_maximum_Q()
+
+        if mtd.doesExist(event_name):
+            hkl_min_vals, hkl_max_vals = self.get_hkl_limits(event_name)
+
+            ConvertToMD(
+                InputWorkspace=event_name,
+                QDimensions="Q3D",
+                dEAnalysisMode="Elastic",
+                Q3DFrames="HKL",
+                QConversionScales="HKL",
+                LorentzCorrection=lorentz_corr,
+                MinValues=hkl_min_vals,
+                MaxValues=hkl_max_vals,
+                OutputWorkspace=md_name,
+                PreprocDetectorsWS=preproc_dets,
+                SplitInto=2,
+                MaxRecursionDepth=10,
+            )
+
     def convert_to_Q_sample(
         self, event_name, md_name, lorentz_corr=False, preproc_dets=None
     ):
@@ -1797,21 +1865,21 @@ class LaueData(BaseDataModel):
 
         """
 
-        self.preprocess_detectors(event_name)
+        if preproc_dets is None:
+            self.preprocess_detectors(event_name)
+            preproc_dets = "detectors"
 
         self.calculate_maximum_Q()
 
         if mtd.doesExist(event_name):
             Q_min_vals, Q_max_vals = self.get_min_max_values()
 
-            if preproc_dets is None:
-                preproc_dets = "detectors"
-
             ConvertToMD(
                 InputWorkspace=event_name,
                 QDimensions="Q3D",
                 dEAnalysisMode="Elastic",
                 Q3DFrames="Q_sample",
+                QConversionScales="Q in A^-1",
                 LorentzCorrection=lorentz_corr,
                 MinValues=Q_min_vals,
                 MaxValues=Q_max_vals,
@@ -1840,21 +1908,15 @@ class LaueData(BaseDataModel):
 
         """
 
-        # self.preprocess_detectors(event_name)
-
-        # self.calculate_maximum_Q()
-
         if mtd.doesExist(event_name):
             Q_min_vals, Q_max_vals = self.get_min_max_values()
-
-            # if preproc_dets is None:
-            #     preproc_dets = "detectors"
 
             ConvertToMD(
                 InputWorkspace=event_name,
                 QDimensions="Q3D",
                 dEAnalysisMode="Elastic",
                 Q3DFrames="Q_lab",
+                QConversionScales="Q in A^-1",
                 LorentzCorrection=lorentz_corr,
                 MinValues=Q_min_vals,
                 MaxValues=Q_max_vals,

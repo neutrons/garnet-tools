@@ -233,7 +233,10 @@ class Integration(SubPlan):
 
             ub.calculate_hkl()
             ub.transform_primitive_to_conventional(centering)
-            ub.refine_UB_with_constraints(cell, tol=0.1)
+
+            opt = Optimization("peaks")
+            opt.optimize_lattice(cell)
+
             ub.copy_UB("data")
 
             ub_file = self.get_diagnostic_file("run#{}_ub".format(run))

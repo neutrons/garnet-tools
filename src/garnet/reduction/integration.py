@@ -201,6 +201,10 @@ class Integration(SubPlan):
 
             # ---
 
+            r_cut = self.params["Radius"]
+
+            data.convert_to_Q_sample("data", "md", lorentz_corr=True)
+
             peaks.predict_peaks(
                 "data",
                 "peaks",
@@ -211,30 +215,18 @@ class Integration(SubPlan):
             )
 
             ub = UBModel("peaks")
-            ub.transform_conventional_to_primitive(centering)
-            ub.copy_UB("data")
 
-            data.convert_to_hkl("data", "md", lorentz_corr=True)
-
-            md_file = self.get_diagnostic_file("run#{}_hkl".format(run))
-            md_file = os.path.splitext(md_file)[0] + ".nxs"
-
-            data.save_histograms(md_file, "md")
+            Q_min, hkl_tol = ub.shortest_reciprocal_spacing(centering)
 
             peaks.integrate_peaks(
                 "md",
                 "peaks",
-                0.5 / np.cbrt(3),
-                method="sphere",
+                0.5 * Q_min / np.cbrt(3),
+                method="ellipsoid",
                 centroid=True,
             )
 
-            # peaks.remove_weak_peaks("peaks", 20)
-
-            ub.calculate_hkl()
-            ub.transform_primitive_to_conventional(centering)
-
-            opt = Optimization("peaks")
+            opt = Optimization("peaks", hkl_tol)
             opt.optimize_lattice(cell)
 
             ub.copy_UB("data")
@@ -247,10 +239,6 @@ class Integration(SubPlan):
             data.load_clear_UB(ub_file, "data", run)
 
             # ---
-
-            data.convert_to_Q_sample("data", "md", lorentz_corr=True)
-
-            r_cut = self.params["Radius"]
 
             peaks.predict_peaks(
                 "data",

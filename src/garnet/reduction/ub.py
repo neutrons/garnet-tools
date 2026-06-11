@@ -25,6 +25,8 @@ from mantid.geometry import PointGroupFactory, UnitCell
 
 import json
 
+from itertools import product
+
 import numpy as np
 
 from scipy.spatial.transform import Rotation
@@ -539,6 +541,31 @@ class UBModel:
             CopyShape=False,
         )
 
+    def shortest_reciprocal_spacing(self, centering, max_index=2):
+        qmin = np.inf
+        hmin = None
+
+        self.transform_conventional_to_primitive(centering)
+
+        UB_prim = self.peaks.sample().getOrientedLattice().getUB().copy()
+
+        for dhkl in product(range(-max_index, max_index + 1), repeat=3):
+            dhkl = np.asarray(dhkl, dtype=float)
+
+            if np.all(dhkl == 0):
+                continue
+
+            dq = 2 * np.pi * UB_prim @ dhkl
+            q = np.linalg.norm(dq)
+
+            if q < qmin:
+                qmin = q
+                hmin = dhkl.copy()
+
+        self.transform_primitive_to_conventional(centering)
+
+        return qmin, hmin
+
 
 class Optimization:
     def __init__(self, peaks, tol=0.1):
@@ -828,8 +855,10 @@ class Optimization:
                 if len(hkl) <= len(x0):
                     break
 
-                w_mean = Isig.mean()
-                weights = Isig / w_mean if w_mean > 0 else None
+                w_scale = (
+                    np.median(Isig[Isig > 0]) if np.any(Isig > 0) else 1.0
+                )
+                weights = Isig / w_scale if w_scale > 0 else None
 
                 args = (hkl, Q, fun, W, weights)
                 sol = scipy.optimize.least_squares(

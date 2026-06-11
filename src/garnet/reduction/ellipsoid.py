@@ -1515,6 +1515,39 @@ class PeakEllipsoid:
 
         return lam_min + (lam_max - lam_min) / (1.0 + (sn_eff / sn0) ** power)
 
+    def _isig_3d(self, params, args_3d):
+        x0, x1, x2, d3d, n3d, _ = args_3d
+        y3d, e3d = self.counts_to_intensity_uncertainty(d3d, n3d)
+
+        c0 = params["c0"].value
+        c1 = params["c1"].value
+        c2 = params["c2"].value
+        r0 = params["r0"].value
+        r1 = params["r1"].value
+        r2 = params["r2"].value
+        u0 = params["u0"].value
+        u1 = params["u1"].value
+        u2 = params["u2"].value
+
+        c, inv_S = self.centroid_inverse_covariance(
+            c0, c1, c2, r0, r1, r2, u0, u1, u2
+        )
+
+        dx = np.prod(self.voxels(x0, x1, x2))
+
+        c0v, c1v, c2v = c
+        dx_vec = [x0 - c0v, x1 - c1v, x2 - c2v]
+        d2 = np.einsum("i...,ij,j...->...", dx_vec, inv_S, dx_vec)
+        pk = (d2 <= 1) & np.isfinite(y3d) & (e3d > 0)
+
+        b = params["B3d"].value
+        b_err = params["B3d"].stderr or params["B3d"].value
+
+        I = np.nansum(y3d[pk] - b) * dx
+        sig = np.sqrt(np.nansum(e3d[pk] ** 2 + b_err**2)) * dx
+
+        return I / sig if sig > 0 else -np.inf
+
     def sweep(
         self, args_1d, args_2d, args_3d, protocol, n_iter=50, report_fit=False
     ):
@@ -1540,6 +1573,7 @@ class PeakEllipsoid:
         ssr_before = np.nansum(
             self.residual(self.params, args_1d, args_2d, args_3d) ** 2
         )
+        isig_before = self._isig_3d(self.params, args_3d)
 
         result = out.minimize(
             method="least_squares",
@@ -1553,8 +1587,9 @@ class PeakEllipsoid:
         ssr_after = np.nansum(
             self.residual(result.params, args_1d, args_2d, args_3d) ** 2
         )
+        isig_after = self._isig_3d(result.params, args_3d)
 
-        if ssr_after < ssr_before:
+        if ssr_after < ssr_before and isig_after >= isig_before:
             self.params = result.params
 
     def calculate_intensity(self, A, H, r0, r1, r2, u0, u1, u2, mode="3d"):

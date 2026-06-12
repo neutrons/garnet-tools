@@ -1773,7 +1773,7 @@ class PeakEllipsoid:
 
         return intens, sig
 
-    def extract_intensity(self, d, n, pk, bkg, kernel):
+    def extract_intensity(self, d, n, pk, bkg, kernel, vol_frac=1.0):
         core = pk & (n > 0)
         shell = bkg & (n > 0)
 
@@ -1838,12 +1838,16 @@ class PeakEllipsoid:
         intens = vol * raw_intens / pk_norm
         sig = vol * raw_sig / pk_norm
 
+        if vol_frac > 0:
+            intens /= vol_frac
+            sig /= vol_frac
+
         if not sig > 0:
             sig = float("-inf")
 
         data_norm = pk_cnts, pk_norm, bkg_cnts, bkg_norm, ratio
 
-        return intens, sig, b, b_err, vol, *data_norm
+        return intens, sig, b, b_err, vol, vol_frac, *data_norm
 
     def matched_filter(self, d, n, v, pk, bkg, kernel, rel_error=0.15):
         mask = (pk | bkg) & (n > 0)
@@ -1931,9 +1935,19 @@ class PeakEllipsoid:
 
         pk, bkg, mask, kernel = self.peak_roi(x0, x1, x2, c, S, 1)
 
-        result = self.extract_intensity(d, n, pk, bkg, kernel)
+        c_prior, S_prior = self.estimated_fit
 
-        intens, sig, b, b_err, N, *data_norm = result
+        pk_prior, _, _, kernel_prior = self.peak_roi(
+            x0, x1, x2, c_prior, S_prior, 1
+        )
+
+        core_prior = pk_prior & (n > 0)
+
+        vol_frac = min(kernel_prior[core_prior].sum() * d3x / 0.997, 1.0)
+
+        result = self.extract_intensity(d, n, pk, bkg, kernel, vol_frac)
+
+        intens, sig, b, b_err, N, vol_frac, *data_norm = result
 
         pk_data, pk_norm, bkg_data, bkg_norm, ratio = data_norm
 
@@ -1945,7 +1959,7 @@ class PeakEllipsoid:
 
         self.weights = (x0[pk], x1[pk], x2[pk]), d[pk].copy()
 
-        self.info = [d3x, b, b_err]
+        self.info = [d3x, b, b_err, vol_frac]
 
         y = d / n
         e = np.sqrt(np.clip(d, 0, None) + 1) / n
@@ -1988,4 +2002,4 @@ class PeakEllipsoid:
         self.intensity.append(I)
         self.sigma.append(I_err)
 
-        return intens, sig if I_filt > sig_filt else intens
+        return intens, sig  # if I_filt > sig_filt else intens

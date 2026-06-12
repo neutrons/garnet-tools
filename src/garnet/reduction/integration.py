@@ -16,7 +16,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["TBB_THREAD_ENABLED"] = "0"
 
-from garnet.plots.peaks import PeakPlot
+from garnet.plots.peaks import PeakPlot, ScanPlot
 from garnet.config.instruments import beamlines
 from garnet.reduction.ub import UBModel, Optimization, lattice_group
 from garnet.reduction.peaks import PeaksModel, PeakModel, centering_reflection
@@ -218,22 +218,20 @@ class Integration(SubPlan):
 
             Q_min, hkl_tol = ub.shortest_reciprocal_spacing(centering)
 
-            peaks.integrate_peaks(
-                "md",
-                "peaks",
-                0.5 * Q_min / np.cbrt(3),
-                method="ellipsoid",
-                centroid=True,
-            )
+            result = peaks.scan_threshold("md", "peaks", Q_min)
+
+            scan_file = self.get_plot_file("run#{}_scan".format(run))
+
+            scan_plot = ScanPlot(*result)
+            scan_plot.save_plot(scan_file)
 
             opt = Optimization("peaks", hkl_tol)
             opt.optimize_lattice(cell)
 
-            ub.copy_UB("data")
-
             ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
             ub_file = os.path.splitext(ub_file)[0] + ".mat"
 
+            ub = UBModel("peaks")
             ub.save_UB(ub_file)
 
             data.load_clear_UB(ub_file, "data", run)

@@ -1,5 +1,6 @@
 from mantid.simpleapi import (
     FindPeaksMD,
+    IndexPeaks,
     PredictPeaks,
     PredictSatellitePeaks,
     CentroidPeaksMD,
@@ -60,6 +61,7 @@ diagonstic_keys = [
     "vol",
     "bkg",
     "bkg_err",
+    "vol_frac",
     "intens",
     "sig",
     "voxels",
@@ -130,7 +132,7 @@ class PeaksModel:
 
             ol.setModUB(self.modUB)
 
-    def find_peaks(self, md, peaks, max_d, density=50, max_peaks=1000):
+    def find_peaks(self, md, peaks, min_Q, density=50, max_peaks=1000):
         """
         Harvest strong peak locations from Q-sample into a peaks table.
 
@@ -140,8 +142,8 @@ class PeaksModel:
             Name of Q-sample.
         peaks : str
             Name of peaks table.
-        max_d : float
-            Maxium d-spacing enforcing lower limit of peak spacing.
+        min_Q : float
+            Minimum Q-spacing enforcing lower limit of peak spacing.
         density : int, optional
             Threshold density. The default is 1000.
         max_peaks : int, optional
@@ -151,12 +153,72 @@ class PeaksModel:
 
         FindPeaksMD(
             InputWorkspace=md,
-            PeakDistanceThreshold=2 * np.pi / max_d * 0.5,
+            PeakDistanceThreshold=min_Q * 0.5,
             MaxPeaks=max_peaks,
             PeakFindingStrategy="VolumeNormalization",
             DensityThresholdFactor=density,
             EdgePixels=self.edge_pixels,
             OutputWorkspace=peaks,
+        )
+
+    def scan_threshold(self, md, peaks, min_Q, drop_fraction=0.05):
+        """
+        Scan peak density threshold from predicted peaks and minimum Q.
+
+        Parameters
+        ----------
+        md : str
+            Name of Q-sample.
+        peaks : str
+            Name of predicted peaks table.
+        min_Q : float
+            Minimum Q-spacing enforcing lower limit of peak spacing.
+        drop_fraction : float
+            Fraction of indexed dropped from found peaks. The default is 0.05.
+
+        """
+
+        predict_peaks = mtd[peaks].getNumberPeaks()
+
+        thresholds = np.logspace(1, 5, 50)
+        found = []
+        indexed = []
+
+        for theshold in thresholds:
+            self.find_peaks(md, peaks, min_Q, theshold, predict_peaks)
+            self.index_peaks(peaks)
+            found.append(mtd[peaks].getNumberPeaks())
+            self.remove_unindexed_peaks(peaks)
+            indexed.append(mtd[peaks].getNumberPeaks())
+
+        found = np.array(found)
+        indexed = np.array(indexed)
+
+        max_indexed = np.max(indexed)
+        min_allowed = (1.0 - drop_fraction) * max_indexed
+
+        good = indexed >= min_allowed
+
+        if not np.any(good):
+            raise RuntimeError(
+                "No threshold satisfies indexed peak retention criterion."
+            )
+
+        candidate_indices = np.where(good)[0]
+        best_i = candidate_indices[np.argmax(thresholds[candidate_indices])]
+
+        threshold = thresholds[best_i]
+
+        self.find_peaks(md, peaks, min_Q, theshold, predict_peaks)
+        self.index_peaks(peaks)
+
+        return thresholds, found, indexed, threshold
+
+    def index_peaks(self, peaks, tol=0.5 / np.cbrt(3)):
+        IndexPeaks(
+            PeaksWorkspace=peaks,
+            Tolerance=tol,
+            RoundHKLs=True,
         )
 
     def remove_aluminum_contamination(self, peaks, d_min, d_max, delta=0.1):

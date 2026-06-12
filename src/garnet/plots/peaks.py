@@ -22,6 +22,23 @@ import skimage.measure
 from garnet.plots.base import BasePlot
 
 
+class ScanPlot(BasePlot):
+    def __init__(self, thresholds, max_peaks, indexed_peaks, cutoff):
+        super(ScanPlot, self).__init__()
+
+        self.close()
+
+        self.fig, self.ax = plt.subplots(1, 1)
+        self.ax.plot(thresholds, max_peaks, "-o", label="Found")
+        self.ax.plot(thresholds, indexed_peaks, "-o", label="Indexed")
+        self.ax.axvline(cutoff, linestyle="--", linewidth=1, color="k")
+        self.ax.set_xscale("log")
+        self.ax.set_xlabel("Threshold")
+        self.ax.set_ylabel("Peaks")
+        self.ax.minorticks_on()
+        self.ax.legend(shadow=True)
+
+
 class PeakPlot(BasePlot):
     def __init__(self):
         super(PeakPlot, self).__init__()

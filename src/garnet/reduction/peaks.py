@@ -45,6 +45,8 @@ centering_reflection = {
     "R": "Rhombohedrally centred, obverse",  # rhomb/hex axes
     "R(obv)": "Rhombohedrally centred, obverse",  # hex axes
     "R(rev)": "Rhombohedrally centred, reverse",  # hex axes
+    "Robv": "Rhombohedrally centred, obverse",  # hex axes
+    "Rrev": "Rhombohedrally centred, reverse",  # hex axes
     "A": "A-face centred",
     "B": "B-face centred",
     "C": "C-face centred",
@@ -184,8 +186,8 @@ class PeaksModel:
         found = []
         indexed = []
 
-        for theshold in thresholds:
-            self.find_peaks(md, peaks, min_Q, theshold, predict_peaks)
+        for threshold in thresholds:
+            self.find_peaks(md, peaks, min_Q, threshold, predict_peaks)
             self.index_peaks(peaks)
             found.append(mtd[peaks].getNumberPeaks())
             self.remove_unindexed_peaks(peaks)
@@ -207,10 +209,11 @@ class PeaksModel:
         candidate_indices = np.where(good)[0]
         best_i = candidate_indices[np.argmax(thresholds[candidate_indices])]
 
-        threshold = thresholds[best_i]
+        threshold = thresholds[best_i + 1]
 
-        self.find_peaks(md, peaks, min_Q, theshold, predict_peaks)
+        self.find_peaks(md, peaks, min_Q, threshold, predict_peaks)
         self.index_peaks(peaks)
+        self.remove_unindexed_peaks(peaks)
 
         return thresholds, found, indexed, threshold
 

@@ -225,13 +225,12 @@ class Integration(SubPlan):
             scan_plot = ScanPlot(*result)
             scan_plot.save_plot(scan_file)
 
-            opt = Optimization("peaks", hkl_tol)
-            opt.optimize_lattice(cell)
+            ub = UBModel("peaks")
+            ub.refine_UB_with_constraints(cell, 0.5 / np.cbrt(3))
 
             ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
             ub_file = os.path.splitext(ub_file)[0] + ".mat"
 
-            ub = UBModel("peaks")
             ub.save_UB(ub_file)
 
             data.load_clear_UB(ub_file, "data", run)

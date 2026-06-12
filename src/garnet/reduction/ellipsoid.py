@@ -109,8 +109,11 @@ class PeakEllipsoid:
             self.S_matrix(r0, r1, r2, u0, u1, u2),
         )
 
-        self.prior_center_sigma = np.mean([r0, r1, r2]) / 3
-        self.prior_cov_sigma = np.mean([r0**2, r1**2, r2**2]) / 3
+        self.prior_center_sigma = np.array([r0, r1, r2]) / 3
+        self.prior_cov_sigma = (
+            np.array([r0**2, r1**2, r2**2, r1 * r2, r0 * r2, r0 * r1])
+            / 3
+        )
 
         self.prior_cov = self.S_matrix(r0, r1, r2, u0, u1, u2)
 
@@ -145,9 +148,9 @@ class PeakEllipsoid:
         params_list = [name for name, _ in params.items()]
         jac = np.zeros((len(params_list), len(names)), dtype=float)
 
-        for col, name in enumerate(["c0", "c1", "c2"]):
-            jac[params_list.index(name), col] = (
-                np.sqrt(self.lamda_center) / self.prior_center_sigma
+        for i, name in enumerate(["c0", "c1", "c2"]):
+            jac[params_list.index(name), i] = (
+                np.sqrt(self.lamda_center) / self.prior_center_sigma[i]
             )
 
         d_inv_S = {
@@ -1404,97 +1407,56 @@ class PeakEllipsoid:
         return amplitude, background
 
     def update_adaptive_prior(self, args_1d, args_2d, args_3d):
-        x0, x1, x2, d1d, n1d, w1d = args_1d
-        x0, x1, x2, d2d, n2d, w2d = args_2d
-        x0, x1, x2, d3d, n3d, w3d = args_3d
+        x0, x1, x2, d3d, n3d, _ = args_3d
 
-        d1d_0, d1d_1, d1d_2 = d1d
-        d2d_0, d2d_1, d2d_2 = d2d
-        n1d_0, n1d_1, n1d_2 = n1d
-        n2d_0, n2d_1, n2d_2 = n2d
+        c_prior, S_prior = self.estimated_fit
+        c0, c1, c2 = c_prior
 
-        y1d_0, e1d_0 = self.counts_to_intensity_uncertainty(d1d_0, n1d_0)
-        y1d_1, e1d_1 = self.counts_to_intensity_uncertainty(d1d_1, n1d_1)
-        y1d_2, e1d_2 = self.counts_to_intensity_uncertainty(d1d_2, n1d_2)
+        # Shoebox half-widths: marginal std along each voxel axis
+        hw = np.sqrt(np.diag(S_prior))
 
-        y2d_0, e2d_0 = self.counts_to_intensity_uncertainty(d2d_0, n2d_0)
-        y2d_1, e2d_1 = self.counts_to_intensity_uncertainty(d2d_1, n2d_1)
-        y2d_2, e2d_2 = self.counts_to_intensity_uncertainty(d2d_2, n2d_2)
-
-        y3d, e3d = self.counts_to_intensity_uncertainty(d3d, n3d)
-
-        c0 = self.params["c0"].value
-        c1 = self.params["c1"].value
-        c2 = self.params["c2"].value
-
-        r0 = self.params["r0"].value
-        r1 = self.params["r1"].value
-        r2 = self.params["r2"].value
-
-        u0 = self.params["u0"].value
-        u1 = self.params["u1"].value
-        u2 = self.params["u2"].value
-
-        c, inv_S = self.centroid_inverse_covariance(
-            c0, c1, c2, r0, r1, r2, u0, u1, u2
+        pk = (
+            (np.abs(x0 - c0) <= hw[0])
+            & (np.abs(x1 - c1) <= hw[1])
+            & (np.abs(x2 - c2) <= hw[2])
         )
 
-        mode_1d = {
-            "1d_0": (y1d_0, e1d_0),
-            "1d_1": (y1d_1, e1d_1),
-            "1d_2": (y1d_2, e1d_2),
-        }
-        metrics_1d = self.collect_mode_fit_metrics(
-            x0, x1, x2, c, inv_S, mode_1d
+        # Background shell: 1-pixel-wide border just outside the peak box
+        dx0, dx1, dx2 = self.voxels(x0, x1, x2)
+        hw_bkg = hw + np.array([dx0, dx1, dx2])
+        outer = (
+            (np.abs(x0 - c0) <= hw_bkg[0])
+            & (np.abs(x1 - c1) <= hw_bkg[1])
+            & (np.abs(x2 - c2) <= hw_bkg[2])
         )
+        bkg = outer & ~pk
 
-        mode_2d = {
-            "2d_0": (y2d_0, e2d_0),
-            "2d_1": (y2d_1, e2d_1),
-            "2d_2": (y2d_2, e2d_2),
-        }
-        metrics_2d = self.collect_mode_fit_metrics(
-            x0, x1, x2, c, inv_S, mode_2d
-        )
+        observed = n3d > 0
+        pk_obs = pk & observed
+        bkg_obs = bkg & observed
 
-        mode_3d = {"3d": (y3d, e3d)}
-        metrics_3d = self.collect_mode_fit_metrics(
-            x0, x1, x2, c, inv_S, mode_3d
-        )
+        n_pk = pk_obs.sum()
+        n_bkg = bkg_obs.sum()
 
-        I_1d_0, sig_1d_0, *_ = metrics_1d["1d_0"]
-        I_1d_1, sig_1d_1, *_ = metrics_1d["1d_1"]
-        I_1d_2, sig_1d_2, *_ = metrics_1d["1d_2"]
+        if n_pk == 0 or n_bkg == 0:
+            scale = self.prior_strength_from_sn(1.0)
+            self.lamda_cov = scale
+            self.lamda_center = scale
+            return
 
-        I_2d_0, sig_2d_0, *_ = metrics_2d["2d_0"]
-        I_2d_1, sig_2d_1, *_ = metrics_2d["2d_1"]
-        I_2d_2, sig_2d_2, *_ = metrics_2d["2d_2"]
+        n_pk_sum = np.nansum(n3d[pk_obs])
+        n_bkg_sum = np.nansum(n3d[bkg_obs])
+        ratio = n_pk_sum / n_bkg_sum if n_bkg_sum > 0 else n_pk / n_bkg
 
-        I_3d, sig_3d, *_ = metrics_3d["3d"]
+        pk_counts = np.nansum(d3d[pk_obs])
+        bkg_counts = np.nansum(d3d[bkg_obs])
 
-        weights = (
-            [self.mode_weights_1d] * 3
-            + [self.mode_weights_2d] * 3
-            + [self.mode_weights_3d]
-        )
+        intens = pk_counts - ratio * bkg_counts
+        sig = np.sqrt(np.abs(pk_counts) + ratio**2 * np.abs(bkg_counts))
 
-        signal_to_noise = [
-            I_1d_0 / sig_1d_0,
-            I_1d_1 / sig_1d_1,
-            I_1d_2 / sig_1d_2,
-            I_2d_0 / sig_2d_0,
-            I_2d_1 / sig_2d_1,
-            I_2d_2 / sig_2d_2,
-            I_3d / sig_3d,
-        ]
+        sn = intens / sig if sig > 0 else 1.0
 
-        sn = self.safe_sn(signal_to_noise)
-
-        w = np.asarray(weights, dtype=float)
-
-        sn_eff = np.exp(np.sum(w * np.log(sn)) / np.sum(w))
-
-        scale = self.prior_strength_from_sn(sn_eff)
+        scale = self.prior_strength_from_sn(sn)
 
         self.lamda_cov = scale
         self.lamda_center = scale

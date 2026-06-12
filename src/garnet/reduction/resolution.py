@@ -437,7 +437,8 @@ class ResolutionEllipsoid:
             raise RuntimeError("Call fit() before estimate_prior_sigmas().")
 
         ws = mtd[self.peaks_ws]
-        cov_devs, offset_norms = [], []
+        cov_dev_vecs = []
+        offset_vecs = []
 
         for i in self.model["used_peaks"]:
             peak = ws.getPeak(i)
@@ -446,21 +447,34 @@ class ResolutionEllipsoid:
             radii, V_s = self._get_peak_shape(ws, i, self.r_cut)
             V_lab = self._sample_axes_to_lab(R, V_s)
             cov_obs = self._covariance_from_ellipsoid(radii, V_lab)
+            cov_obs = 0.5 * (cov_obs + cov_obs.T)
             cov_pred = self._predict_cov_lab(peak)
 
+            T = self._stoica_wilkinson_transform_from_peak(peak)
+
             dC = cov_obs - cov_pred
-            cov_devs.append(np.sqrt(np.trace(dC @ dC)))
+            dC_w = T @ dC @ T.T
+            cov_dev_vecs.append(
+                [
+                    dC_w[0, 0],
+                    dC_w[1, 1],
+                    dC_w[2, 2],
+                    dC_w[1, 2],
+                    dC_w[0, 2],
+                    dC_w[0, 1],
+                ]
+            )
 
             offset_s = self._get_peak_offset(ws, i)
-            offset_norms.append(np.linalg.norm(R @ offset_s))
+            offset_vecs.append(T @ (R @ offset_s))
 
-        cov_devs = np.array(cov_devs)
-        offset_norms = np.array(offset_norms)
+        cov_dev_vecs = np.array(cov_dev_vecs)  # (n_peaks, 6)
+        offset_vecs = np.array(offset_vecs)  # (n_peaks, 3)
 
-        self.prior_cov_sigma = float(np.sqrt(np.mean(cov_devs**2)))
-        self.prior_center_sigma = float(np.sqrt(np.mean(offset_norms**2)))
+        self.prior_cov_sigma = np.sqrt(np.mean(cov_dev_vecs**2, axis=0))
+        self.prior_center_sigma = np.sqrt(np.mean(offset_vecs**2, axis=0))
 
-        return self.prior_cov_sigma, self.prior_center_sigma
+        return self.prior_center_sigma, self.prior_cov_sigma
 
     def diagnostics(self):
         if self.model is None:

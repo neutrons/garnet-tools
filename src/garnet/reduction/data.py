@@ -232,7 +232,7 @@ class BaseDataModel:
                 LoadEventNexus(
                     Filename=files[0],
                     OutputWorkspace=self.instrument,
-                    LoadNexusInstrumentXML=True,
+                    LoadNexusInstrumentXML=False,
                     # LoadLogs=False,
                 )
             else:
@@ -1422,7 +1422,7 @@ class LaueData(BaseDataModel):
                 FilterByTimeStop=time_cut,
                 FilterByTofMin=None,
                 FilterByTofMax=None,
-                LoadNexusInstrumentXML=True,
+                LoadNexusInstrumentXML=False,
             )
 
         if type(runs) is list and mtd[event_name].isGroup():
@@ -2328,7 +2328,7 @@ class LaueData(BaseDataModel):
             Load(
                 Filename=filename,
                 OutputWorkspace="bkg",
-                LoadNexusInstrumentXML=True,
+                LoadNexusInstrumentXML=False,
             )
 
             pc_bkg = mtd["bkg"].run().getProperty("gd_prtn_chrg").value

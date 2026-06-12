@@ -556,6 +556,8 @@ class ResolutionEllipsoid:
         Q = np.array([r["Q"] for r in rows])
         signal_noise = np.array([r["signal_noise"] for r in rows])
 
+        s = 1 if Q.size > 1000 else 10
+
         obs = {
             k: np.array([r[f"obs_{k}"] for r in rows])
             for k in ["x0", "x1", "x2"]
@@ -606,7 +608,7 @@ class ResolutionEllipsoid:
                 sig_pred,
                 sig_obs,
                 c=lamda,
-                s=1,
+                s=s,
                 cmap="viridis",
                 marker=".",
                 rasterized=True,
@@ -628,7 +630,7 @@ class ResolutionEllipsoid:
                 Q,
                 resid,
                 c=signal_noise,
-                s=1,
+                s=s,
                 cmap="plasma",
                 norm="log",
                 marker=".",
@@ -653,7 +655,7 @@ class ResolutionEllipsoid:
                 np.rad2deg(gamma),
                 np.rad2deg(nu),
                 c=resid_map,
-                s=1,
+                s=s,
                 cmap="binary",
                 norm="linear",
                 marker=".",
@@ -669,11 +671,12 @@ class ResolutionEllipsoid:
 
             # [1, c1] center offset vs Q – S/N color
             ax = axes[1, c1]
+            resid = offset[lab] / Q * 100
             sc_sn = ax.scatter(
                 Q,
-                offset[lab],
+                resid,
                 c=signal_noise,
-                s=1,
+                s=s,
                 cmap="plasma",
                 norm="log",
                 marker=".",
@@ -683,7 +686,7 @@ class ResolutionEllipsoid:
             ax.set_ylim(-max_trans, max_trans)
             ax.set_xlabel("$|Q|$ [$\\AA^{-1}$]")
             if k == 0:
-                ax.set_ylabel("$\Delta{c}$ [$\\AA^{-1}$]")
+                ax.set_ylabel("$\Delta{c}/|Q|$ [%]$ [%]")
             else:
                 ax.tick_params(labelleft=False)
             ax.minorticks_on()

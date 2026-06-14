@@ -16,12 +16,14 @@ class ResolutionEllipsoid:
         sig_noise_cut=5.0,
         min_peaks=10,
         scale_bounds=(0.5, 2.0),
+        mosaic="isotropic",
     ):
         self.peaks_ws = peaks_ws
         self.r_cut = r_cut
         self.sig_noise_cut = sig_noise_cut
         self.min_peaks = min_peaks
         self.scale_bounds = scale_bounds
+        self.mosaic = mosaic
         self.model = None
         self.prior_cov_sigma = None
         self.prior_center_sigma = None
@@ -106,12 +108,6 @@ class ResolutionEllipsoid:
                         float(d["radius2"]),
                     ]
                 )
-
-                d0, d1, d2 = 0, 0, 0
-                if "translation0" in d.keys():
-                    d0 = d["translation0"]
-                    d1 = d["translation1"]
-                    d2 = d["translation2"]
 
         V = np.column_stack([v0, v1, v2])
         V = self._normalize_columns(V)
@@ -247,56 +243,45 @@ class ResolutionEllipsoid:
         Q_vec = k * q_lambda
         Q2 = np.dot(Q_vec, Q_vec)
 
-        if Q2 > 0:
-            qhat = Q_vec / np.sqrt(Q2)
-            m1, m2 = self._transverse_directions(qhat)
-        else:
-            m1 = np.array([1.0, 0.0, 0.0])
-            m2 = np.array([0.0, 1.0, 0.0])
+        cols = [
+            k**2 * self._outer6(alpha_i),  # sigma_alpha_i^2
+            k**2 * self._outer6(beta_i),  # sigma_beta_i^2
+            k**2 * self._outer6(alpha_f),  # sigma_alpha_f^2
+            k**2 * self._outer6(beta_f),  # sigma_beta_f^2
+            k**2 * self._outer6(q_lambda),  # sigma_dl_mod^2 (σ_λ/λ)
+        ]
 
-        A = np.column_stack(
-            [
-                k**2 * self._outer6(alpha_i),  # sigma_alpha_i^2
-                k**2 * self._outer6(beta_i),  # sigma_beta_i^2
-                k**2 * self._outer6(alpha_f),  # sigma_alpha_f^2
-                k**2 * self._outer6(beta_f),  # sigma_beta_f^2
-                (k / lamda) ** 2
-                * self._outer6(q_lambda),  # sigma_dl_timing^2 (σ_λ = const)
-                k**2
-                * self._outer6(q_lambda),  # sigma_dl_mod^2 (σ_λ/λ = const)
-                Q2 * self._outer6(m1),  # sigma_mosaic_1^2
-                Q2 * self._outer6(m2),  # sigma_mosaic_2^2
+        if self.mosaic == "isotropic":
+            mosaic_iso = Q2 * np.eye(3) - np.outer(Q_vec, Q_vec)
+            cols.append(self._vech6(mosaic_iso))
+
+        elif self.mosaic == "diagonal":
+            R = peak.getGoniometerMatrix()
+            for j in range(3):
+                cols.append(self._outer6(np.cross(Q_vec, R[:, j])))
+
+        else:  # "full"
+            R = peak.getGoniometerMatrix()
+            s2 = np.sqrt(0.5)
+            mosaic_dirs = [
+                R[:, 0],
+                R[:, 1],
+                R[:, 2],
+                (R[:, 0] + R[:, 1]) * s2,
+                (R[:, 0] + R[:, 2]) * s2,
+                (R[:, 1] + R[:, 2]) * s2,
             ]
-        )
+            for v in mosaic_dirs:
+                cols.append(self._outer6(np.cross(Q_vec, v)))
 
-        return A
+        return np.column_stack(cols)
 
     def _predict_cov_lab(self, peak):
         A = self._model_design_lab(peak)
-
-        x = np.array(
-            [
-                self.model["sigma_alpha_i"] ** 2,
-                self.model["sigma_beta_i"] ** 2,
-                self.model["sigma_alpha_f"] ** 2,
-                self.model["sigma_beta_f"] ** 2,
-                self.model["sigma_dl_timing"] ** 2,
-                self.model["sigma_dl_mod"] ** 2,
-                self.model["sigma_mosaic_1"] ** 2,
-                self.model["sigma_mosaic_2"] ** 2,
-            ]
-        )
-
-        y = A @ x
-
+        y = A @ self.model["variance_parameters"]
         cov = np.array(
-            [
-                [y[0], y[5], y[4]],
-                [y[5], y[1], y[3]],
-                [y[4], y[3], y[2]],
-            ]
+            [[y[0], y[5], y[4]], [y[5], y[1], y[3]], [y[4], y[3], y[2]]]
         )
-
         return 0.5 * (cov + cov.T)
 
     def robust_nnls(self, A, y, max_iter=20, c=1.345, eps=1e-12):
@@ -389,15 +374,27 @@ class ResolutionEllipsoid:
 
         x, residual_norm, robust_weights = self.robust_nnls(A, y)
 
+        sq = lambda v: np.sqrt(max(v, 0.0))
+        base = {
+            "sigma_alpha_i": sq(x[0]),
+            "sigma_beta_i": sq(x[1]),
+            "sigma_alpha_f": sq(x[2]),
+            "sigma_beta_f": sq(x[3]),
+            "sigma_dl_mod": sq(x[4]),
+        }
+        if self.mosaic == "isotropic":
+            base["sigma_mosaic"] = sq(x[5])
+        elif self.mosaic == "diagonal":
+            base["sigma_mosaic_0"] = sq(x[5])
+            base["sigma_mosaic_1"] = sq(x[6])
+            base["sigma_mosaic_2"] = sq(x[7])
+        else:  # full
+            labels = ["00", "11", "22", "01", "02", "12"]
+            for k, lab in enumerate(labels):
+                base[f"sigma_mosaic_{lab}"] = sq(x[5 + k])
+
         self.model = {
-            "sigma_alpha_i": np.sqrt(max(x[0], 0.0)),
-            "sigma_beta_i": np.sqrt(max(x[1], 0.0)),
-            "sigma_alpha_f": np.sqrt(max(x[2], 0.0)),
-            "sigma_beta_f": np.sqrt(max(x[3], 0.0)),
-            "sigma_dl_timing": np.sqrt(max(x[4], 0.0)),
-            "sigma_dl_mod": np.sqrt(max(x[5], 0.0)),
-            "sigma_mosaic_1": np.sqrt(max(x[6], 0.0)),
-            "sigma_mosaic_2": np.sqrt(max(x[7], 0.0)),
+            **base,
             "variance_parameters": x,
             "residual_norm": residual_norm,
             "used_peaks": used,
@@ -444,6 +441,10 @@ class ResolutionEllipsoid:
             peak = ws.getPeak(i)
             R = peak.getGoniometerMatrix()
 
+            Q_mag = np.linalg.norm(np.array(peak.getQLabFrame()))
+            if Q_mag == 0:
+                continue
+
             radii, V_s = self._get_peak_shape(ws, i, self.r_cut)
             V_lab = self._sample_axes_to_lab(R, V_s)
             cov_obs = self._covariance_from_ellipsoid(radii, V_lab)
@@ -467,6 +468,10 @@ class ResolutionEllipsoid:
 
             offset_s = self._get_peak_offset(ws, i)
             offset_vecs.append(T @ (R @ offset_s))
+
+            # Normalise by Q so stored sigmas are fractional (σ/Q, σ/Q²)
+            cov_dev_vecs[-1] = np.array(cov_dev_vecs[-1]) / Q_mag**2
+            offset_vecs[-1] = np.array(offset_vecs[-1]) / Q_mag
 
         cov_dev_vecs = np.array(cov_dev_vecs)  # (n_peaks, 6)
         offset_vecs = np.array(offset_vecs)  # (n_peaks, 3)
@@ -686,7 +691,7 @@ class ResolutionEllipsoid:
             ax.set_ylim(-max_trans, max_trans)
             ax.set_xlabel("$|Q|$ [$\\AA^{-1}$]")
             if k == 0:
-                ax.set_ylabel("$\Delta{c}/|Q|$ [%]$ [%]")
+                ax.set_ylabel("$\Delta{c}/|Q|$ [%]")
             else:
                 ax.tick_params(labelleft=False)
             ax.minorticks_on()

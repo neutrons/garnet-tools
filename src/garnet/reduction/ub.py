@@ -924,6 +924,140 @@ class Optimization:
             ol.setModUB(UB @ ol.getModHKL())
             ol.setError(sig_a, sig_b, sig_c, sig_alpha, sig_beta, sig_gamma)
 
+    def optimize_lattice_only(self, cell, n_cycles=5, sigma_cut=3.0):
+        """
+        Refine lattice parameters under cell constraints with U fixed.
+
+        The crystal orientation (U matrix) is held constant; only the free
+        lattice parameters allowed by ``cell`` are optimized.
+
+        Parameters
+        ----------
+        cell : str
+            Lattice system to constrain parameters.
+        n_cycles : int, optional
+            Maximum number of sigma-clipping cycles. The default is 5.
+        sigma_cut : float, optional
+            Outlier rejection threshold in units of the median residual norm.
+            The default is 3.0.
+
+        """
+
+        if not (mtd.doesExist(self.peaks) and self.min_req):
+            return
+
+        a, b, c, alpha, beta, gamma = self.get_lattice_parameters()
+
+        phi, theta, omega = self.get_orientation_angles()
+
+        fun_dict = {
+            "Fixed": self.fixed,
+            "Cubic": self.cubic,
+            "Rhombohedral": self.rhombohedral,
+            "Tetragonal": self.tetragonal,
+            "Hexagonal": self.hexagonal,
+            "Orthorhombic": self.orthorhombic,
+            "Monoclinic": self.monoclinic,
+            "Triclinic": self.triclinic,
+        }
+
+        x0_dict = {
+            "Fixed": (),
+            "Cubic": (a,),
+            "Rhombohedral": (a, alpha),
+            "Tetragonal": (a, c),
+            "Hexagonal": (a, c),
+            "Orthorhombic": (a, b, c),
+            "Monoclinic": (a, b, c, beta),
+            "Triclinic": (a, b, c, alpha, beta, gamma),
+        }
+
+        base_fun = fun_dict[cell]
+        x0 = x0_dict[cell]
+
+        if len(x0) == 0:
+            return
+
+        # Append fixed orientation so residual() receives the expected 9-tuple
+        def fun(x):
+            return base_fun((*x, phi, theta, omega))
+
+        W = self.whiten_weight_matrix(self.Q)
+
+        hkl = self.hkl.copy()
+        Q = self.Q.copy()
+        Isig = self.Isig.copy()
+
+        sol = None
+        for _ in range(n_cycles):
+            if len(hkl) <= len(x0):
+                break
+
+            w_scale = np.median(Isig[Isig > 0]) if np.any(Isig > 0) else 1.0
+            weights = Isig / w_scale if w_scale > 0 else None
+
+            args = (hkl, Q, fun, W, weights)
+            sol = scipy.optimize.least_squares(self.residual, x0=x0, args=args)
+
+            raw_res = self.residual(sol.x, hkl, Q, fun, W).reshape(-1, 3)
+            norms = np.sqrt((raw_res**2).sum(axis=1))
+
+            cutoff = sigma_cut * np.median(norms)
+            keep = norms <= cutoff
+
+            if keep.all():
+                break
+
+            hkl = hkl[keep]
+            Q = Q[keep]
+            Isig = Isig[keep]
+            x0 = sol.x
+
+        if sol is None:
+            return
+
+        a, b, c, alpha, beta, gamma, phi, theta, omega = fun(sol.x)
+
+        B = self.B_matrix(a, b, c, alpha, beta, gamma)
+        U = self.U_matrix(phi, theta, omega)
+
+        UB = np.dot(U, B)
+
+        J = sol.jac
+        inv_cov = J.T.dot(J)
+
+        cov = (
+            np.linalg.inv(inv_cov)
+            if np.linalg.det(inv_cov) > 0
+            else np.zeros((len(sol.x), len(sol.x)))
+        )
+
+        chi2dof = np.sum(sol.fun**2) / (sol.fun.size - sol.x.size)
+        cov *= chi2dof
+
+        sig = np.sqrt(np.diagonal(cov))
+
+        sig_a, sig_b, sig_c, sig_alpha, sig_beta, sig_gamma, *_ = fun(sig)
+
+        if np.isclose(a, sig_a):
+            sig_a = 0
+        if np.isclose(b, sig_b):
+            sig_b = 0
+        if np.isclose(c, sig_c):
+            sig_c = 0
+
+        if np.isclose(alpha, sig_alpha):
+            sig_alpha = 0
+        if np.isclose(beta, sig_beta):
+            sig_beta = 0
+        if np.isclose(gamma, sig_gamma):
+            sig_gamma = 0
+
+        ol = mtd[self.peaks].sample().getOrientedLattice()
+        ol.setUB(UB)
+        ol.setModUB(UB @ ol.getModHKL())
+        ol.setError(sig_a, sig_b, sig_c, sig_alpha, sig_beta, sig_gamma)
+
 
 class RefineSingleCrystalGoniometer:
     def __init__(self, peaks, tol=0.12, cell="Triclinic", n_iter=1):

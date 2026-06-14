@@ -214,6 +214,12 @@ class Integration(SubPlan):
                 lamda_max,
             )
 
+            pk = PeakModel("peaks")
+            self.orig_d = {
+                pk.get_hklmnp(i): pk.get_d_from_ub(i)
+                for i in range(pk.get_number_peaks())
+            }
+
             ub = UBModel("peaks")
 
             Q_min, hkl_tol = ub.shortest_reciprocal_spacing(centering)
@@ -225,12 +231,14 @@ class Integration(SubPlan):
             scan_plot = ScanPlot(*result)
             scan_plot.save_plot(scan_file)
 
-            ub = UBModel("peaks")
-            ub.refine_UB_with_constraints(cell, 0.5 / np.cbrt(3))
+            opt = Optimization("peaks", tol=0.5 / np.cbrt(3))
+            opt.optimize_lattice("Fixed")
+            opt.optimize_lattice_only(cell)
 
             ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
             ub_file = os.path.splitext(ub_file)[0] + ".mat"
 
+            ub = UBModel("peaks")
             ub.save_UB(ub_file)
 
             data.load_clear_UB(ub_file, "data", run)
@@ -554,7 +562,7 @@ class Integration(SubPlan):
             ellipsoid = PeakEllipsoid()
             ellipsoid.update_constraints(Q0, Q1, Q2, dQ)
             ellipsoid.update_estimate(shape)
-            ellipsoid.set_resolution_sigma(*self.res_sigma)
+            ellipsoid.set_resolution_sigma(*self.res_sigma, Q)
 
             args = (Q0, Q1, Q2, d, n, dQ, Q, weights)
             fit_params = ellipsoid.fit(*args)
@@ -714,7 +722,9 @@ class Integration(SubPlan):
 
             goniometer = peak.get_goniometer_angles(i)
 
-            peak_name = peak.get_peak_name(i)
+            orig_d = self.orig_d.get(peak.get_hklmnp(i))
+
+            peak_name = peak.get_peak_name(i, d=orig_d)
 
             dQ = data.get_resolution_in_Q(lamda, two_theta)
 

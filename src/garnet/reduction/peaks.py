@@ -163,7 +163,7 @@ class PeaksModel:
             OutputWorkspace=peaks,
         )
 
-    def scan_threshold(self, md, peaks, min_Q, drop_fraction=0.05):
+    def scan_threshold(self, md, peaks, min_Q):
         """
         Scan peak density threshold from predicted peaks and minimum Q.
 
@@ -175,8 +175,6 @@ class PeaksModel:
             Name of predicted peaks table.
         min_Q : float
             Minimum Q-spacing enforcing lower limit of peak spacing.
-        drop_fraction : float
-            Fraction of indexed dropped from found peaks. The default is 0.05.
 
         """
 
@@ -196,20 +194,13 @@ class PeaksModel:
         found = np.array(found)
         indexed = np.array(indexed)
 
-        max_indexed = np.max(indexed)
-        min_allowed = (1.0 - drop_fraction) * max_indexed
+        max_ind = np.nanmax(indexed)
+        min_ind = np.nanmin(indexed)
 
-        good = indexed >= min_allowed
+        ave_ind = 0.5 * (max_ind + min_ind)
 
-        if not np.any(good):
-            raise RuntimeError(
-                "No threshold satisfies indexed peak retention criterion."
-            )
-
-        candidate_indices = np.where(good)[0]
-        best_i = candidate_indices[np.argmax(thresholds[candidate_indices])]
-
-        threshold = thresholds[best_i + 1]
+        i_best = np.nanargmin(np.abs(indexed - ave_ind))
+        threshold = thresholds[i_best]
 
         self.find_peaks(md, peaks, min_Q, threshold, predict_peaks)
         self.index_peaks(peaks)
@@ -1696,7 +1687,7 @@ class PeakModel:
                 items = np.array(items).tolist()
             run_info[log] = items
 
-    def get_peak_name(self, no, merge=False):
+    def get_peak_name(self, no, merge=False, d=None):
         """
         Name of peak.
 
@@ -1704,6 +1695,9 @@ class PeakModel:
         ----------
         no : int
             Peak index number.
+        d : float, optional
+            D-spacing to use in the name.  When provided the lattice lookup
+            is skipped, so the name is stable even after UB refinement.
 
         Returns
         -------
@@ -1719,7 +1713,7 @@ class PeakModel:
         mnp = [int(val) for val in peak.getIntMNP()]
         lamda = peak.getWavelength()
 
-        if HasUB(Workspace=self.peaks):
+        if d is None and HasUB(Workspace=self.peaks):
             ol = mtd[self.peaks].sample().getOrientedLattice()
             mod_1 = ol.getModVec(0)
             mod_2 = ol.getModVec(1)
@@ -1729,7 +1723,7 @@ class PeakModel:
                 m * np.array(mod_1) + n * np.array(mod_2) + p * np.array(mod_3)
             )
             d = ol.d(V3D(h + dh, k + dk, l + dl))
-        else:
+        elif d is None:
             d = peak.getDSpacing()
 
         if not merge:
@@ -1741,6 +1735,38 @@ class PeakModel:
         else:
             name = "peak_d={:.4f}_({:d},{:d},{:d})_({:d},{:d},{:d})"
             return name.format(d, *hkl, *mnp)
+
+    def get_d_from_ub(self, no):
+        """
+        D-spacing from current oriented lattice for the given peak.
+
+        Parameters
+        ----------
+        no : int
+            Peak index number.
+
+        Returns
+        -------
+        d : float
+            D-spacing in Angstroms.
+
+        """
+
+        peak = mtd[self.peaks].getPeak(no)
+        hkl = [int(val) for val in peak.getIntHKL()]
+        mnp = [int(val) for val in peak.getIntMNP()]
+        if HasUB(Workspace=self.peaks):
+            ol = mtd[self.peaks].sample().getOrientedLattice()
+            mod_1 = ol.getModVec(0)
+            mod_2 = ol.getModVec(1)
+            mod_3 = ol.getModVec(2)
+            h, k, l, m, n, p = *hkl, *mnp
+            dh, dk, dl = (
+                m * np.array(mod_1) + n * np.array(mod_2) + p * np.array(mod_3)
+            )
+            return ol.d(V3D(h + dh, k + dk, l + dl))
+        else:
+            return peak.getDSpacing()
 
     def get_hkl(self, no):
         """

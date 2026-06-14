@@ -206,9 +206,11 @@ class PeakEllipsoid:
 
         return c, inv_S
 
-    def set_resolution_sigma(self, prior_center_sigma, prior_cov_sigma):
-        self.prior_center_sigma = prior_center_sigma
-        self.prior_cov_sigma = prior_cov_sigma
+    def set_resolution_sigma(
+        self, prior_center_sigma, prior_cov_sigma, Q_mag=1.0
+    ):
+        self.prior_center_sigma = prior_center_sigma * Q_mag
+        self.prior_cov_sigma = prior_cov_sigma * Q_mag**2
 
     def data_norm(self, d, n, v, rel_err=30):
         mask = (n > 0) & np.isfinite(n)
@@ -1441,7 +1443,7 @@ class PeakEllipsoid:
         if n_pk == 0 or n_bkg == 0:
             scale = self.prior_strength_from_sn(1.0)
             self.lamda_cov = scale
-            self.lamda_center = scale
+            self.lamda_center = scale / 10
             return
 
         n_pk_sum = np.nansum(n3d[pk_obs])
@@ -1459,7 +1461,7 @@ class PeakEllipsoid:
         scale = self.prior_strength_from_sn(sn)
 
         self.lamda_cov = scale
-        self.lamda_center = scale
+        self.lamda_center = scale / 10
 
     def safe_sn(self, sn, floor=1.0, ceiling=1e4):
         sn = np.nan_to_num(sn, nan=floor, posinf=ceiling, neginf=floor)

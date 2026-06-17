@@ -972,7 +972,9 @@ class BaseDataModel:
         mtd[ws].run()["time"] = log
         mtd[ws].run().getProperty("time").units = t_units
 
-    def log_split_info(self, ws, log_name, log_limits, log_bins):
+    def log_split_info(
+        self, ws, log_name, log_limits, log_bins, log_ramp="Both"
+    ):
         """
         Generate split information for filtering events by log values.
 
@@ -986,6 +988,8 @@ class BaseDataModel:
             Min/max values of log (bin center).
         log_bins : int
             Number of equally space bins.
+        log_ramp : str
+            Filter log by ramp direction. The default is `Both`.
 
         """
 
@@ -1007,6 +1011,7 @@ class BaseDataModel:
                     MaximumLogValue=log_max,
                     LogValueInterval=log_interval,
                     LogBoundary="Left",
+                    FilterLogValueByChangingDirection=log_ramp,
                 )
 
                 log_vals = np.linspace(

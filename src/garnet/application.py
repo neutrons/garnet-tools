@@ -449,7 +449,7 @@ class FormView(QWidget):
             (4 * np.pi / 3) * (1.0 / d_min) ** 3 * V_typical * centering_frac
         )
 
-    def update_mem_estimate(self):
+    def update_mem_estimate(self, overhead_factor=10):
         instrument = self.get_instrument()
         bl = beamlines.get(instrument, {})
         rows, cols = bl.get("BankPixels", [256, 256])
@@ -476,7 +476,9 @@ class FormView(QWidget):
             n_peaks = self._estimate_n_peaks(d_min, centering)
             task_bytes = n_peaks * (21**3) * 16
 
-        self.mem_label.setText(self._format_bytes(inst_bytes + task_bytes))
+        memory = overhead_factor * (inst_bytes + task_bytes)
+
+        self.mem_label.setText(self._format_bytes(memory))
 
     def int_plan(self):
         tab = QWidget()

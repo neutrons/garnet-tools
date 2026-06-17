@@ -783,6 +783,84 @@ class Peaks:
             plt.close(fig)
             plt.close("all")
 
+    def remove_volume_outliers(self, n_sigma=5.0):
+        res = ResolutionEllipsoid(self.peaks, r_cut=np.inf)
+        res.fit()
+
+        ol = mtd[self.peaks].sample().getOrientedLattice()
+
+        Q0_mod, log_fracs, wl, indices = [], [], [], []
+
+        for i, peak in enumerate(mtd[self.peaks]):
+            shape = peak.getPeakShape()
+            if shape.shapeName() != "ellipsoid":
+                continue
+
+            ellipsoid = eval(shape.toJSON())
+            r0 = ellipsoid["radius0"]
+            r1 = ellipsoid["radius1"]
+            r2 = ellipsoid["radius2"]
+
+            if r0 <= 0 or r1 <= 0 or r2 <= 0:
+                continue
+
+            vol_obs = 4 / 3 * np.pi * r0 * r1 * r2
+
+            cov = res.predict_sample_cov(i)
+            radii, _ = res._ellipsoid_from_covariance(cov)
+            vol_model = 4 / 3 * np.pi * np.prod(radii)
+
+            if vol_model <= 0:
+                continue
+
+            h, k, l = [int(v) for v in peak.getIntHKL()]
+            d0 = ol.d(h, k, l)
+            Q0_mod.append(2 * np.pi / d0)
+            log_fracs.append(np.log(vol_obs / vol_model))
+            wl.append(peak.getWavelength())
+            indices.append(i)
+
+        if len(log_fracs) == 0:
+            return
+
+        Q0_mod = np.array(Q0_mod)
+        log_fracs = np.array(log_fracs)
+        wl = np.array(wl)
+
+        med = np.median(log_fracs)
+        mad = np.median(np.abs(log_fracs - med))
+
+        if mad > 0:
+            keep = np.abs(log_fracs - med) <= n_sigma * mad
+        else:
+            keep = np.ones(len(log_fracs), dtype=bool)
+
+        filename = os.path.splitext(self.filename)[0]
+
+        with PdfPages(filename + "_volfrac.pdf") as pdf:
+            fig, ax = plt.subplots(layout="constrained")
+            sc = ax.scatter(
+                Q0_mod,
+                log_fracs,
+                c=wl,
+                s=0.5,
+                rasterized=True,
+            )
+            fig.colorbar(sc, ax=ax, label=r"$\lambda$ [\AA]")
+            ax.axhline(med, color="k", lw=1)
+            ax.axhline(med + n_sigma * mad, color="k", lw=1, linestyle="--")
+            ax.axhline(med - n_sigma * mad, color="k", lw=1, linestyle="--")
+            ax.minorticks_on()
+            ax.set_xlabel(r"$|Q|$ [\AA$^{-1}$]")
+            ax.set_ylabel(r"$\ln(V_\mathrm{obs}/V_\mathrm{model})$")
+            pdf.savefig(fig, dpi=300, bbox_inches=None)
+            plt.close(fig)
+            plt.close("all")
+
+        for idx, flag in zip(indices, ~keep):
+            if flag:
+                mtd[self.peaks].getPeak(idx).setSigmaIntensity(float("-inf"))
+
     def remove_non_integrated(self):
         for peak in mtd[self.peaks]:
             shape = eval(peak.getPeakShape().toJSON())
@@ -824,17 +902,25 @@ class Peaks:
         run_info = mtd[self.peaks].run()
         run_keys = run_info.keys()
 
-        keys = ["h", "k", "l", "m", "n", "p", "run"]
-        vals = ["intens", "sig", "vol"]
+        required = [
+            "h",
+            "k",
+            "l",
+            "m",
+            "n",
+            "p",
+            "run",
+            "intens_raw",
+            "sig_raw",
+            "d3x",
+        ]
 
         info_dict = {}
         norm_dict = {}
         rate_dict = {}
 
-        items = keys + vals
-
         log_info = np.all(
-            ["peaks_{}".format(item) in run_keys for item in items]
+            ["peaks_{}".format(item) in run_keys for item in required]
         )
         if log_info:
             h = run_info.getLogData("peaks_h").value
@@ -847,29 +933,30 @@ class Peaks:
 
             cntrt = run_info.getLogData("peaks_cntrt").value
 
-            N = run_info.getLogData("peaks_voxels").value
-            vol = run_info.getLogData("peaks_vol").value
+            n_vox = run_info.getLogData("peaks_n_vox").value
+            d3x = run_info.getLogData("peaks_d3x").value
+            vol_frac = run_info.getLogData("peaks_vol_frac").value
             pk_data = run_info.getLogData("peaks_pk_data").value
             pk_norm = run_info.getLogData("peaks_pk_norm").value
             bkg_data = run_info.getLogData("peaks_bkg_data").value
             bkg_norm = run_info.getLogData("peaks_bkg_norm").value
             ratio = run_info.getLogData("peaks_ratio").value
 
-            intens = run_info.getLogData("peaks_intens").value
-            sig = run_info.getLogData("peaks_sig").value
+            intens = run_info.getLogData("peaks_intens_raw").value
+            sig = run_info.getLogData("peaks_sig_raw").value
 
             for i in range(len(run)):
                 key = (run[i], h[i], k[i], l[i], m[i], n[i], p[i])
-                vals = (
-                    N[i],
-                    vol[i],
-                    pk_data[i],
-                    pk_norm[i],
-                    bkg_data[i],
-                    bkg_norm[i],
-                    ratio[i],
-                )
-                info_dict[key] = vals
+                info_dict[key] = {
+                    "n_vox": n_vox[i],
+                    "d3x": d3x[i],
+                    "vol_frac": vol_frac[i],
+                    "pk_data": pk_data[i],
+                    "pk_norm": pk_norm[i],
+                    "bkg_data": bkg_data[i],
+                    "bkg_norm": bkg_norm[i],
+                    "ratio": ratio[i],
+                }
                 norm_dict[key] = (intens[i], sig[i])
                 rate_dict[run[i]] = cntrt[i]
 
@@ -922,15 +1009,13 @@ class Peaks:
             items = self.info_dict.get(key)
 
             if items is not None:
-                N, vol, pk_data, pk_norm, bkg_data, bkg_norm, ratio = items
-
                 lamda = peak.getWavelength()
                 two_theta = peak.getScattering()
-                # pc = peak.getMonitorCount()
 
                 Q = 4 * np.pi / lamda * np.sin(0.5 * two_theta)
 
-                norm = N * vol
+                norm = items["vol_frac"]
+                ratio = items["ratio"]
 
                 x.append(Q)
                 y.append(norm)
@@ -1067,6 +1152,16 @@ class Peaks:
             FilterVariable="Wavelength",
             FilterValue=upper_bound,
             Operator="<",
+        )
+
+        self.remove_volume_outliers()
+
+        FilterPeaks(
+            InputWorkspace=self.peaks,
+            OutputWorkspace=self.peaks,
+            FilterVariable="Signal/Noise",
+            FilterValue=-1,
+            Operator=">=",
         )
 
         self.reset_satellite()
@@ -1292,12 +1387,17 @@ class Peaks:
             peaks = self.peaks
             app = ""
 
-        self.rescale_intensities()
-
         filename = os.path.splitext(self.filename)[0] + app
 
-        if mtd.doesExist(self.peaks + "_merge"):
-            self.merge_intensities(self.peaks)
+        FilterPeaks(
+            InputWorkspace=peaks,
+            OutputWorkspace=peaks,
+            FilterVariable="Signal/Noise",
+            FilterValue=2,
+            Operator=">=",
+        )
+
+        self.rescale_intensities()
 
         SortPeaksWorkspace(
             InputWorkspace=peaks,
@@ -1309,14 +1409,6 @@ class Peaks:
         self.calculate_statistics(peaks, filename + "_symm.txt")
 
         self.renumber_peaks(peaks)
-
-        FilterPeaks(
-            InputWorkspace=peaks,
-            OutputWorkspace=peaks,
-            FilterVariable="Signal/Noise",
-            FilterValue=2,
-            Operator=">=",
-        )
 
         SaveHKL(
             InputWorkspace=peaks,

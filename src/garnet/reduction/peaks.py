@@ -52,7 +52,7 @@ centering_reflection = {
     "C": "C-face centred",
 }
 
-diagonstic_keys = [
+diagnostic_keys = [
     "run",
     "h",
     "k",
@@ -60,18 +60,36 @@ diagonstic_keys = [
     "m",
     "n",
     "p",
-    "vol",
+    "d3x",
     "bkg",
     "bkg_err",
     "vol_frac",
-    "intens",
-    "sig",
-    "voxels",
+    "n_vox",
+    "intens_raw",
+    "sig_raw",
     "pk_data",
     "pk_norm",
     "bkg_data",
     "bkg_norm",
     "ratio",
+    "I_1d_0",
+    "s_1d_0",
+    "I_1d_1",
+    "s_1d_1",
+    "I_1d_2",
+    "s_1d_2",
+    "I_2d_0",
+    "s_2d_0",
+    "I_2d_1",
+    "s_2d_1",
+    "I_2d_2",
+    "s_2d_2",
+    "I_3d",
+    "s_3d",
+    "I_ell",
+    "s_ell",
+    "I_prof",
+    "s_prof",
     "Qx",
     "Qy",
     "Qz",
@@ -1201,7 +1219,7 @@ class PeaksModel:
             merge_run = mtd[merge].run()
             peaks_run = mtd[peaks].run()
 
-            for key in diagonstic_keys:
+            for key in diagnostic_keys:
                 log = "peaks_{}".format(key)
                 if peaks_run.hasProperty(log) and merge_run.hasProperty(log):
                     peaks_log = peaks_run.getLogData(log).value
@@ -1651,7 +1669,7 @@ class PeakModel:
 
         return list(gon.getEulerAngles())
 
-    def add_diagonstic_info(self, no, values):
+    def add_diagnostic_info(self, no, info):
         """
         Log diagnostic info.
 
@@ -1659,8 +1677,10 @@ class PeakModel:
         ----------
         no : int
             Peak index number.
-        values : list
-           Diagnostics.
+        info : dict
+            Mapping of diagnostic key → scalar value.  Keys must be a subset
+            of ``diagnostic_keys`` (positional run/hkl keys are filled from
+            the peak itself and must not appear in *info*).
 
         """
 
@@ -1670,14 +1690,24 @@ class PeakModel:
         h, k, l = [int(val) for val in peak.getIntHKL()]
         m, n, p = [int(val) for val in peak.getIntMNP()]
 
+        positional = {
+            "run": run,
+            "h": h,
+            "k": k,
+            "l": l,
+            "m": m,
+            "n": n,
+            "p": p,
+        }
+        combined = {**positional, **info}
+
         run_info = mtd[self.peaks].run()
         run_info_keys = run_info.keys()
 
-        vals = [run, h, k, l, m, n, p] + values
-
-        assert len(vals) == len(diagonstic_keys)
-
-        for key, val in zip(diagonstic_keys, vals):
+        for key in diagnostic_keys:
+            val = combined.get(key)
+            if val is None:
+                continue
             log = "peaks_{}".format(key)
             if log not in run_info_keys:
                 items = [val]

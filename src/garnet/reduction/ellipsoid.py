@@ -1811,7 +1811,7 @@ class PeakEllipsoid:
 
         data_norm = pk_cnts, pk_norm, bkg_cnts, bkg_norm, ratio
 
-        return intens, sig, b, b_err, vol, vol_frac, *data_norm
+        return intens, sig, b, b_err, vol, vol_frac, int(vol_pk), *data_norm
 
     def matched_filter(self, d, n, v, pk, bkg, kernel, rel_error=0.15):
         mask = (pk | bkg) & (n > 0)
@@ -1911,7 +1911,7 @@ class PeakEllipsoid:
 
         result = self.extract_intensity(d, n, pk, bkg, kernel, vol_frac)
 
-        intens, sig, b, b_err, N, vol_frac, *data_norm = result
+        intens, sig, b, b_err, N, vol_frac, n_vox, *data_norm = result
 
         pk_data, pk_norm, bkg_data, bkg_norm, ratio = data_norm
 
@@ -1923,16 +1923,10 @@ class PeakEllipsoid:
 
         self.weights = (x0[pk], x1[pk], x2[pk]), d[pk].copy()
 
-        self.info = [d3x, b, b_err, vol_frac]
-
         y = d / n
         e = np.sqrt(np.clip(d, 0, None) + 1) / n
 
         intens_raw, sig_raw = self.extract_raw_intensity(d, pk, bkg)
-
-        self.info += [intens_raw, sig_raw]
-
-        self.info += [N, pk_data, pk_norm, bkg_data, bkg_norm, ratio]
 
         if not np.isfinite(sig):
             sig = float("inf")
@@ -1947,9 +1941,9 @@ class PeakEllipsoid:
 
         result = self.fitted_profile(x0, x1, x2, d, n, c, S)
 
-        I, I_err, b, x, y_fit, y, e = result
+        I, I_err, b_prof, x_prof, y_fit, y_prof, e_prof = result
 
-        self.integral = x, y_fit, y, e
+        self.integral = x_prof, y_fit, y_prof, e_prof
 
         result = self.matched_filter(d, n, d, pk, bkg, kernel)
 
@@ -1966,4 +1960,42 @@ class PeakEllipsoid:
         self.intensity.append(I)
         self.sigma.append(I_err)
 
-        return intens, sig  # if I_filt > sig_filt else intens
+        I1d = self.intensity[0]
+        s1d = self.sigma[0]
+        I2d = self.intensity[1]
+        s2d = self.sigma[1]
+
+        self.info = {
+            "d3x": d3x,
+            "bkg": b,
+            "bkg_err": b_err,
+            "vol_frac": vol_frac,
+            "n_vox": n_vox,
+            "intens_raw": intens_raw,
+            "sig_raw": sig_raw,
+            "pk_data": pk_data,
+            "pk_norm": pk_norm,
+            "bkg_data": bkg_data,
+            "bkg_norm": bkg_norm,
+            "ratio": ratio,
+            "I_1d_0": I1d[0],
+            "s_1d_0": s1d[0],
+            "I_1d_1": I1d[1],
+            "s_1d_1": s1d[1],
+            "I_1d_2": I1d[2],
+            "s_1d_2": s1d[2],
+            "I_2d_0": I2d[0],
+            "s_2d_0": s2d[0],
+            "I_2d_1": I2d[1],
+            "s_2d_1": s2d[1],
+            "I_2d_2": I2d[2],
+            "s_2d_2": s2d[2],
+            "I_3d": self.intensity[2],
+            "s_3d": self.sigma[2],
+            "I_ell": self.intensity[3],
+            "s_ell": self.sigma[3],
+            "I_prof": self.intensity[4],
+            "s_prof": self.sigma[4],
+        }
+
+        return intens, sig

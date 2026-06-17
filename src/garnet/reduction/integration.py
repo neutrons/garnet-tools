@@ -634,9 +634,7 @@ class Integration(SubPlan):
                         print("Exception saving figure: {}".format(e))
                         print(traceback.format_exc())
 
-                extra_info = [*info, *shape[:3], self.cntrt]
-
-                result[key] = intens, sig, shape, extra_info, hkl
+                result[key] = intens, sig, shape, info, hkl
 
             del ellipsoid
 
@@ -826,7 +824,13 @@ class Integration(SubPlan):
 
                 peak.set_peak_shape(i, *shape)
 
-                peak.add_diagonstic_info(i, info)
+                Qx, Qy, Qz = shape[:3]
+                info["Qx"] = Qx
+                info["Qy"] = Qy
+                info["Qz"] = Qz
+                info["cntrt"] = self.cntrt
+
+                peak.add_diagnostic_info(i, info)
 
             else:
                 peak.set_peak_intensity(i, 0, 0)

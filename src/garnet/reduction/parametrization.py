@@ -79,6 +79,9 @@ class Parametrization(SubPlan):
             self.params["LogExtents"] = [0, 1]
             self.params["LogBins"] = 0
 
+        if self.params.get("LogRamp") is None:
+            self.params["LogRamp"] = "Both"
+
         if self.params.get("MillerIndex") is not None:
             self.check(
                 len(self.params["MillerIndex"]),

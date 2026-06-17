@@ -122,7 +122,7 @@ class Normalization(SubPlan):
             else:
                 raise subprocess.SubprocessError(err.decode().strip())
         except (FileNotFoundError, subprocess.SubprocessError):
-            subprocess.Popen(["mantidpython", SLICEVIEW, result_file])
+            subprocess.Popen(["python", SLICEVIEW, result_file])
 
     def normalize(self):
         data = DataModel(beamlines[self.plan["Instrument"]])

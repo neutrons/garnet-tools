@@ -116,7 +116,7 @@ class Parametrization(SubPlan):
             else:
                 raise subprocess.SubprocessError(err.decode().strip())
         except (FileNotFoundError, subprocess.SubprocessError):
-            subprocess.Popen(["mantidpython", SLICEVIEW, result_file])
+            subprocess.Popen(["python", SLICEVIEW, result_file])
 
     def parametrize(self):
         data = DataModel(beamlines[self.plan["Instrument"]])
@@ -156,6 +156,7 @@ class Parametrization(SubPlan):
                     self.params["LogName"],
                     self.params["LogExtents"],
                     self.params["LogBins"],
+                    self.params["LogRamp"],
                 )
 
                 indices, workspaces = data.filter_events(

@@ -17,6 +17,7 @@ from mantid.simpleapi import (
     CopySample,
     CloneWorkspace,
     SaveNexus,
+    SaveHKLCW,
     LoadNexus,
     AddPeakHKL,
     HasUB,
@@ -1179,6 +1180,21 @@ class PeaksModel:
 
         SaveNexus(Filename=filename, InputWorkspace=peaks)
 
+    def save_hkl_cw(self, filename, peaks):
+        """
+        Save peaks in SHELXL CW format sorted by d-spacing.
+
+        Parameters
+        ----------
+        filename : str
+            Name of output file with extension .hkl.
+        peaks : str
+            Name of peaks table.
+
+        """
+
+        SaveHKLCW(Workspace=peaks, OutputFile=filename)
+
     def convert_peaks(self, peaks):
         """
         Remove instrument from peaks.
@@ -1429,6 +1445,48 @@ class PeaksModel:
 
         name = "peaks_run#{}"
         return name.format(run)
+
+    def filter_unique_hkl(self, peaks, unique_peaks):
+        """
+        Keep one representative per unique (h,k,l,m,n,p) group.
+
+        The representative is the peak whose wavelength is closest to the
+        median wavelength of the group (middle-wavelength observation).
+
+        Parameters
+        ----------
+        peaks : str
+            Name of input peaks table.
+        unique_peaks : str
+            Name of output peaks table with one peak per unique Miller index.
+
+        """
+
+        n_peak = mtd[peaks].getNumberPeaks()
+
+        groups = {}
+        for i in range(n_peak):
+            pk = mtd[peaks].getPeak(i)
+            h, k, l = [int(v) for v in pk.getIntHKL()]
+            m, n, p = [int(v) for v in pk.getIntMNP()]
+            key = (h, k, l, m, n, p)
+            if key not in groups:
+                groups[key] = []
+            groups[key].append((i, pk.getWavelength()))
+
+        keep = set()
+        for entries in groups.values():
+            entries.sort(key=lambda x: x[1])
+            mid = entries[len(entries) // 2]
+            keep.add(mid[0])
+
+        CloneWorkspace(InputWorkspace=peaks, OutputWorkspace=unique_peaks)
+
+        to_remove = sorted(
+            [i for i in range(n_peak) if i not in keep], reverse=True
+        )
+        for i in to_remove:
+            mtd[unique_peaks].removePeak(i)
 
 
 class PeakModel:

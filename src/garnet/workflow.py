@@ -18,6 +18,7 @@ config["Q.convention"] = "Crystallography"
 from garnet.reduction.plan import ReductionPlan
 from garnet.reduction.parallel import ParallelTasks
 from garnet.reduction.integration import Integration
+from garnet.reduction.combination import Combination
 from garnet.reduction.normalization import Normalization
 from garnet.reduction.parametrization import Parametrization
 from garnet.reduction.data import DataModel
@@ -41,12 +42,14 @@ reduction_types = {
     "param": "Parameterization",
 }
 
+valid_reductions = set(reduction_types.keys()) | {"comb"}
+
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn", force=True)
 
     filename, reduction, arg = sys.argv[1], sys.argv[2], sys.argv[3]
 
-    assert reduction in reduction_types.keys()
+    assert reduction in valid_reductions
 
     if arg.isdigit():
         n_proc = int(arg)
@@ -67,44 +70,70 @@ if __name__ == "__main__":
     else:
         rp.load_plan(filename)
 
-        if reduction == "norm":
-            func = Normalization.normalize_parallel
-            comb = Normalization.combine_parallel
-            inst = Normalization(rp.plan)
-        elif reduction == "param":
-            func = Parametrization.parametrize_parallel
-            comb = Parametrization.combine_parallel
-            inst = Parametrization(rp.plan)
-        else:
-            func = Integration.integrate_parallel
-            comb = Integration.combine_parallel
-            inst = Integration(rp.plan)
+        section_needed = (
+            "Integration"
+            if reduction in ("int", "comb")
+            else reduction_types.get(reduction)
+        )
 
-        for key in reduction_types.keys():
-            if key != reduction and key != "temp":
-                if rp.plan.get(reduction_types[key]) is not None:
-                    rp.plan.pop(reduction_types[key])
+        seen = set()
+        for section in reduction_types.values():
+            if (
+                section is not None
+                and section != section_needed
+                and section not in seen
+            ):
+                seen.add(section)
+                if rp.plan.get(section) is not None:
+                    rp.plan.pop(section)
 
         pprint.pp(rp.plan)
 
-        inst.create_directories()
+        if reduction == "comb":
+            rp.plan["Integration"]["NumProcesses"] = n_proc
+            inst = Combination(rp.plan)
+            inst.create_directories()
+            inst.combine()
 
-        data = DataModel(beamlines[rp.plan["Instrument"]])
-        data.update_raw_path(rp.plan)
+        else:
+            if reduction == "norm":
+                func = Normalization.normalize_parallel
+                comb = Normalization.combine_parallel
+                inst = Normalization(rp.plan)
+            elif reduction == "param":
+                func = Parametrization.parametrize_parallel
+                comb = Parametrization.combine_parallel
+                inst = Parametrization(rp.plan)
+            else:
+                func = Integration.integrate_parallel
+                comb = Integration.combine_parallel
+                inst = Integration(rp.plan)
 
-        pt = ParallelTasks(func, comb)
+            inst.create_directories()
 
-        n_runs = len(rp.plan["Runs"])
+            data = DataModel(beamlines[rp.plan["Instrument"]])
+            data.update_raw_path(rp.plan)
 
-        max_proc = min(os.cpu_count(), n_runs)
+            pt = ParallelTasks(func, comb)
 
-        if n_proc > max_proc:
-            n_proc = max_proc
+            n_runs = len(rp.plan["Runs"])
 
-        pt.run_tasks(rp.plan, n_proc)
+            max_proc = min(os.cpu_count(), n_runs)
 
-        fname = filename.replace(".yaml", "_" + reduction + ".json")
+            if n_proc > max_proc:
+                n_proc = max_proc
 
-        fname = os.path.join(inst.get_output_path(), os.path.basename(fname))
+            pt.run_tasks(rp.plan, n_proc)
+
+        reduction_suffix = {
+            "int": "_integration",
+            "norm": "_normalization",
+            "param": "_parametrization",
+            "comb": "_combination",
+        }
+        fname = os.path.join(
+            inst.get_output_path(),
+            rp.plan["OutputName"] + reduction_suffix[reduction] + ".json",
+        )
 
         rp.save_plan(fname)

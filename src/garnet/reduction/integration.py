@@ -23,7 +23,7 @@ from garnet.reduction.peaks import PeaksModel, PeakModel, centering_reflection
 from garnet.reduction.ellipsoid import PeakEllipsoid
 from garnet.reduction.resolution import ResolutionEllipsoid
 from garnet.reduction.data import DataModel
-from garnet.reduction.plan import SubPlan
+from garnet.reduction.intensity import IntegrationModel
 
 INTEGRATION = os.path.abspath(__file__)
 directory = os.path.dirname(INTEGRATION)
@@ -34,7 +34,7 @@ REFLECTIONS = os.path.abspath(filename)
 assert os.path.exists(REFLECTIONS)
 
 
-class Integration(SubPlan):
+class Integration(IntegrationModel):
     def __init__(self, plan):
         super(Integration, self).__init__(plan)
 
@@ -69,6 +69,8 @@ class Integration(SubPlan):
             self.params["CrossTerms"] = False
         if self.params.get("ProfileFit") is None:
             self.params["ProfileFit"] = True
+        if self.params.get("OptimizeUB") is None:
+            self.params["OptimizeUB"] = False
 
         self.check(
             self.params["MaxOrder"], ">=", 0, "MaxOrder must be non-negative"
@@ -185,9 +187,14 @@ class Integration(SubPlan):
 
             data.apply_mask("data", self.plan.get("MaskFile"))
 
-            # data.load_background(self.plan.get("BackgroundFile"), "data")
-
             data.load_clear_UB(self.plan["UBFile"], "data", run)
+
+            data.load_background(
+                self.plan.get("BackgroundFile"),
+                "data",
+                self.plan.get("DetectorCalibration"),
+                self.plan.get("TubeCalibration"),
+            )
 
             lamda_min, lamda_max = data.wavelength_band
 
@@ -203,7 +210,9 @@ class Integration(SubPlan):
 
             r_cut = self.params["Radius"]
 
-            data.convert_to_Q_sample("data", "md", lorentz_corr=True)
+            data.convert_to_Q_lab("data", "md")
+
+            # data.subtract_background("md", "data")
 
             peaks.predict_peaks(
                 "data",
@@ -220,28 +229,29 @@ class Integration(SubPlan):
                 for i in range(pk.get_number_peaks())
             }
 
-            ub = UBModel("peaks")
+            if self.params["OptimizeUB"]:
+                ub = UBModel("peaks")
 
-            Q_min, hkl_tol = ub.shortest_reciprocal_spacing(centering)
+                Q_min, hkl_tol = ub.shortest_reciprocal_spacing(centering)
 
-            result = peaks.scan_threshold("md", "peaks", Q_min)
+                result = peaks.scan_threshold("md", "peaks", Q_min)
 
-            scan_file = self.get_plot_file("run#{}_scan".format(run))
+                scan_file = self.get_plot_file("run#{}_scan".format(run))
 
-            scan_plot = ScanPlot(*result)
-            scan_plot.save_plot(scan_file)
+                scan_plot = ScanPlot(*result)
+                scan_plot.save_plot(scan_file)
 
-            opt = Optimization("peaks", tol=0.5 / np.cbrt(3))
-            opt.optimize_lattice("Fixed")
-            opt.optimize_lattice_only(cell)
+                opt = Optimization("peaks", tol=0.5 / np.cbrt(3))
+                opt.optimize_lattice("Fixed")
+                opt.optimize_lattice_only(cell)
 
-            ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
-            ub_file = os.path.splitext(ub_file)[0] + ".mat"
+                ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
+                ub_file = os.path.splitext(ub_file)[0] + ".mat"
 
-            ub = UBModel("peaks")
-            ub.save_UB(ub_file)
+                ub = UBModel("peaks")
+                ub.save_UB(ub_file)
 
-            data.load_clear_UB(ub_file, "data", run)
+                data.load_clear_UB(ub_file, "data", run)
 
             # ---
 
@@ -254,10 +264,10 @@ class Integration(SubPlan):
                 lamda_max,
             )
 
-            md_file = self.get_diagnostic_file("run#{}_data".format(run))
-            md_file = os.path.splitext(md_file)[0] + ".nxs"
+            # md_file = self.get_diagnostic_file("run#{}_data".format(run))
+            # md_file = os.path.splitext(md_file)[0] + ".nxs"
 
-            data.save_histograms(md_file, "md")
+            # data.save_histograms(md_file, "md")
 
             ub = UBModel("peaks")
             self.P = ub.centering_matrix(centering)
@@ -498,34 +508,6 @@ class Integration(SubPlan):
         v = v / np.linalg.norm(v)
         return tuple(np.round(v / tol).astype(int).tolist())
 
-    def voxel_weights(
-        self, Q0, Q1, Q2, c, neighbors, t_max=0.95, k_nearest=12
-    ):
-        weights = np.ones_like(Q2)
-
-        if neighbors:
-            dx = np.stack([Q0 - c[0], Q1 - c[1], Q2 - c[2]], axis=-1)
-
-            box_radius = np.sqrt(np.einsum("...i,...i->...", dx, dx).max())
-            deltas = np.array([q_j - c for q_j in neighbors])
-            dist_sqs = np.einsum("ji,ji->j", deltas, deltas)
-
-            nearby = dist_sqs < (2.0 * box_radius) ** 2
-            if nearby.any():
-                deltas = deltas[nearby]
-                dist_sqs = dist_sqs[nearby]
-
-                if len(dist_sqs) > k_nearest:
-                    idx = np.argpartition(dist_sqs, k_nearest)[:k_nearest]
-                    deltas = deltas[idx]
-                    dist_sqs = dist_sqs[idx]
-
-                dots = np.einsum("...i,ji->...j", dx, deltas)
-                t_all = np.clip(dots / (0.5 * dist_sqs), 0.0, t_max)
-                weights = (1.0 - t_all).min(axis=-1)
-
-        return weights
-
     def integrate_peaks(self, data):
         result = {}
 
@@ -544,6 +526,8 @@ class Integration(SubPlan):
                 projections,
                 c,
                 neighbors,
+                b,
+                m,
             ) = data_info
 
             (
@@ -565,7 +549,7 @@ class Integration(SubPlan):
             ellipsoid.set_resolution_sigma(*self.res_sigma, Q)
 
             args = (Q0, Q1, Q2, d, n, dQ, Q, weights)
-            fit_params = ellipsoid.fit(*args)
+            fit_params = ellipsoid.fit(*args, b=b, m=m)
 
             intens_params = None
             if fit_params is not None:
@@ -585,7 +569,7 @@ class Integration(SubPlan):
                 norm_params = Q0, Q1, Q2, d, n, c, S
 
                 try:
-                    intens, sig = ellipsoid.integrate(*norm_params)
+                    intens, sig = ellipsoid.integrate(*norm_params, b=b, m=m)
                 except Exception as e:
                     print("Exception extracting intensity: {}".format(e))
                     print(traceback.format_exc())
@@ -595,7 +579,7 @@ class Integration(SubPlan):
                 best_prof = ellipsoid.best_prof
                 best_proj = ellipsoid.best_proj
                 data_norm_fit = ellipsoid.data_norm_fit
-                redchi2 = ellipsoid.redchi2
+                reddev = ellipsoid.reddev
                 intensity = ellipsoid.intensity
                 sigma = ellipsoid.sigma
                 peak_background_mask = ellipsoid.peak_background_mask
@@ -620,7 +604,7 @@ class Integration(SubPlan):
                         hkl, d_spacing, wavelength, angles, goniometer
                     )
 
-                    self.peak_plot.add_peak_stats(redchi2, intensity, sigma)
+                    self.peak_plot.add_peak_stats(reddev, intensity, sigma)
 
                     self.peak_plot.add_data_norm_fit(*data_norm_fit)
 
@@ -749,6 +733,11 @@ class Integration(SubPlan):
             d, _, Q0, Q1, Q2 = data.extract_bin_info(bank_name + "_data")
             n, _, Q0, Q1, Q2 = data.extract_bin_info(bank_name + "_norm")
 
+            b, m = None, None
+            if data.workspace_exists(bank_name + "_data_bkg"):
+                b, *_ = data.extract_bin_info(bank_name + "_data_bkg")
+                m, *_ = data.extract_bin_info(bank_name + "_norm_bkg")
+
             data.check_volume_preservation(bank_name + "_result")
 
             peak_file = self.get_diagnostic_file(peak_name)
@@ -779,6 +768,8 @@ class Integration(SubPlan):
                 projections,
                 center,
                 neighbors,
+                b,
+                m,
             )
 
             peak_file = self.get_plot_file(peak_name)
@@ -834,106 +825,3 @@ class Integration(SubPlan):
 
             else:
                 peak.set_peak_intensity(i, 0, 0)
-
-    def bin_axes(self, R, two_theta, az_phi):
-        two_theta = np.deg2rad(two_theta)
-        az_phi = np.deg2rad(az_phi)
-
-        kf_hat = np.array(
-            [
-                np.sin(two_theta) * np.cos(az_phi),
-                np.sin(two_theta) * np.sin(az_phi),
-                np.cos(two_theta),
-            ]
-        )
-
-        ki_hat = np.array([0, 0, 1])
-
-        n = kf_hat - ki_hat
-        n /= np.linalg.norm(n)
-
-        u = kf_hat + ki_hat
-        u /= np.linalg.norm(u)
-
-        v = np.cross(n, u)
-        v /= np.linalg.norm(v)
-
-        return R.T @ n, R.T @ u, R.T @ v
-
-    def project_ellipsoid_parameters(self, params, projections):
-        W = np.column_stack(projections)
-
-        c0, c1, c2, r0, r1, r2, v0, v1, v2 = params
-
-        V = np.column_stack([v0, v1, v2])
-
-        return *np.dot(W.T, [c0, c1, c2]), r0, r1, r2, *np.dot(W.T, V).T
-
-    def revert_ellipsoid_parameters(self, params, projections):
-        W = np.column_stack(projections)
-
-        c0, c1, c2, r0, r1, r2, v0, v1, v2 = params
-
-        V = np.column_stack([v0, v1, v2])
-
-        return *np.dot(W, [c0, c1, c2]), r0, r1, r2, *np.dot(W, V).T
-
-    def transform_Q(self, Q0, Q1, Q2, projections):
-        W = np.column_stack(projections)
-
-        return np.einsum("ij,j...->i...", W, [Q0, Q1, Q2])
-
-    def bin_extent(
-        self,
-        UB,
-        hkl,
-        lamda,
-        R,
-        two_theta,
-        az_phi,
-        shape,
-        dQ,
-        bin_min=21,
-        bin_max=21,
-    ):
-        n, u, v = self.bin_axes(R, two_theta, az_phi)
-        projections = [n, u, v]
-
-        params = self.project_ellipsoid_parameters(shape, projections)
-
-        c0, c1, c2, r0, r1, r2, v0, v1, v2 = params
-
-        U = np.column_stack([v0, v1, v2])
-        V = np.diag([r0**2, r1**2, r2**2])
-
-        S = np.dot(np.dot(U, V), U.T)
-        r_cut = 3 * np.sqrt(np.diag(S))
-
-        r_cut = np.where(r_cut < 3 * dQ, 3 * dQ, r_cut)
-
-        W = np.column_stack(projections)
-        A = 2 * np.pi * (W.T @ UB)
-
-        miller_half_width = 0.5 * np.sum(np.abs(A), axis=1)
-        r_cut = np.minimum(r_cut, miller_half_width)
-
-        bins = np.clip(1 + np.floor(r_cut / dQ).astype(int), bin_min, bin_max)
-
-        Wp = np.linalg.inv(W.T @ (2 * np.pi * UB)).T
-        transform = Wp.tolist()
-
-        h, k, l = hkl
-
-        Q0, Q1, Q2 = A @ np.array([h, k, l])
-
-        extents = np.array(
-            [
-                [Q0 - r_cut[0], Q0 + r_cut[0]],
-                [Q1 - r_cut[1], Q1 + r_cut[1]],
-                [Q2 - r_cut[2], Q2 + r_cut[2]],
-            ]
-        )
-
-        conversion = A.copy()
-
-        return bins, extents, projections, transform, conversion

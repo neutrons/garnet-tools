@@ -660,7 +660,7 @@ class NuclearStructureRefinement:
 
             R = peak.getGoniometerMatrix()
 
-            if mnp.norm2() == 0 and I > 3 * sig and np.isfinite(I):
+            if mnp.norm2() == 0 and sig > 0 and I > 3 * sig and np.isfinite(I):
                 lamdas.append(lamda)
                 two_thetas.append(two_theta)
 
@@ -679,7 +679,7 @@ class NuclearStructureRefinement:
 
                 G.append(R)
 
-        scale_factor = 10000 / np.nanpercentile(intensity, 99)
+        scale_factor = 10000 / np.nanpercentile(np.abs(intensity), 99)
 
         unique = ReflectionGenerator(self.crystal_structure)
         unique = unique.getHKLsUsingFilter(
@@ -1632,7 +1632,7 @@ class NuclearStructureRefinement:
                 lim = [lim[0] * 0.9, lim[1] * 1.1]
 
                 ax.plot(lim, lim, "-")
-                ax.errorbar(ic, io, yerr=eo, fmt="o", rasterized=True)
+                ax.errorbar(ic, io, yerr=np.abs(eo), fmt="o", rasterized=True)
 
                 ax.set_xlim(*lim)
                 ax.set_ylim(*lim)

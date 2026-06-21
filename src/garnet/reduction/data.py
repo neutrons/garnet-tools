@@ -16,6 +16,7 @@ from mantid.simpleapi import (
     RebinToWorkspace,
     ApplyCalibration,
     Multiply,
+    Minus,
     Divide,
     Plus,
     PreprocessDetectorsToMD,
@@ -58,6 +59,7 @@ from mantid.simpleapi import (
     CloneWorkspace,
     PlusMD,
     MinusMD,
+    MultiplyMD,
     SaveMD,
     LoadMD,
     CreateMDHistoWorkspace,
@@ -2302,6 +2304,7 @@ class LaueData(BaseDataModel):
         detector_calibration=None,
         tube_calibration=None,
         save=False,
+        subtract=False,
     ):
         """
         Load a background file and scale to data.
@@ -2312,6 +2315,11 @@ class LaueData(BaseDataModel):
             Background file.
         event_name : str
             Name of raw event data.
+        subtract : bool
+            If True, scale background by run proton charge and subtract
+            directly from event_name (event-space subtraction, one-time
+            load kept as "bkg").  If False, restore original counts and
+            convert to Q-lab as "bkg_md" for use in normalization.
 
         """
 
@@ -2329,7 +2337,9 @@ class LaueData(BaseDataModel):
         n_det_inst //= cols // c * rows // r
         n_det_inst *= cols // c * rows // r
 
-        if not mtd.doesExist("bkg_md") and filename is not None:
+        guard_ws = "bkg" if subtract else "bkg_md"
+
+        if not mtd.doesExist(guard_ws) and filename is not None:
             Load(
                 Filename=filename,
                 OutputWorkspace="bkg",
@@ -2455,27 +2465,99 @@ class LaueData(BaseDataModel):
             if not mtd["bkg"].run().hasProperty("NormalizationFactor"):
                 NormaliseByCurrent(InputWorkspace="bkg", OutputWorkspace="bkg")
 
+            if not subtract:
+                CreateSingleValuedWorkspace(
+                    DataValue=pc_bkg, OutputWorkspace="pc_scale"
+                )
+
+                Multiply(
+                    LHSWorkspace="bkg",
+                    RHSWorkspace="pc_scale",
+                    OutputWorkspace="bkg",
+                )
+
+                DeleteWorkspace(Workspace="pc_scale")
+
+                mtd["bkg"].run()["NormalizationFactor"] = pc_bkg
+                mtd["bkg"].run()["gd_prtn_chrg"] = pc_bkg
+
+                self.convert_to_Q_lab("bkg", "bkg_md")
+
+                if save:
+                    SaveNexus(Filename="/tmp/bkg.nxs", InputWorkspace="bkg")
+
+                DeleteWorkspace(Workspace="bkg")
+
+            DeleteWorkspace(Workspace="_detectors")
+
+        if subtract and filename is not None and event_name is not None:
+            pc_run = mtd[event_name].run().getProtonCharge()
+
             CreateSingleValuedWorkspace(
-                DataValue=pc_bkg, OutputWorkspace="pc_scale"
+                DataValue=pc_run, OutputWorkspace="pc_run_scale"
             )
 
             Multiply(
                 LHSWorkspace="bkg",
-                RHSWorkspace="pc_scale",
-                OutputWorkspace="bkg",
+                RHSWorkspace="pc_run_scale",
+                OutputWorkspace="bkg_scaled",
             )
 
-            mtd["bkg"].run()["NormalizationFactor"] = pc_bkg
-            mtd["bkg"].run()["gd_prtn_chrg"] = pc_bkg
+            DeleteWorkspace(Workspace="pc_run_scale")
 
-            self.convert_to_Q_lab("bkg", "bkg_md")
+            sub_name = event_name + "_sub"
 
-            if save:
-                SaveNexus(Filename="/tmp/bkg.nxs", InputWorkspace="bkg")
+            Minus(
+                LHSWorkspace=event_name,
+                RHSWorkspace="bkg_scaled",
+                OutputWorkspace=sub_name,
+            )
 
-            DeleteWorkspace(Workspace="bkg")
+            DeleteWorkspace(Workspace="bkg_scaled")
 
-            DeleteWorkspace(Workspace="_detectors")
+            DeleteWorkspace(Workspace=event_name)
+
+            RenameWorkspace(
+                InputWorkspace=sub_name, OutputWorkspace=event_name
+            )
+
+    def subtract_background(self, md_name, event_name):
+        if not mtd.doesExist("bkg_md") or not mtd.doesExist(md_name):
+            return
+
+        pc_signal = mtd[event_name].run().getProtonCharge()
+        pc_bkg = (
+            mtd["bkg_md"]
+            .getExperimentInfo(0)
+            .run()
+            .getProperty("gd_prtn_chrg")
+            .value
+        )
+
+        if not (np.isfinite(pc_bkg) and pc_bkg > 0):
+            return
+
+        ratio = pc_signal / pc_bkg
+
+        CreateSingleValuedWorkspace(
+            DataValue=ratio, OutputWorkspace="pc_ratio"
+        )
+
+        MultiplyMD(
+            LHSWorkspace="bkg_md",
+            RHSWorkspace="pc_ratio",
+            OutputWorkspace="bkg_md_scaled",
+        )
+
+        DeleteWorkspace(Workspace="pc_ratio")
+
+        MinusMD(
+            LHSWorkspace=md_name,
+            RHSWorkspace="bkg_md_scaled",
+            OutputWorkspace=md_name,
+        )
+
+        DeleteWorkspace(Workspace="bkg_md_scaled")
 
     def normalize_to_hkl(self, md, projections, extents, bins, symmetry=None):
         """

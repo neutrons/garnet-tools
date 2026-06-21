@@ -1512,14 +1512,14 @@ class PeakPlot(BasePlot):
         ellip[4].set_title(r"$2\theta={:.2f}^\circ$".format(angles[0]))
         ellip[5].set_title(r"$\phi={:.2f}^\circ$".format(angles[1]))
 
-    def add_peak_stats(self, redchi2, intensity, sigma):
+    def add_peak_stats(self, reddev, intensity, sigma):
         """
         Add peak statistics.
 
         Parameters
         ----------
-        redchi2 : list
-            Reduced chi^2 per degree of freedom.
+        reddev : list
+            Reduced Poisson deviance D/dof per mode.
         intensity : list
             Integrated intensity.
         sigma : list
@@ -1527,27 +1527,27 @@ class PeakPlot(BasePlot):
 
         """
 
-        label = r"$I={}$ | $I/\sigma={:.1f}$ | $\chi^2_\nu={:.1f}$"
+        label = r"$I={}$ | $I/\sigma={:.1f}$ | $D_\nu={:.1f}$"
 
         self.prof[0].set_title(
             label.format(
                 self._sci_notation(intensity[0][0]),
                 intensity[0][0] / sigma[0][0],
-                redchi2[0][0],
+                reddev[0][0],
             )
         )
         self.prof[1].set_title(
             label.format(
                 self._sci_notation(intensity[0][1]),
                 intensity[0][1] / sigma[0][1],
-                redchi2[0][1],
+                reddev[0][1],
             )
         )
         self.prof[2].set_title(
             label.format(
                 self._sci_notation(intensity[0][2]),
                 intensity[0][2] / sigma[0][2],
-                redchi2[0][2],
+                reddev[0][2],
             )
         )
 
@@ -1561,14 +1561,14 @@ class PeakPlot(BasePlot):
             r"$I={}$".format(self._sci_notation(intensity[1][2]))
         )
 
-        self.proj[1].set_title(r"$\chi^2_\nu={:.1f}$".format(redchi2[1][0]))
-        self.proj[3].set_title(r"$\chi^2_\nu={:.1f}$".format(redchi2[1][1]))
-        self.proj[5].set_title(r"$\chi^2_\nu={:.1f}$".format(redchi2[1][2]))
+        self.proj[1].set_title(r"$D_\nu={:.1f}$".format(reddev[1][0]))
+        self.proj[3].set_title(r"$D_\nu={:.1f}$".format(reddev[1][1]))
+        self.proj[5].set_title(r"$D_\nu={:.1f}$".format(reddev[1][2]))
 
         self.ellip[0].set_title(
             r"$I={}$".format(self._sci_notation(intensity[2]))
         )
-        self.ellip[1].set_title(r"$\chi^2_\nu={:.1f}$".format(redchi2[2]))
+        self.ellip[1].set_title(r"$D_\nu={:.1f}$".format(reddev[2]))
 
         I_sig = "$I/\sigma={:.1f}$"
 

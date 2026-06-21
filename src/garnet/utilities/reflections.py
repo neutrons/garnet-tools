@@ -789,7 +789,25 @@ class Peaks:
 
         ol = mtd[self.peaks].sample().getOrientedLattice()
 
+        run_info = mtd[self.peaks].run()
+        run_keys = run_info.keys()
+        voxel_lookup = {}
+        if "peaks_n_vox" in run_keys and "peaks_d3x" in run_keys:
+            dh = run_info.getLogData("peaks_h").value
+            dk = run_info.getLogData("peaks_k").value
+            dl = run_info.getLogData("peaks_l").value
+            dm = run_info.getLogData("peaks_m").value
+            dn = run_info.getLogData("peaks_n").value
+            dp = run_info.getLogData("peaks_p").value
+            dr = run_info.getLogData("peaks_run").value
+            d_n_vox = run_info.getLogData("peaks_n_vox").value
+            d_d3x = run_info.getLogData("peaks_d3x").value
+            for j in range(len(dr)):
+                key = (dr[j], dh[j], dk[j], dl[j], dm[j], dn[j], dp[j])
+                voxel_lookup[key] = d_n_vox[j] * d_d3x[j]
+
         Q0_mod, log_fracs, wl, indices = [], [], [], []
+        vol_ell, vol_vox = [], []
 
         for i, peak in enumerate(mtd[self.peaks]):
             shape = peak.getPeakShape()
@@ -814,11 +832,16 @@ class Peaks:
                 continue
 
             h, k, l = [int(v) for v in peak.getIntHKL()]
+            m_int, n_int, p_int = [int(v) for v in peak.getIntMNP()]
             d0 = ol.d(h, k, l)
             Q0_mod.append(2 * np.pi / d0)
             log_fracs.append(np.log(vol_obs / vol_model))
             wl.append(peak.getWavelength())
             indices.append(i)
+
+            vol_ell.append(vol_obs)
+            vox_key = (peak.getRunNumber(), h, k, l, m_int, n_int, p_int)
+            vol_vox.append(voxel_lookup.get(vox_key, np.nan))
 
         if len(log_fracs) == 0:
             return
@@ -836,6 +859,9 @@ class Peaks:
             keep = np.ones(len(log_fracs), dtype=bool)
 
         filename = os.path.splitext(self.filename)[0]
+
+        vol_ell = np.array(vol_ell)
+        vol_vox = np.array(vol_vox)
 
         with PdfPages(filename + "_volfrac.pdf") as pdf:
             fig, ax = plt.subplots(layout="constrained")
@@ -855,6 +881,30 @@ class Peaks:
             ax.set_ylabel(r"$\ln(V_\mathrm{obs}/V_\mathrm{model})$")
             pdf.savefig(fig, dpi=300, bbox_inches=None)
             plt.close(fig)
+
+            if voxel_lookup:
+                valid = np.isfinite(vol_vox) & (vol_ell > 0)
+                if valid.any():
+                    lim = [0, np.nanmax(vol_ell[valid]) * 1.1]
+                    fig, ax = plt.subplots(layout="constrained")
+                    ax.plot(lim, lim, "-k", lw=0.8)
+                    sc = ax.scatter(
+                        vol_ell[valid],
+                        vol_vox[valid],
+                        c=np.array(wl)[valid],
+                        s=2,
+                        rasterized=True,
+                    )
+                    fig.colorbar(sc, ax=ax, label=r"$\lambda$ [\AA]")
+                    ax.set_xlim(*lim)
+                    ax.set_ylim(*lim)
+                    ax.set_aspect("equal")
+                    ax.minorticks_on()
+                    ax.set_xlabel(r"$V_\mathrm{ell}$ [\AA$^{-3}$]")
+                    ax.set_ylabel(r"$V_\mathrm{vox}$ [\AA$^{-3}$]")
+                    pdf.savefig(fig, dpi=300, bbox_inches=None)
+                    plt.close(fig)
+
             plt.close("all")
 
         for idx, flag in zip(indices, ~keep):

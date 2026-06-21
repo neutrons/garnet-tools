@@ -527,7 +527,7 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#garnet.plots.peaks.PeakPlot.add_peak_info" title="garnet.plots.peaks.PeakPlot.add_peak_info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_peak_info</span></code></a>(hkl, d, wavelength, angles, gon)</p></td>
 <td><p>Add peak information.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#garnet.plots.peaks.PeakPlot.add_peak_stats" title="garnet.plots.peaks.PeakPlot.add_peak_stats"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_peak_stats</span></code></a>(redchi2, intensity, sigma)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#garnet.plots.peaks.PeakPlot.add_peak_stats" title="garnet.plots.peaks.PeakPlot.add_peak_stats"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_peak_stats</span></code></a>(reddev, intensity, sigma)</p></td>
 <td><p>Add peak statistics.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#garnet.plots.peaks.PeakPlot.save_plot" title="garnet.plots.peaks.PeakPlot.save_plot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_plot</span></code></a>(filename)</p></td>
@@ -647,12 +647,12 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.plots.peaks.PeakPlot.add_peak_stats">
-<span class="sig-name descname"><span class="pre">add_peak_stats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">redchi2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">intensity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1515-L1587"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_peak_stats" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add_peak_stats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">reddev</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">intensity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1515-L1587"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_peak_stats" title="Link to this definition">#</a></dt>
 <dd><p>Add peak statistics.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
-<dt><strong>redchi2</strong><span class="classifier">list</span></dt><dd><p>Reduced chi^2 per degree of freedom.</p>
+<dt><strong>reddev</strong><span class="classifier">list</span></dt><dd><p>Reduced Poisson deviance D/dof per mode.</p>
 </dd>
 <dt><strong>intensity</strong><span class="classifier">list</span></dt><dd><p>Integrated intensity.</p>
 </dd>

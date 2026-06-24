@@ -16,7 +16,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["TBB_THREAD_ENABLED"] = "0"
 
-from garnet.plots.peaks import PeakPlot, ScanPlot
+from garnet.plots.peaks import PeakPlot
 from garnet.config.instruments import beamlines
 from garnet.reduction.ub import UBModel, Optimization, lattice_group
 from garnet.reduction.peaks import PeaksModel, PeakModel, centering_reflection
@@ -24,6 +24,7 @@ from garnet.reduction.ellipsoid import PeakEllipsoid
 from garnet.reduction.resolution import ResolutionEllipsoid
 from garnet.reduction.data import DataModel
 from garnet.reduction.intensity import IntegrationModel
+from garnet.reduction.estimator import PeakEstimator
 
 INTEGRATION = os.path.abspath(__file__)
 directory = os.path.dirname(INTEGRATION)
@@ -67,8 +68,6 @@ class Integration(IntegrationModel):
             self.params["MaxOrder"] = 0
         if self.params.get("CrossTerms") is None:
             self.params["CrossTerms"] = False
-        if self.params.get("ProfileFit") is None:
-            self.params["ProfileFit"] = True
         if self.params.get("OptimizeUB") is None:
             self.params["OptimizeUB"] = False
 
@@ -210,9 +209,7 @@ class Integration(IntegrationModel):
 
             r_cut = self.params["Radius"]
 
-            data.convert_to_Q_lab("data", "md")
-
-            # data.subtract_background("md", "data")
+            data.convert_to_Q_sample("data", "md")
 
             peaks.predict_peaks(
                 "data",
@@ -229,18 +226,42 @@ class Integration(IntegrationModel):
                 for i in range(pk.get_number_peaks())
             }
 
+            self.predict_add_satellite_peaks(lamda_min, lamda_max)
+
+            # rough integration for initial peak shapes
+            peaks.integrate_peaks(
+                "md",
+                "peaks",
+                r_cut / np.cbrt(3),
+                method="ellipsoid",
+                centroid=True,
+                update=False,
+            )
+
+            # minimal resolution model init (no apply/diagnostics yet)
+            res = ResolutionEllipsoid("peaks", r_cut=np.inf)
+            res.fit()
+
+            # refine centroids and resolution model on full Q-sample data
+            estimator = PeakEstimator()
+            estimator.collect_peaks("peaks", data, r_cut, "md")
+            estimator.estimate("peaks", res)
+            moment_covs = estimator.moment_covs
+
+            del estimator
+
+            data.delete_workspace("md")
+
+            # diagnostics from improved model
+            res_file = self.get_plot_file("run#{}_res".format(run))
+            self.res_sigma = res.estimate_prior_sigmas(moment_covs)
+            res.plot_diagnostics(res_file)
+
+            pk_file = self.get_diagnostic_file("run#{}_peaks".format(run))
+            peaks.save_peaks(pk_file, "peaks")
+
+            # UB refinement using estimator-refined centroids
             if self.params["OptimizeUB"]:
-                ub = UBModel("peaks")
-
-                Q_min, hkl_tol = ub.shortest_reciprocal_spacing(centering)
-
-                result = peaks.scan_threshold("md", "peaks", Q_min)
-
-                scan_file = self.get_plot_file("run#{}_scan".format(run))
-
-                scan_plot = ScanPlot(*result)
-                scan_plot.save_plot(scan_file)
-
                 opt = Optimization("peaks", tol=0.5 / np.cbrt(3))
                 opt.optimize_lattice("Fixed")
                 opt.optimize_lattice_only(cell)
@@ -253,8 +274,7 @@ class Integration(IntegrationModel):
 
                 data.load_clear_UB(ub_file, "data", run)
 
-            # ---
-
+            # re-predict with refined UB
             peaks.predict_peaks(
                 "data",
                 "peaks",
@@ -264,51 +284,15 @@ class Integration(IntegrationModel):
                 lamda_max,
             )
 
-            # md_file = self.get_diagnostic_file("run#{}_data".format(run))
-            # md_file = os.path.splitext(md_file)[0] + ".nxs"
+            self.predict_add_satellite_peaks(lamda_min, lamda_max)
 
-            # data.save_histograms(md_file, "md")
+            res.apply()
 
             ub = UBModel("peaks")
             self.P = ub.centering_matrix(centering)
 
             self.peaks, self.data = peaks, data
-
             self.r_cut = r_cut
-
-            self.predict_add_satellite_peaks(lamda_min, lamda_max)
-
-            peaks.integrate_peaks(
-                "md",
-                "peaks",
-                r_cut / np.cbrt(3),
-                method="ellipsoid",
-                centroid=True,
-                update=False,
-            )
-
-            pk_file = self.get_diagnostic_file("run#{}_peaks".format(run))
-
-            peaks.save_peaks(pk_file, "peaks")
-
-            res_file = self.get_plot_file("run#{}_res".format(run))
-
-            res = ResolutionEllipsoid("peaks", r_cut=np.inf)
-
-            res.fit()
-            res.plot_diagnostics(res_file)
-
-            self.res_sigma = res.estimate_prior_sigmas()
-
-            res.apply()
-
-            pk_file = self.get_diagnostic_file("run#{}_peaks".format(run))
-
-            peaks.save_peaks(pk_file, "peaks")
-
-            data.delete_workspace("md")
-
-            fit = self.params["ProfileFit"]
 
             banks = peaks.get_bank_names("peaks")
 
@@ -322,9 +306,7 @@ class Integration(IntegrationModel):
 
                 data.convert_to_Q_sample(bank, bank, False, bank + "_dets")
 
-                peak_dict = self.extract_peak_info(
-                    "peaks", r_cut, True, fit, bank
-                )
+                peak_dict = self.extract_peak_info("peaks", r_cut, bank=bank)
 
                 data.delete_workspace(bank)
 
@@ -586,11 +568,14 @@ class Integration(IntegrationModel):
                 integral = ellipsoid.integral
                 matched_filter = ellipsoid.filter
                 estimated_fit = ellipsoid.estimated_fit
+                bkg_prof = ellipsoid.best_bkg_prof
 
                 if self.make_plot:
                     self.peak_plot.add_ellipsoid_fit(best_fit)
 
                     self.peak_plot.add_profile_fit(best_prof)
+
+                    self.peak_plot.add_profile_bkg(bkg_prof)
 
                     self.peak_plot.add_projection_fit(best_proj)
 
@@ -734,9 +719,9 @@ class Integration(IntegrationModel):
             n, _, Q0, Q1, Q2 = data.extract_bin_info(bank_name + "_norm")
 
             b, m = None, None
-            if data.workspace_exists(bank_name + "_data_bkg"):
-                b, *_ = data.extract_bin_info(bank_name + "_data_bkg")
-                m, *_ = data.extract_bin_info(bank_name + "_norm_bkg")
+            if data.workspace_exists(bank_name + "_bkg_data"):
+                b, *_ = data.extract_bin_info(bank_name + "_bkg_data")
+                m, *_ = data.extract_bin_info(bank_name + "_bkg_norm")
 
             data.check_volume_preservation(bank_name + "_result")
 

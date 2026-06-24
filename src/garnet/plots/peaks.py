@@ -348,6 +348,7 @@ class PeakPlot(BasePlot):
         self.prof = []
         self.prof_error = []
         self.prof_step = []
+        self.prof_bkg_error = []
         self.prof_lp = []
         self.prof_rp = []
         self.prof_lb = []
@@ -378,9 +379,11 @@ class PeakPlot(BasePlot):
         self.prof_lb.append(vl)
         self.prof_rb.append(vr)
 
+        bkg_cont = ax.errorbar([], [], [], fmt="^", color="C2", zorder=0)
         error_cont = ax.errorbar(x, y, e, fmt="o", color="C0")
         step_line = ax.step(x, y, where="mid", color="C1")
 
+        self.prof_bkg_error.append(bkg_cont)
         self.prof_error.append(error_cont)
         self.prof_step.append(step_line)
 
@@ -409,9 +412,11 @@ class PeakPlot(BasePlot):
         self.prof_lb.append(vl)
         self.prof_rb.append(vr)
 
+        bkg_cont = ax.errorbar([], [], [], fmt="^", color="C2", zorder=0)
         error_cont = ax.errorbar(x, y, e, fmt="o", color="C0")
         step_line = ax.step(x, y, where="mid", color="C1")
 
+        self.prof_bkg_error.append(bkg_cont)
         self.prof_error.append(error_cont)
         self.prof_step.append(step_line)
 
@@ -440,9 +445,11 @@ class PeakPlot(BasePlot):
         self.prof_lb.append(vl)
         self.prof_rb.append(vr)
 
+        bkg_cont = ax.errorbar([], [], [], fmt="^", color="C2", zorder=0)
         error_cont = ax.errorbar(x, y, e, fmt="o", color="C0")
         step_line = ax.step(x, y, where="mid", color="C1")
 
+        self.prof_bkg_error.append(bkg_cont)
         self.prof_error.append(error_cont)
         self.prof_step.append(step_line)
 
@@ -828,6 +835,30 @@ class PeakPlot(BasePlot):
 
         self.prof[2].relim()
         self.prof[2].autoscale_view()
+
+    def add_profile_bkg(self, bkg_prof):
+        if bkg_prof is None:
+            for bkg_cont in self.prof_bkg_error:
+                lines, caps, bars = bkg_cont
+                lines.set_data([], [])
+                (barsy,) = bars
+                barsy.set_segments([])
+            return
+
+        for k, (x, y_bkg, e_bkg) in enumerate(bkg_prof):
+            lines, caps, bars = self.prof_bkg_error[k]
+            lines.set_data(x, y_bkg)
+
+            (barsy,) = bars
+            yb, yt = y_bkg - e_bkg, y_bkg + e_bkg
+            n = len(x)
+            segments = [
+                np.array([[x[i], yt[i]], [x[i], yb[i]]]) for i in range(n)
+            ]
+            barsy.set_segments(segments)
+
+            self.prof[k].relim()
+            self.prof[k].autoscale_view()
 
     def add_projection_fit(self, xye_fit):
         x1, x2, y_fit, y, e = xye_fit[0]

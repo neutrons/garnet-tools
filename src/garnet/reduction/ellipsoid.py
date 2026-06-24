@@ -750,7 +750,8 @@ class PeakEllipsoid:
             return r, dr_dmu, valid
 
         dv = d[valid]
-        muv = np.clip(mu[valid], eps, None)
+        mu_true = mu[valid]
+        muv = np.clip(mu_true, eps, None)
 
         term = muv - dv
         positive = dv > 0
@@ -766,6 +767,33 @@ class PeakEllipsoid:
         fv[near] = 1.0 / np.sqrt(muv[near])
         far = ~near
         fv[far] = (1.0 - dv[far] / muv[far]) / rv[far]
+
+        # For mu < 0: the eps-clip gives near-zero r and a gradient that pushes mu
+        # further negative.  Instead, evaluate the deviance at a small positive floor
+        # and extrapolate linearly to the true (negative) mu.  This gives a large
+        # negative residual — correct gradient direction — with a bounded Jacobian.
+        neg = mu_true < 0
+        if np.any(neg):
+            floor = 0.01
+            dv_neg = dv[neg]
+            muv_fl = np.full(neg.sum(), floor)
+            term_fl = muv_fl - dv_neg
+            pos_fl = dv_neg > 0
+            term_fl[pos_fl] += dv_neg[pos_fl] * np.log(
+                dv_neg[pos_fl] / muv_fl[pos_fl]
+            )
+            term_fl = np.maximum(term_fl, 0.0)
+            rv_fl = np.sign(muv_fl - dv_neg) * np.sqrt(2.0 * term_fl)
+            near_fl = np.isclose(muv_fl, dv_neg, rtol=1e-8, atol=1e-10) | (
+                np.abs(rv_fl) < 1e-10
+            )
+            fv_fl = np.where(
+                near_fl,
+                1.0 / np.sqrt(muv_fl),
+                (1.0 - dv_neg / muv_fl) / rv_fl,
+            )
+            rv[neg] = rv_fl + (mu_true[neg] - floor) * fv_fl
+            fv[neg] = fv_fl
 
         rv *= w[valid]
         fv *= w[valid]
@@ -1227,11 +1255,11 @@ class PeakEllipsoid:
         c2_err = self.params["c2"].stderr
 
         if c0_err is None:
-            c0_err = c0
+            c0_err = abs(c0) if c0 != 0 else self.prior_center_sigma[0]
         if c1_err is None:
-            c1_err = c1
+            c1_err = abs(c1) if c1 != 0 else self.prior_center_sigma[1]
         if c2_err is None:
-            c2_err = c2
+            c2_err = abs(c2) if c2 != 0 else self.prior_center_sigma[2]
 
         r0 = self.params["r0"].value
         r1 = self.params["r1"].value
@@ -1373,6 +1401,24 @@ class PeakEllipsoid:
             (x2[0, 0, :], *y1[2]),
         )
 
+        self.best_bkg_prof = None
+        scale = getattr(self, "_bkg_scale", None)
+        if bkg_1d is not None and scale is not None:
+            x_coords = (x0[:, 0, 0] + xmod, x1[0, :, 0], x2[0, 0, :])
+            bkg_prof = []
+            for x_k, b1d_k, n1d_k in zip(x_coords, bkg_1d, n1d):
+                b_raw_proj = b1d_k * scale
+                valid = (n1d_k > 0) & np.isfinite(n1d_k) & np.isfinite(b1d_k)
+                y_bkg = np.where(valid, b1d_k / n1d_k, np.nan)
+                e_bkg = np.where(
+                    valid,
+                    np.sqrt(np.clip(b_raw_proj, 0, None) + 1)
+                    / (scale * n1d_k),
+                    np.nan,
+                )
+                bkg_prof.append((x_k, y_bkg, e_bkg))
+            self.best_bkg_prof = bkg_prof
+
         self.best_proj = (
             (x1[0, :, :], x2[0, :, :], *y2[0]),
             (x0[:, 0, :] + xmod, x2[:, 0, :], *y2[1]),
@@ -1426,35 +1472,128 @@ class PeakEllipsoid:
 
         return i
 
-    def quick_gaussian(self, x0, x1, x2, d, n, mode="3d", bkg=None):
-        mask = n > 0
+    def _mode_mah2(self, x0, x1, x2, mode):
+        """
+        Mahalanobis² in the projected subspace, with output shape matching
+        profile_project output for the same mode.
 
-        if mask.sum() <= 3:
-            return None
+        1d_k  → shape (nk,)        along the single projected axis
+        2d_k  → shape (ni, nj)     in the plane perpendicular to axis k
+        3d    → shape (n0, n1, n2) full 3-D
+        """
+        c_est, S_est = self.estimated_fit
 
+        if mode == "3d":
+            dx = np.stack(
+                [x0 - c_est[0], x1 - c_est[1], x2 - c_est[2]], axis=-1
+            )
+            try:
+                return np.einsum(
+                    "...i,ij,...j->...", dx, np.linalg.inv(S_est), dx
+                )
+            except np.linalg.LinAlgError:
+                return np.full(x0.shape, np.inf)
+
+        elif mode == "1d_0":
+            xk = x0[:, 0, 0]
+            skk = S_est[0, 0]
+            return (
+                (xk - c_est[0]) ** 2 / skk
+                if skk > 0
+                else np.full(xk.shape, np.inf)
+            )
+
+        elif mode == "1d_1":
+            xk = x1[0, :, 0]
+            skk = S_est[1, 1]
+            return (
+                (xk - c_est[1]) ** 2 / skk
+                if skk > 0
+                else np.full(xk.shape, np.inf)
+            )
+
+        elif mode == "1d_2":
+            xk = x2[0, 0, :]
+            skk = S_est[2, 2]
+            return (
+                (xk - c_est[2]) ** 2 / skk
+                if skk > 0
+                else np.full(xk.shape, np.inf)
+            )
+
+        elif mode == "2d_0":
+            xa, xb = x1[0, :, :], x2[0, :, :]
+            ij = [1, 2]
+            dxs = np.stack([xa - c_est[1], xb - c_est[2]], axis=-1)
+        elif mode == "2d_1":
+            xa, xb = x0[:, 0, :], x2[:, 0, :]
+            ij = [0, 2]
+            dxs = np.stack([xa - c_est[0], xb - c_est[2]], axis=-1)
+        elif mode == "2d_2":
+            xa, xb = x0[:, :, 0], x1[:, :, 0]
+            ij = [0, 1]
+            dxs = np.stack([xa - c_est[0], xb - c_est[1]], axis=-1)
+        else:
+            return np.full(x0.shape, np.inf)
+
+        S_sub = S_est[np.ix_(ij, ij)]
+        try:
+            return np.einsum(
+                "...i,ij,...j->...", dxs, np.linalg.inv(S_sub), dxs
+            )
+        except np.linalg.LinAlgError:
+            return np.full(xa.shape, np.inf)
+
+    def quick_gaussian(self, x0, x1, x2, d, n, mode="3d", b=None, m=None):
         w = np.ones_like(n)
 
-        d_int, n_int, *_ = self.profile_project(x0, x1, x2, d, n, w, mode=mode)
+        d_proj, n_proj, _, _ = self.profile_project(
+            x0, x1, x2, d, n, w, mode=mode
+        )
 
-        y = d / n
-        y[~mask] = np.nan
+        valid = (n_proj > 0) & np.isfinite(d_proj) & np.isfinite(n_proj)
+        if valid.sum() <= 3:
+            return None
 
-        if bkg is not None:
-            bkg_norm = np.where(mask, bkg / n, np.nan)
-            y_net = y - bkg_norm
+        y = np.where(valid, d_proj / n_proj, np.nan)
+
+        if b is not None and m is not None:
+            scale = np.nanmedian(np.where(n > 0, m / n, np.nan))
+            if np.isfinite(scale) and scale > 0:
+                bkg_nc = self.project_background(
+                    np.where(np.isfinite(b), b / scale, 0.0), mode
+                )
+                bkg_rate_proj = np.where(n_proj > 0, bkg_nc / n_proj, 0.0)
+                bkg_valid = valid & np.isfinite(bkg_rate_proj)
+                y_net = np.where(bkg_valid, y - bkg_rate_proj, y)
+            else:
+                y_net = y
         else:
             y_net = y
 
-        B = np.nanpercentile(y_net, 5)
-        A = np.nanpercentile(y_net, 95) - B
+        mah2 = self._mode_mah2(x0, x1, x2, mode)
 
-        if np.isfinite(A):
+        peak_roi = valid & (mah2 <= 1.0)
+        bkg_shell = valid & (mah2 >= 4.0)
+
+        if bkg_shell.sum() >= 3:
+            B = float(np.nanmedian(y_net[bkg_shell]))
+        else:
+            B = float(np.nanpercentile(y_net[valid], 5))
+
+        src = peak_roi if peak_roi.sum() >= 3 else valid
+        A = float(np.nanpercentile(y_net[src], 95)) - B
+
+        if not np.isfinite(A):
             A = 1
         if not np.isfinite(B):
             B = 0
 
-        self.params.add("A" + mode, value=A, min=-np.inf, max=np.inf)
-        self.params.add("B" + mode, value=B, min=-np.inf, max=np.inf)
+        B = max(B, 0.0)
+        A = max(A, 0.0)
+
+        self.params.add("A" + mode, value=A, min=0, max=np.inf)
+        self.params.add("B" + mode, value=B, min=0, max=np.inf)
 
         return A > B
 
@@ -1467,7 +1606,8 @@ class PeakEllipsoid:
         n_int,
         wgt,
         report_fit=False,
-        bkg=None,
+        b=None,
+        m=None,
     ):
         d = d_int.copy()
         n = n_int.copy()
@@ -1504,9 +1644,9 @@ class PeakEllipsoid:
             x0, x1, x2, d, n, wgt, mode="1d_2"
         )
 
-        est1d_0 = self.quick_gaussian(x0, x1, x2, d, n, mode="1d_0", bkg=bkg)
-        est1d_1 = self.quick_gaussian(x0, x1, x2, d, n, mode="1d_1", bkg=bkg)
-        est1d_2 = self.quick_gaussian(x0, x1, x2, d, n, mode="1d_2", bkg=bkg)
+        est1d_0 = self.quick_gaussian(x0, x1, x2, d, n, mode="1d_0", b=b, m=m)
+        est1d_1 = self.quick_gaussian(x0, x1, x2, d, n, mode="1d_1", b=b, m=m)
+        est1d_2 = self.quick_gaussian(x0, x1, x2, d, n, mode="1d_2", b=b, m=m)
 
         if est1d_0 is None or est1d_1 is None or est1d_2 is None:
             return None
@@ -1515,12 +1655,22 @@ class PeakEllipsoid:
         n1d = [n1d_0, n1d_1, n1d_2]
         w1d = self.uniform_mode_weights(d1d, n1d, self.mode_weights_1d)
 
+        # scale = median(m/n) ≈ 1/k; b/scale converts background to signal units
+        bkg_counts_3d = None
+        if b is not None and m is not None:
+            scale = np.nanmedian(np.where(n > 0, m / n, np.nan))
+            if np.isfinite(scale) and scale > 0:
+                self._bkg_scale = scale
+                bkg_counts_3d = np.where(np.isfinite(b), b / scale, 0.0)
+            else:
+                self._bkg_scale = None
+
         bkg_1d = None
-        if bkg is not None:
+        if bkg_counts_3d is not None:
             bkg_1d = [
-                self.project_background(bkg, "1d_0"),
-                self.project_background(bkg, "1d_1"),
-                self.project_background(bkg, "1d_2"),
+                self.project_background(bkg_counts_3d, "1d_0"),
+                self.project_background(bkg_counts_3d, "1d_1"),
+                self.project_background(bkg_counts_3d, "1d_2"),
             ]
 
         args_1d = [x0, x1, x2, d1d, n1d, w1d, bkg_1d]
@@ -1543,9 +1693,9 @@ class PeakEllipsoid:
             x0, x1, x2, d, n, wgt, mode="2d_2"
         )
 
-        est2d_0 = self.quick_gaussian(x0, x1, x2, d, n, mode="2d_0", bkg=bkg)
-        est2d_1 = self.quick_gaussian(x0, x1, x2, d, n, mode="2d_1", bkg=bkg)
-        est2d_2 = self.quick_gaussian(x0, x1, x2, d, n, mode="2d_2", bkg=bkg)
+        est2d_0 = self.quick_gaussian(x0, x1, x2, d, n, mode="2d_0", b=b, m=m)
+        est2d_1 = self.quick_gaussian(x0, x1, x2, d, n, mode="2d_1", b=b, m=m)
+        est2d_2 = self.quick_gaussian(x0, x1, x2, d, n, mode="2d_2", b=b, m=m)
 
         if est2d_0 is None or est2d_1 is None or est2d_2 is None:
             return None
@@ -1555,11 +1705,11 @@ class PeakEllipsoid:
         w2d = self.uniform_mode_weights(d2d, n2d, self.mode_weights_2d)
 
         bkg_2d = None
-        if bkg is not None:
+        if bkg_counts_3d is not None:
             bkg_2d = [
-                self.project_background(bkg, "2d_0"),
-                self.project_background(bkg, "2d_1"),
-                self.project_background(bkg, "2d_2"),
+                self.project_background(bkg_counts_3d, "2d_0"),
+                self.project_background(bkg_counts_3d, "2d_1"),
+                self.project_background(bkg_counts_3d, "2d_2"),
             ]
 
         args_2d = [x0, x1, x2, d2d, n2d, w2d, bkg_2d]
@@ -1567,41 +1717,46 @@ class PeakEllipsoid:
         d3d, n3d, _, _ = self.profile_project(x0, x1, x2, d, n, wgt, mode="3d")
         w3d = self.uniform_mode_weights([d3d], [n3d], self.mode_weights_3d)[0]
 
-        est3d = self.quick_gaussian(x0, x1, x2, d, n, mode="3d", bkg=bkg)
+        est3d = self.quick_gaussian(x0, x1, x2, d, n, mode="3d", b=b, m=m)
 
         if est3d is None:
             return None
 
         bkg_3d = (
-            self.project_background(bkg, "3d") if bkg is not None else None
+            self.project_background(bkg_counts_3d, "3d")
+            if bkg_counts_3d is not None
+            else None
         )
 
         args_3d = [x0, x1, x2, d3d, n3d, w3d, bkg_3d]
 
+        n_iter = 30
+        n_loop = 3
+
         protocol = [False] * 9
-        n_iter = 30
 
         self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
-        self.update_adaptive_prior(args_1d, args_2d, args_3d)
+        for _ in range(n_loop):
+            self.update_adaptive_prior(args_1d, args_2d, args_3d)
 
-        protocol = [True] * 3 + [False] * 3 + [False] * 3
-        n_iter = 30
-
-        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
-
-        protocol = [False] * 3 + [True] * 3 + [False] * 3
-        n_iter = 30
-
-        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
-
-        amplitude, background = self.estimate_peak_strength()
-
-        if np.all(amplitude > background):
-            protocol = [False] * 3 + [True] * 3 + [True] * 3
-            n_iter = 30
+            protocol = [True] * 3 + [False] * 3 + [False] * 3
 
             self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
+
+            self.update_adaptive_prior(args_1d, args_2d, args_3d)
+
+            protocol = [False] * 3 + [True] * 3 + [False] * 3
+
+            self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
+
+            self.update_adaptive_prior(args_1d, args_2d, args_3d)
+
+            protocol = [False] * 3 + [False] * 3 + [True] * 3
+
+            self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
+
+            self.update_adaptive_prior(args_1d, args_2d, args_3d)
 
         return args_1d, args_2d, args_3d
 
@@ -1614,70 +1769,9 @@ class PeakEllipsoid:
         return amplitude, background
 
     def update_adaptive_prior(self, args_1d, args_2d, args_3d):
-        x0, x1, x2, d3d, n3d, *rest = args_3d
-        bkg_3d = rest[1] if len(rest) > 1 else None
-
-        c_prior, S_prior = self.estimated_fit
-        c0, c1, c2 = c_prior
-
-        # Shoebox half-widths: marginal std along each voxel axis
-        hw = np.sqrt(np.diag(S_prior))
-
-        pk = (
-            (np.abs(x0 - c0) <= hw[0])
-            & (np.abs(x1 - c1) <= hw[1])
-            & (np.abs(x2 - c2) <= hw[2])
-        )
-
-        # Background shell: 1-pixel-wide border just outside the peak box
-        dx0, dx1, dx2 = self.voxels(x0, x1, x2)
-        hw_bkg = hw + np.array([dx0, dx1, dx2])
-        outer = (
-            (np.abs(x0 - c0) <= hw_bkg[0])
-            & (np.abs(x1 - c1) <= hw_bkg[1])
-            & (np.abs(x2 - c2) <= hw_bkg[2])
-        )
-        bkg_shell = outer & ~pk
-
-        observed = n3d > 0
-        pk_obs = pk & observed
-        bkg_obs = bkg_shell & observed
-
-        n_pk = pk_obs.sum()
-
-        if n_pk == 0:
-            scale = self.prior_strength_from_sn(1.0)
-            self.lamda_cov = scale
-            self.lamda_center = scale / 10
-            return
-
-        pk_counts = np.nansum(d3d[pk_obs])
-
-        if bkg_3d is not None:
-            bkg_pk = np.nansum(bkg_3d[pk_obs])
-            intens = pk_counts - bkg_pk
-            sig = np.sqrt(np.abs(pk_counts) + np.abs(bkg_pk))
-            sn = intens / sig if sig > 0 else 1.0
-        else:
-            n_bkg = bkg_obs.sum()
-            if n_bkg == 0:
-                scale = self.prior_strength_from_sn(1.0)
-                self.lamda_cov = scale
-                self.lamda_center = scale / 10
-                return
-
-            n_pk_sum = np.nansum(n3d[pk_obs])
-            n_bkg_sum = np.nansum(n3d[bkg_obs])
-            ratio = n_pk_sum / n_bkg_sum if n_bkg_sum > 0 else n_pk / n_bkg
-
-            bkg_counts = np.nansum(d3d[bkg_obs])
-            intens = pk_counts - ratio * bkg_counts
-            sig = np.sqrt(np.abs(pk_counts) + ratio**2 * np.abs(bkg_counts))
-            sn = intens / sig if sig > 0 else 1.0
-
+        sn = self._isig_3d(self.params, args_3d)
         scale = self.prior_strength_from_sn(sn)
-
-        self.lamda_cov = scale
+        self.lamda_cov = scale / 10
         self.lamda_center = scale / 10
 
     def safe_sn(self, sn, floor=1.0, ceiling=1e4):
@@ -1757,9 +1851,6 @@ class PeakEllipsoid:
             nan_policy="omit",
         )
 
-        ssr_before = np.nansum(
-            self.residual(self.params, args_1d, args_2d, args_3d) ** 2
-        )
         isig_before = self._isig_3d(self.params, args_3d)
 
         result = out.minimize(
@@ -1771,12 +1862,9 @@ class PeakEllipsoid:
         if report_fit:
             print(fit_report(result))
 
-        ssr_after = np.nansum(
-            self.residual(result.params, args_1d, args_2d, args_3d) ** 2
-        )
         isig_after = self._isig_3d(result.params, args_3d)
 
-        if ssr_after < ssr_before and isig_after >= isig_before:
+        if isig_after >= isig_before:
             self.params = result.params
 
     def calculate_intensity(self, A, H, r0, r1, r2, u0, u1, u2, mode="3d"):
@@ -1837,20 +1925,14 @@ class PeakEllipsoid:
             elapsed = time.perf_counter() - fit_start
             print("fit [{}] {:.3f}s".format(outcome, elapsed))
 
+        self._fit_xmod = xmod
+
         x0 = x0_prof - xmod
         x1 = x1_proj.copy()
         x2 = x2_proj.copy()
 
         d_val = d.copy()
         n_val = n.copy()
-
-        bkg = None
-        if b is not None and m is not None:
-            bkg = np.where(
-                np.isfinite(b) & np.isfinite(m) & (m > 0),
-                n_val * b / m,
-                0.0,
-            )
 
         y = d_val / n_val
         e = np.sqrt(np.clip(d_val, 0, None) + 1) / n_val
@@ -1874,14 +1956,18 @@ class PeakEllipsoid:
         i0, i1, i2 = coords.min(axis=0)
         j0, j1, j2 = coords.max(axis=0) + 1
 
+        self._fit_crop = (i0, j0, i1, j1, i2, j2)
+
         y = y[i0:j0, i1:j1, i2:j2].copy()
         e = e[i0:j0, i1:j1, i2:j2].copy()
 
         d_val = d_val[i0:j0, i1:j1, i2:j2].copy()
         n_val = n_val[i0:j0, i1:j1, i2:j2].copy()
 
-        if bkg is not None:
-            bkg = bkg[i0:j0, i1:j1, i2:j2].copy()
+        if b is not None:
+            b = b[i0:j0, i1:j1, i2:j2].copy()
+        if m is not None:
+            m = m[i0:j0, i1:j1, i2:j2].copy()
 
         if (np.array(y.shape) <= 3).any():
             log_fit_time("small-cropped-shape")
@@ -1903,7 +1989,7 @@ class PeakEllipsoid:
         weights = None
         try:
             weights = self.estimate_envelope(
-                x0, x1, x2, d_val, n_val, voxel_weights, bkg=bkg
+                x0, x1, x2, d_val, n_val, voxel_weights, b=b, m=m
             )
         except Exception as e:
             print("Exception estimating envelope: {}".format(e))
@@ -1980,10 +2066,10 @@ class PeakEllipsoid:
         d_bkg = d[bkg].copy()
 
         pk_intens = np.nansum(d_pk)
-        pk_err = np.sqrt(pk_intens)
+        pk_err = np.sqrt(max(pk_intens, 0.0))
 
         bkg_intens = np.nansum(d_bkg)
-        bkg_err = np.sqrt(bkg_intens)
+        bkg_err = np.sqrt(max(bkg_intens, 0.0))
 
         vol_pk = pk.sum()
         vol_bkg = bkg.sum()
@@ -1999,10 +2085,18 @@ class PeakEllipsoid:
         return intens, sig
 
     def extract_intensity(
-        self, d, n, pk, bkg, kernel, vol_frac=1.0, bkg_meas=None
+        self,
+        d,
+        n,
+        pk,
+        bkg,
+        kernel,
+        vol_frac=1.0,
+        bkg_meas=None,
+        bkg_var_meas=None,
     ):
         core = pk & (n > 0)
-        shell = bkg & (n >= 0)
+        shell = bkg & (n > 0)
 
         d_pk = d[core].copy()
         d_bkg = d[shell].copy()
@@ -2027,8 +2121,16 @@ class PeakEllipsoid:
         vol = k_pk.sum()
 
         if bkg_meas is not None:
-            bkg_cnts = np.nansum(bkg_meas[core] * k_pk)
+            bkg_cnts = np.nansum(bkg_meas[pk])
             bkg_norm = pk_norm
+
+            # Var(bkg_cnts) = sum(n^2 * b / m^2); falls back to |bkg_cnts| if
+            # exact per-voxel variance not available (assumes n/m = 1)
+            bkg_variance = (
+                np.nansum(bkg_var_meas[pk])
+                if bkg_var_meas is not None
+                else np.abs(bkg_cnts)
+            )
 
             b = (
                 bkg_cnts / bkg_norm
@@ -2036,13 +2138,13 @@ class PeakEllipsoid:
                 else 0.0
             )
             b_err = (
-                np.sqrt(np.abs(bkg_cnts)) / bkg_norm
+                np.sqrt(bkg_variance) / bkg_norm
                 if np.isfinite(bkg_norm) and bkg_norm > 0
                 else 0.0
             )
 
             raw_intens = pk_cnts - bkg_cnts
-            raw_sig = np.sqrt(np.abs(pk_cnts) + np.abs(bkg_cnts))
+            raw_sig = np.sqrt(np.abs(pk_cnts) + bkg_variance)
 
             ratio = 1.0
         else:
@@ -2113,7 +2215,7 @@ class PeakEllipsoid:
             neg_ll,
             [I0, b0],
             method="L-BFGS-B",
-            bounds=[(0.0, None), (None, None)],
+            bounds=[(0.0, None), (0.0, None)],
         )
 
         I, b = res.x
@@ -2153,11 +2255,7 @@ class PeakEllipsoid:
         bkg_1d = None
         bkg_norm = None
         if bkg_meas is not None:
-            bkg_1d = np.where(
-                np.isfinite(bkg_meas),
-                np.nansum(bkg_meas, axis=(1, 2)),
-                0.0,
-            )
+            bkg_1d = np.nansum(bkg_meas, axis=(1, 2))
             bkg_norm = np.where(n_int > 0, bkg_1d / n_int, 0.0)
 
         y = d_int / n_int
@@ -2192,6 +2290,55 @@ class PeakEllipsoid:
 
         return I, I_err, b, x, y_fit, y, e
 
+    def background_profile(self, x0, x1, x2, d, n, b, m):
+        """
+        Projected 1D background intensity and Poisson uncertainty for each axis,
+        cropped to the same region as the fit so x values match best_prof.
+
+        Returns
+        -------
+        list of 3 tuples (x, y_bkg, e_bkg), one per axis, or None if unavailable.
+        """
+        if b is None or m is None:
+            return None
+
+        # crop to the fit region so x coordinates align with best_prof
+        if hasattr(self, "_fit_crop"):
+            i0, j0, i1, j1, i2, j2 = self._fit_crop
+            x0 = x0[i0:j0, i1:j1, i2:j2]
+            x1 = x1[i0:j0, i1:j1, i2:j2]
+            x2 = x2[i0:j0, i1:j1, i2:j2]
+            d = d[i0:j0, i1:j1, i2:j2]
+            n = n[i0:j0, i1:j1, i2:j2]
+            b = b[i0:j0, i1:j1, i2:j2]
+            m = m[i0:j0, i1:j1, i2:j2]
+
+        scale = np.nanmedian(np.where(n > 0, m / n, np.nan))
+        if not (np.isfinite(scale) and scale > 0):
+            return None
+
+        w = np.ones_like(n)
+        coords = (x0[:, 0, 0], x1[0, :, 0], x2[0, 0, :])
+        result = []
+
+        for mode, x_coord in zip(("1d_0", "1d_1", "1d_2"), coords):
+            _, n_proj, _, _ = self.profile_project(
+                x0, x1, x2, d, n, w, mode=mode
+            )
+            b_proj = self.project_background(b, mode)
+
+            valid = (n_proj > 0) & np.isfinite(n_proj) & np.isfinite(b_proj)
+            denom = np.where(valid, scale * n_proj, np.nan)
+
+            y_bkg = np.where(valid, b_proj / denom, np.nan)
+            e_bkg = np.where(
+                valid, np.sqrt(np.clip(b_proj, 0, None) + 1) / denom, np.nan
+            )
+
+            result.append((x_coord, y_bkg, e_bkg))
+
+        return result
+
     def integrate(self, x0, x1, x2, d, n, c, S, b=None, m=None):
         dx0, dx1, dx2 = self.voxels(x0, x1, x2)
 
@@ -2204,11 +2351,13 @@ class PeakEllipsoid:
         n[np.isinf(n)] = np.nan
 
         bkg_meas = None
+        bkg_var_meas = None
         if b is not None and m is not None:
-            bkg_meas = np.where(
-                np.isfinite(b) & np.isfinite(m) & (m > 0),
-                n * b / m,
-                0.0,
+            valid_bkg = np.isfinite(b) & np.isfinite(m) & (m > 0)
+            bkg_meas = np.where(valid_bkg, n * b / m, 0.0)
+            # Per-voxel Poisson variance of the ratio estimator: Var(n*b/m) = n^2*b/m^2
+            bkg_var_meas = np.where(
+                valid_bkg, n**2 * np.maximum(b, 0.0) / m**2, 0.0
             )
 
         pk, bkg, mask, kernel = self.peak_roi(x0, x1, x2, c, S, 1)
@@ -2224,7 +2373,7 @@ class PeakEllipsoid:
         vol_frac = min(kernel_prior[core_prior].sum() * d3x / 0.997, 1.0)
 
         result = self.extract_intensity(
-            d, n, pk, bkg, kernel, vol_frac, bkg_meas
+            d, n, pk, bkg, kernel, vol_frac, bkg_meas, bkg_var_meas
         )
 
         intens, sig, b, b_err, N, vol_frac, n_vox, *data_norm = result
@@ -2239,8 +2388,13 @@ class PeakEllipsoid:
 
         self.weights = (x0[pk], x1[pk], x2[pk]), d[pk].copy()
 
-        y = d / n
-        e = np.sqrt(np.clip(d, 0, None) + 1) / n
+        y = np.divide(d, n, out=np.full_like(d, np.nan), where=n > 0)
+        e = np.divide(
+            np.sqrt(np.clip(d, 0, None) + 1),
+            n,
+            out=np.full_like(d, np.nan),
+            where=n > 0,
+        )
 
         intens_raw, sig_raw = self.extract_raw_intensity(d, pk, bkg)
 

@@ -1,11 +1,18 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.stats
 
 from mantid.simpleapi import mtd
 from mantid.kernel import V3D
 from mantid.dataobjects import PeakShapeEllipsoid
 
 from scipy.optimize import nnls
+
+# r0,r1,r2 stored in the peak workspace are 99.7% containment radii,
+# matching the convention in ellipsoid.py (S_matrix = U diag(r²) U.T,
+# mah²≤1 ↔ 99.7% ellipsoid).
+_CHI2_SCALE_3D = scipy.stats.chi2.ppf(0.997, df=3)  # ≈ 14.16
+_R_SCALE = np.sqrt(_CHI2_SCALE_3D)  # ≈ 3.76
 
 
 class ResolutionEllipsoid:
@@ -127,14 +134,17 @@ class ResolutionEllipsoid:
         ws.getPeak(no).setPeakShape(shape)
 
     def _covariance_from_ellipsoid(self, radii, V):
-        return V @ np.diag(np.asarray(radii, dtype=float) ** 2) @ V.T
+        # radii are 99.7% containment radii; divide by _R_SCALE to get sigma
+        sigma = np.asarray(radii, dtype=float) / _R_SCALE
+        return V @ np.diag(sigma**2) @ V.T
 
     def _ellipsoid_from_covariance(self, cov):
         cov = 0.5 * (cov + cov.T)
 
         W, V = np.linalg.eigh(cov)
 
-        radii = np.sqrt(W)
+        # convert 1-sigma eigenvalues to 99.7% containment radii
+        radii = np.sqrt(np.maximum(W, 0.0)) * _R_SCALE
         V = self._normalize_columns(V)
 
         if np.linalg.det(V) < 0:
@@ -290,6 +300,10 @@ class ResolutionEllipsoid:
         A x ~= y, x >= 0
         """
 
+        finite = np.all(np.isfinite(A), axis=1) & np.isfinite(y)
+        A = A[finite]
+        y = y[finite]
+
         # initial unweighted fit
         x, _ = nnls(A, y)
 
@@ -332,7 +346,7 @@ class ResolutionEllipsoid:
 
         for i, peak in enumerate(ws):
             sig_noise = peak.getIntensityOverSigma()
-            if sig_noise < self.sig_noise_cut:
+            if not np.isfinite(sig_noise) or sig_noise < self.sig_noise_cut:
                 continue
 
             two_theta = peak.getScattering()
@@ -352,6 +366,9 @@ class ResolutionEllipsoid:
 
             radii_s, V_s = self._get_peak_shape(ws, i, self.r_cut)
 
+            if not np.all(np.isfinite(radii_s)) or np.any(radii_s <= 0):
+                continue
+
             V_lab = self._sample_axes_to_lab(R, V_s)
             V_lab = self._normalize_columns(V_lab)
 
@@ -363,11 +380,20 @@ class ResolutionEllipsoid:
 
             Q = self._Q_magnitude(two_theta, lamda)
 
+            if not (np.isfinite(Q) and Q > 0):
+                continue
+
             w = sig_noise / Q**2
+
+            if not (np.all(np.isfinite(y_p)) and np.all(np.isfinite(A_p))):
+                continue
 
             A_blocks.append(w * A_p)
             y_blocks.append(w * y_p)
             used.append(i)
+
+        if not A_blocks:
+            return
 
         A = np.vstack(A_blocks)
         y = np.concatenate(y_blocks)
@@ -429,55 +455,86 @@ class ResolutionEllipsoid:
         cov_s = R.T @ cov_lab @ R
         return 0.5 * (cov_s + cov_s.T)
 
-    def estimate_prior_sigmas(self):
+    def estimate_prior_sigmas(self, moment_covs=None):
+        """
+        Estimate prior width for covariance and centroid parameters.
+
+        Parameters
+        ----------
+        moment_covs : dict or None
+            {peak_index: (3,3) sample-frame empirical covariance} from
+            PeakEstimator.moment_covs.  When provided these true data-driven
+            observations are used instead of the peak shapes in the workspace
+            (which are set by res.apply() and are trivially 1:1 with the model).
+        """
         if self.model is None:
             raise RuntimeError("Call fit() before estimate_prior_sigmas().")
 
         ws = mtd[self.peaks_ws]
-        cov_dev_vecs = []
+        cov_obs_vecs = []
         offset_vecs = []
 
-        for i in self.model["used_peaks"]:
-            peak = ws.getPeak(i)
-            R = peak.getGoniometerMatrix()
+        cov_indices = (
+            list(moment_covs.keys())
+            if moment_covs is not None
+            else self.model["used_peaks"]
+        )
 
+        moment_cov_obs = {}  # peak_index -> C_w (S-W frame, un-normalised)
+
+        for i in cov_indices:
+            peak = ws.getPeak(i)
+            R = np.array(peak.getGoniometerMatrix()).reshape(3, 3)
             Q_mag = np.linalg.norm(np.array(peak.getQLabFrame()))
             if Q_mag == 0:
                 continue
 
-            radii, V_s = self._get_peak_shape(ws, i, self.r_cut)
-            V_lab = self._sample_axes_to_lab(R, V_s)
-            cov_obs = self._covariance_from_ellipsoid(radii, V_lab)
-            cov_obs = 0.5 * (cov_obs + cov_obs.T)
-            cov_pred = self._predict_cov_lab(peak)
-
             T = self._stoica_wilkinson_transform_from_peak(peak)
 
-            dC = cov_obs - cov_pred
-            dC_w = T @ dC @ T.T
-            cov_dev_vecs.append(
-                [
-                    dC_w[0, 0],
-                    dC_w[1, 1],
-                    dC_w[2, 2],
-                    dC_w[1, 2],
-                    dC_w[0, 2],
-                    dC_w[0, 1],
-                ]
+            if moment_covs is not None:
+                cov_lab = R @ moment_covs[i] @ R.T
+            else:
+                radii, V_s = self._get_peak_shape(ws, i, self.r_cut)
+                V_lab = self._sample_axes_to_lab(R, V_s)
+                cov_lab = self._covariance_from_ellipsoid(radii, V_lab)
+
+            cov_lab = 0.5 * (cov_lab + cov_lab.T)
+            C_w = T @ cov_lab @ T.T
+            moment_cov_obs[i] = C_w
+
+            cov_obs_vecs.append(
+                np.array(
+                    [
+                        C_w[0, 0],
+                        C_w[1, 1],
+                        C_w[2, 2],
+                        C_w[1, 2],
+                        C_w[0, 2],
+                        C_w[0, 1],
+                    ]
+                )
+                / Q_mag**2
             )
 
+        self._moment_cov_obs = moment_cov_obs
+
+        for i in self.model["used_peaks"]:
+            peak = ws.getPeak(i)
+            R = peak.getGoniometerMatrix()
+            Q_mag = np.linalg.norm(np.array(peak.getQLabFrame()))
+            if Q_mag == 0:
+                continue
+            T = self._stoica_wilkinson_transform_from_peak(peak)
             offset_s = self._get_peak_offset(ws, i)
-            offset_vecs.append(T @ (R @ offset_s))
+            offset_vecs.append(T @ (R @ offset_s) / Q_mag)
 
-            # Normalise by Q so stored sigmas are fractional (σ/Q, σ/Q²)
-            cov_dev_vecs[-1] = np.array(cov_dev_vecs[-1]) / Q_mag**2
-            offset_vecs[-1] = np.array(offset_vecs[-1]) / Q_mag
-
-        cov_dev_vecs = np.array(cov_dev_vecs)  # (n_peaks, 6)
+        cov_obs_vecs = np.array(cov_obs_vecs)  # (n_peaks, 6)
         offset_vecs = np.array(offset_vecs)  # (n_peaks, 3)
 
-        self.prior_cov_sigma = np.sqrt(np.mean(cov_dev_vecs**2, axis=0))
+        self.prior_cov_sigma = np.sqrt(np.mean(cov_obs_vecs**2, axis=0))
         self.prior_center_sigma = np.sqrt(np.mean(offset_vecs**2, axis=0))
+
+        self._offset_vecs = offset_vecs
 
         return self.prior_center_sigma, self.prior_cov_sigma
 
@@ -488,22 +545,26 @@ class ResolutionEllipsoid:
         ws = mtd[self.peaks_ws]
         rows = []
 
+        moment_cov_obs = getattr(self, "_moment_cov_obs", {})
+
         for i in self.model["used_peaks"]:
             peak = ws.getPeak(i)
 
             R = peak.getGoniometerMatrix()
 
-            radii, V_sample = self._get_peak_shape(ws, i, self.r_cut)
-            V_lab = self._sample_axes_to_lab(R, V_sample)
-
-            cov_lab_obs = self._covariance_from_ellipsoid(radii, V_lab)
-            cov_lab_obs = 0.5 * (cov_lab_obs + cov_lab_obs.T)
-
             cov_lab_pred = self._predict_cov_lab(peak)
 
             T = self._stoica_wilkinson_transform_from_peak(peak)
 
-            cov_w_obs = T @ cov_lab_obs @ T.T
+            if i in moment_cov_obs:
+                cov_w_obs = moment_cov_obs[i]
+            else:
+                radii, V_sample = self._get_peak_shape(ws, i, self.r_cut)
+                V_lab = self._sample_axes_to_lab(R, V_sample)
+                cov_lab_obs = self._covariance_from_ellipsoid(radii, V_lab)
+                cov_lab_obs = 0.5 * (cov_lab_obs + cov_lab_obs.T)
+                cov_w_obs = T @ cov_lab_obs @ T.T
+
             cov_w_pred = T @ cov_lab_pred @ T.T
 
             # Project translation offset along predicted ellipsoid axes

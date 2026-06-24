@@ -510,7 +510,7 @@
 <span id="garnet-plots-peaks-module"></span><h2>garnet.plots.peaks module<a class="headerlink" href="#module-garnet.plots.peaks" title="Link to this heading">#</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="garnet.plots.peaks.PeakPlot">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">PeakPlot</span></span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L42-L1595"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">PeakPlot</span></span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L42-L1626"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#garnet.plots.base.BasePlot" title="garnet.plots.base.BasePlot"><code class="xref py py-class docutils literal notranslate"><span class="pre">BasePlot</span></code></a></p>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
@@ -550,13 +550,16 @@
 <tr class="row-odd"><td><p><strong>add_integral_fit</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>add_profile_fit</strong></p></td>
+<tr class="row-even"><td><p><strong>add_profile_bkg</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>add_projection_fit</strong></p></td>
+<tr class="row-odd"><td><p><strong>add_profile_fit</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>close</strong></p></td>
+<tr class="row-even"><td><p><strong>add_projection_fit</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p><strong>close</strong></p></td>
 <td></td>
 </tr>
 </tbody>
@@ -564,12 +567,12 @@
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.plots.peaks.PeakPlot.add_data_norm_fit">
-<span class="sig-name descname"><span class="pre">add_data_norm_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xye</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L920-L1002"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_data_norm_fit" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add_data_norm_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xye</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L951-L1033"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_data_norm_fit" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.plots.peaks.PeakPlot.add_ellipsoid">
-<span class="sig-name descname"><span class="pre">add_ellipsoid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">c</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">S</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1121-L1219"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_ellipsoid" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add_ellipsoid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">c</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">S</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1152-L1250"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_ellipsoid" title="Link to this definition">#</a></dt>
 <dd><p>Draw ellipsoid envelopes.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -585,7 +588,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.plots.peaks.PeakPlot.add_ellipsoid_fit">
-<span class="sig-name descname"><span class="pre">add_ellipsoid_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xye_fit</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1030-L1119"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_ellipsoid_fit" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add_ellipsoid_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xye_fit</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1061-L1150"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_ellipsoid_fit" title="Link to this definition">#</a></dt>
 <dd><p>Three-dimensional ellipsoids.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -599,7 +602,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.plots.peaks.PeakPlot.add_estimated_ellipsoid">
-<span class="sig-name descname"><span class="pre">add_estimated_ellipsoid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">c</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">S</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1221-L1266"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_estimated_ellipsoid" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add_estimated_ellipsoid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">c</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">S</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1252-L1297"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_estimated_ellipsoid" title="Link to this definition">#</a></dt>
 <dd><p>Draw estimated ellipsoid envelopes on ROI views.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -615,17 +618,17 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.plots.peaks.PeakPlot.add_filter">
-<span class="sig-name descname"><span class="pre">add_filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L758-L765"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_filter" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add_filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L765-L772"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_filter" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.plots.peaks.PeakPlot.add_integral_fit">
-<span class="sig-name descname"><span class="pre">add_integral_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xye_fit</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L737-L756"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_integral_fit" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add_integral_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xye_fit</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L744-L763"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_integral_fit" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.plots.peaks.PeakPlot.add_peak_info">
-<span class="sig-name descname"><span class="pre">add_peak_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hkl</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">d</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wavelength</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">angles</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gon</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1486-L1513"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_peak_info" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add_peak_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hkl</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">d</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wavelength</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">angles</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gon</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1517-L1544"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_peak_info" title="Link to this definition">#</a></dt>
 <dd><p>Add peak information.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -647,7 +650,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.plots.peaks.PeakPlot.add_peak_stats">
-<span class="sig-name descname"><span class="pre">add_peak_stats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">reddev</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">intensity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1515-L1587"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_peak_stats" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add_peak_stats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">reddev</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">intensity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1546-L1618"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_peak_stats" title="Link to this definition">#</a></dt>
 <dd><p>Add peak statistics.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -664,18 +667,23 @@
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="garnet.plots.peaks.PeakPlot.add_profile_bkg">
+<span class="sig-name descname"><span class="pre">add_profile_bkg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bkg_prof</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L839-L861"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_profile_bkg" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="garnet.plots.peaks.PeakPlot.add_profile_fit">
-<span class="sig-name descname"><span class="pre">add_profile_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xye_fit</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L767-L830"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_profile_fit" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add_profile_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xye_fit</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L774-L837"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_profile_fit" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.plots.peaks.PeakPlot.add_projection_fit">
-<span class="sig-name descname"><span class="pre">add_projection_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xye_fit</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L832-L918"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_projection_fit" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add_projection_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xye_fit</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L863-L949"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.add_projection_fit" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.plots.peaks.PeakPlot.save_plot">
-<span class="sig-name descname"><span class="pre">save_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1589-L1595"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.save_plot" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">save_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1620-L1626"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.save_plot" title="Link to this definition">#</a></dt>
 <dd><p>Save the current peak figure without rebuilding it.</p>
 <p>PeakPlot mutators update existing artists in place, so repeated saves can
 reuse the same figure instead of recreating the entire layout for each peak.</p>
@@ -683,7 +691,7 @@ reuse the same figure instead of recreating the entire layout for each peak.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.plots.peaks.PeakPlot.update_envelope">
-<span class="sig-name descname"><span class="pre">update_envelope</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pk</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bkg</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1297-L1353"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.update_envelope" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">update_envelope</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pk</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bkg</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1328-L1384"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.PeakPlot.update_envelope" title="Link to this definition">#</a></dt>
 <dd><p>Draw region-of-interest.
 mask =</p>
 <dl class="field-list simple">
@@ -836,6 +844,7 @@ mask =</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.peaks.PeakPlot.add_integral_fit"><code class="docutils literal notranslate"><span class="pre">PeakPlot.add_integral_fit()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.peaks.PeakPlot.add_peak_info"><code class="docutils literal notranslate"><span class="pre">PeakPlot.add_peak_info()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.peaks.PeakPlot.add_peak_stats"><code class="docutils literal notranslate"><span class="pre">PeakPlot.add_peak_stats()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.peaks.PeakPlot.add_profile_bkg"><code class="docutils literal notranslate"><span class="pre">PeakPlot.add_profile_bkg()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.peaks.PeakPlot.add_profile_fit"><code class="docutils literal notranslate"><span class="pre">PeakPlot.add_profile_fit()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.peaks.PeakPlot.add_projection_fit"><code class="docutils literal notranslate"><span class="pre">PeakPlot.add_projection_fit()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.peaks.PeakPlot.save_plot"><code class="docutils literal notranslate"><span class="pre">PeakPlot.save_plot()</span></code></a></li>

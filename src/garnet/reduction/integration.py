@@ -209,7 +209,7 @@ class Integration(IntegrationModel):
 
             r_cut = self.params["Radius"]
 
-            data.convert_to_Q_sample("data", "md")
+            data.convert_to_Q_lab("data", "md")
 
             peaks.predict_peaks(
                 "data",
@@ -228,7 +228,6 @@ class Integration(IntegrationModel):
 
             self.predict_add_satellite_peaks(lamda_min, lamda_max)
 
-            # rough integration for initial peak shapes
             peaks.integrate_peaks(
                 "md",
                 "peaks",
@@ -238,21 +237,22 @@ class Integration(IntegrationModel):
                 update=False,
             )
 
-            # minimal resolution model init (no apply/diagnostics yet)
             res = ResolutionEllipsoid("peaks", r_cut=np.inf)
             res.fit()
 
-            # refine centroids and resolution model on full Q-sample data
+            monitor_ratio = data.get_monitor_ratio()
+
             estimator = PeakEstimator()
-            estimator.collect_peaks("peaks", data, r_cut, "md")
+            estimator.collect_peaks("peaks", data, "md", monitor_ratio)
             estimator.estimate("peaks", res)
+            est_file = self.get_plot_file("run#{}_est".format(run))
+            estimator.plot_estimate(est_file)
             moment_covs = estimator.moment_covs
 
             del estimator
 
             data.delete_workspace("md")
 
-            # diagnostics from improved model
             res_file = self.get_plot_file("run#{}_res".format(run))
             self.res_sigma = res.estimate_prior_sigmas(moment_covs)
             res.plot_diagnostics(res_file)
@@ -260,7 +260,6 @@ class Integration(IntegrationModel):
             pk_file = self.get_diagnostic_file("run#{}_peaks".format(run))
             peaks.save_peaks(pk_file, "peaks")
 
-            # UB refinement using estimator-refined centroids
             if self.params["OptimizeUB"]:
                 opt = Optimization("peaks", tol=0.5 / np.cbrt(3))
                 opt.optimize_lattice("Fixed")

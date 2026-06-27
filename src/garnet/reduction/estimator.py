@@ -1,8 +1,8 @@
 import numpy as np
 
+from garnet.plots.peaks import PeakEstimatePlot
 from garnet.reduction.peaks import PeakModel
 from garnet.reduction.intensity import (
-    bin_axes,
     bin_extent,
     revert_ellipsoid_parameters,
 )
@@ -10,7 +10,7 @@ from garnet.reduction.intensity import (
 
 def predict_local_cov(res, peak_index, projections):
     """
-    Project the ResolutionEllipsoid predicted covariance into the local S-W frame.
+    Project the predicted covariance into the local frame.
 
     Parameters
     ----------
@@ -25,13 +25,13 @@ def predict_local_cov(res, peak_index, projections):
         Predicted covariance in the local projection frame.
     """
 
-    cov_s = res.predict_sample_cov(peak_index)
+    cov_lab = res.predict_lab_cov(peak_index)
     W = np.column_stack(projections)
-    cov_local = W.T @ cov_s @ W
+    cov_local = W.T @ cov_lab @ W
     return 0.5 * (cov_local + cov_local.T)
 
 
-def fit_peak_3d(d, x0, x1, x2, cov_local):
+def fit_peak_3d(d, b, x0, x1, x2, cov_local):
     """
     Fit f(x) = A * exp(-½ xᵀ Σ⁻¹ x) + B with Σ fixed from the global model.
 
@@ -42,12 +42,14 @@ def fit_peak_3d(d, x0, x1, x2, cov_local):
     Parameters
     ----------
     d : (n0, n1, n2) array
-        Raw counts.
+        Signal counts.
+    b : (n0, n1, n2) array
+        Background counts.
     x0, x1, x2 : 1-d arrays
-        Bin-centre coordinates along each local axis (x0 already centred
+        Bin-center coordinates along each local axis (x0 already centred
         by subtracting |Q|; x1 and x2 centred at 0).
     cov_local : (3, 3) array
-        Covariance matrix in the local frame (Σ, fixed).
+        Covariance matrix in the local frame.
 
     Returns
     -------
@@ -57,7 +59,9 @@ def fit_peak_3d(d, x0, x1, x2, cov_local):
     snr : float
     """
 
-    valid = np.isfinite(d) & (d >= 0)
+    s = d - b
+
+    valid = np.isfinite(s) & (s >= 0)
     N = int(valid.sum())
 
     zero = (0.0, 0.0, 0.0, 0.0, np.zeros(3), 0.0)
@@ -65,13 +69,13 @@ def fit_peak_3d(d, x0, x1, x2, cov_local):
     if N < 6:
         return zero
 
-    B = float(np.nanpercentile(d[valid], 15))
+    B = np.nanpercentile(s[valid], 15)
     B = max(B, 0.0)
 
     Q0, Q1, Q2 = np.meshgrid(x0, x1, x2, indexing="ij")
 
     # centroid: weight by squared excess above background
-    w = np.where(valid, np.maximum(d - B, 0.0) ** 2, 0.0)
+    w = np.where(valid, np.maximum(s - B, 0.0) ** 2, 0.0)
     wsum = float(w.sum())
 
     if wsum > 0:
@@ -96,8 +100,7 @@ def fit_peak_3d(d, x0, x1, x2, cov_local):
     quad = np.einsum("...i,ij,...j->...", dx, Sigma_inv, dx)
     g = np.where(valid, np.exp(-0.5 * quad), 0.0)
 
-    # clip negatives from background subtraction; deviance requires d >= 0
-    dv = np.where(valid, np.maximum(d, 0.0), 0.0)
+    dv = np.where(valid, np.maximum(s, 0.0), 0.0)
     gv = g[valid]
     dv_flat = dv[valid]
 
@@ -141,25 +144,30 @@ def fit_peak_3d(d, x0, x1, x2, cov_local):
     return A, B_fit, A_err, B_err, c, snr
 
 
-def moment_covariance(d, x0, x1, x2, c, W):
+def moment_covariance(d, b, x0, x1, x2, c, W):
     """
-    Empirical covariance in sample frame from weighted second moments.
+    Empirical covariance in local frame from weighted second moments.
 
     Parameters
     ----------
     d : (n0, n1, n2) array
+    b : (n0, n1, n2) array
     x0, x1, x2 : 1-d coordinate arrays in local frame
     c : (3,) centroid in local frame
-    W : (3, 3) matrix whose columns are the local projection vectors in sample frame
+    W : (3, 3) matrix whose columns are the local projection vectors in local frame
 
     Returns
     -------
-    cov_sample : (3, 3) array or None
+    cov : (3, 3) array or None
     """
 
-    B = float(np.nanpercentile(d[np.isfinite(d)], 15))
-    w = np.maximum(d - max(B, 0.0), 0.0)
-    wsum = float(w.sum())
+    s = d - b
+
+    B = np.nanpercentile(d[np.isfinite(s)], 15)
+    sig = np.maximum(s - max(B, 0.0), 0.0)
+    noise = np.sqrt(np.maximum(d + b, 1.0))
+    w = np.where(np.isfinite(d), sig / noise, 0.0)
+    wsum = w.sum()
 
     if wsum <= 0.0:
         return None
@@ -178,8 +186,8 @@ def moment_covariance(d, x0, x1, x2, c, W):
     cov_local = (dx * w_flat) @ dx.T / wsum
     cov_local = 0.5 * (cov_local + cov_local.T)
 
-    cov_sample = W @ cov_local @ W.T
-    return 0.5 * (cov_sample + cov_sample.T)
+    cov = W @ cov_local @ W.T
+    return 0.5 * (cov + cov.T)
 
 
 class PeakEstimator:
@@ -194,7 +202,7 @@ class PeakEstimator:
     Usage
     -----
     estimator = PeakEstimator()
-    estimator.collect_peaks(peaks_ws, data, r_cut, "md")
+    estimator.collect_peaks(peaks_ws, data, "md")
     estimator.estimate(peaks_ws, res)
     # peaks workspace now has refined centroids; res has improved model
     # then run the normal per-bank integrate_peaks loop
@@ -211,11 +219,8 @@ class PeakEstimator:
         self,
         peaks_ws,
         data,
-        r_cut,
         md_ws,
-        bkg_md=None,
         pc_ratio=1.0,
-        R_bkg=None,
     ):
         """
         Bin all predicted peaks using the full Q-sample workspace.
@@ -225,27 +230,20 @@ class PeakEstimator:
         ----------
         peaks_ws : str
         data : DataModel
-        r_cut : float  (used only as fallback for shape initialisation)
         md_ws : str  full Q-sample workspace (e.g. "md")
-        bkg_md : str or None
-            Background Q-lab workspace (no Lorentz correction).  When given,
-            the binned background is scaled by pc_ratio and subtracted from
-            each peak box before fitting.
         pc_ratio : float
             Scale factor = pc_signal / pc_background (proton charge ratio).
-        R_bkg : (3, 3) array or None
-            Goniometer matrix for the background run.  For isotropic powder
-            backgrounds the signal R is reused, so this is only needed when
-            the background has a preferred orientation.
         """
 
         peak = PeakModel(peaks_ws)
         n_peak = peak.get_number_peaks()
         UB = peak.get_UB()
 
+        I = np.eye(3)
+
         for i in range(n_peak):
             d_spacing = peak.get_d_spacing(i)
-            Q_center = 2.0 * np.pi / d_spacing
+            Q_mod = 2.0 * np.pi / d_spacing
             hkl = peak.get_hkl(i)
             lamda = peak.get_wavelength(i)
             two_theta, az_phi = peak.get_angles(i)
@@ -253,63 +251,41 @@ class PeakEstimator:
             shape = peak.get_peak_shape(i)
             dQ = data.get_resolution_in_Q(lamda, two_theta)
 
-            bin_params = UB, hkl, lamda, R, two_theta, az_phi, shape, dQ
+            bin_params = UB, hkl, lamda, I, two_theta, az_phi, shape, dQ
             bins, extents, projections, transform, conversion = bin_extent(
                 *bin_params
             )
 
             result = data.bin_in_Q(md_ws, extents, bins, projections)
 
-            if result is None:
-                continue
-
-            d_arr, _, Q0, Q1, Q2 = result
+            d, _, Q0, Q1, Q2 = result
 
             data.delete_workspace(md_ws + "_bin")
 
-            if bkg_md is not None:
-                # For powder backgrounds, R_bkg does not matter (isotropic), so
-                # we reuse the signal projections.  Pass R_bkg only when the
-                # background has a preferred orientation.
-                if R_bkg is not None:
-                    bkg_bin_params = (
-                        UB,
-                        hkl,
-                        lamda,
-                        R_bkg,
-                        two_theta,
-                        az_phi,
-                        shape,
-                        dQ,
-                    )
-                    _, bkg_extents, bkg_projections, _, _ = bin_extent(
-                        *bkg_bin_params
-                    )
-                else:
-                    bkg_extents, bkg_projections = extents, projections
+            b = np.zeros_like(d)
+            if data.workspace_exists("bkg_md"):
+                result = data.bin_in_Q("bkg_md", extents, bins, projections)
 
-                result_bkg = data.bin_in_Q(
-                    bkg_md, bkg_extents, bins, bkg_projections
-                )
+                b, _, Q0, Q1, Q2 = result
 
-                if result_bkg is not None:
-                    d_bkg, _, _, _, _ = result_bkg
-                    data.delete_workspace(bkg_md + "_bin")
-                    d_arr = d_arr - pc_ratio * d_bkg
+                data.delete_workspace("bkg_md_bin")
 
-            # store axes only to keep memory usage linear in n_peaks
-            x0 = Q0[:, 0, 0] - Q_center  # centred along n axis
-            x1 = Q1[0, :, 0]  # centred at 0 along u
-            x2 = Q2[0, 0, :]  # centred at 0 along v
+            b *= pc_ratio
+
+            x0 = Q0[:, 0, 0] - Q_mod
+            x1 = Q1[0, :, 0]
+            x2 = Q2[0, 0, :]
 
             self._peak_data[i] = {
-                "d": d_arr,
+                "d": d,
+                "b": b,
                 "x0": x0,
                 "x1": x1,
                 "x2": x2,
-                "Q_center": Q_center,
+                "Q_mod": Q_mod,
                 "projections": projections,
                 "W": np.column_stack(projections),
+                "R": R,
                 "hkl": hkl,
             }
 
@@ -335,6 +311,7 @@ class PeakEstimator:
 
                 A, B, A_err, B_err, c, snr = fit_peak_3d(
                     pd["d"],
+                    pd["b"],
                     pd["x0"],
                     pd["x1"],
                     pd["x2"],
@@ -357,10 +334,13 @@ class PeakEstimator:
                     continue
 
                 W = self._peak_data[i]["W"]
-                dQ_sample = W @ c
+                dQ = W @ c
 
-                Q_s = np.array(peak.get_sample_Q(i))
-                peak.set_peak_center(i, *(Q_s + dQ_sample))
+                R = self._peak_data[i]["R"]
+
+                Q = R @ peak.get_sample_Q(i)
+                Q = R.T @ (Q + dQ)
+                peak.set_peak_center(i, *Q)
 
             if iteration < self.n_iter - 1:
                 for i, fit in self._fit.items():
@@ -368,16 +348,22 @@ class PeakEstimator:
                         continue
 
                     pd = self._peak_data[i]
-                    cov_s = moment_covariance(
+                    cov = moment_covariance(
                         pd["d"],
+                        pd["b"],
                         pd["x0"],
                         pd["x1"],
                         pd["x2"],
                         fit["c"],
                         pd["W"],
                     )
-                    if cov_s is not None:
-                        self._write_peak_shape(peaks_ws, i, cov_s, res)
+
+                    if cov is not None:
+                        R = self._peak_data[i]["R"]
+
+                        cov = R.T @ cov @ R
+
+                        self._write_peak_shape(peaks_ws, i, cov, res)
 
                 res.fit()
                 res.apply()
@@ -387,11 +373,17 @@ class PeakEstimator:
             if fit["snr"] < self.snr_min:
                 continue
             pd = self._peak_data[i]
-            cov_s = moment_covariance(
-                pd["d"], pd["x0"], pd["x1"], pd["x2"], fit["c"], pd["W"]
+            cov = moment_covariance(
+                pd["d"],
+                pd["b"],
+                pd["x0"],
+                pd["x1"],
+                pd["x2"],
+                fit["c"],
+                pd["W"],
             )
-            if cov_s is not None:
-                self.moment_covs[i] = cov_s
+            if cov is not None:
+                self.moment_covs[i] = cov
 
         results = {}
 
@@ -454,3 +446,109 @@ class PeakEstimator:
             list(V_sample[:, 1]),
             list(V_sample[:, 2]),
         )
+
+    def _extract_normalized_profiles(self):
+        """
+        For all high-SNR peaks collect 1D marginal profiles normalized to
+        (y - B) / A vs z = (x - mu) / sigma.
+
+        Returns
+        -------
+        zs, yns, ens : each a list of 3 ndarrays (one per axis)
+        """
+
+        zs = [[], [], []]
+        yns = [[], [], []]
+        ens = [[], [], []]
+
+        sum_axes_per_k = [(1, 2), (0, 2), (0, 1)]
+        eps = 1e-10
+
+        for i, fit in self._fit.items():
+            if fit["snr"] < self.snr_min:
+                continue
+
+            c = fit["c"]
+            cov_local = fit["cov_local"]
+            sigmas = np.sqrt(np.maximum(np.diag(cov_local), 0.0))
+
+            pd = self._peak_data[i]
+            d = pd["d"]
+            b = pd.get("b", np.zeros_like(d))
+            xs = [pd["x0"], pd["x1"], pd["x2"]]
+
+            for k in range(3):
+                if sigmas[k] <= 0:
+                    continue
+
+                dk = np.nansum(d, axis=sum_axes_per_k[k])
+                bk = np.nansum(b, axis=sum_axes_per_k[k])
+                ek = np.sqrt(np.maximum(dk + bk, 0.0))
+                net = dk - bk
+                z = (xs[k] - c[k]) / sigmas[k]
+                g = np.exp(-0.5 * z**2)
+
+                valid = np.isfinite(net) & np.isfinite(ek) & (ek > 0)
+                if valid.sum() < 3:
+                    continue
+
+                w = np.where(valid, 1.0 / (ek**2 + eps), 0.0)
+                sw = w.sum()
+                if sw <= 0:
+                    continue
+
+                net_bar = (w * net).sum() / sw
+                g_bar = (w * g).sum() / sw
+                num = (w * (g - g_bar) * (net - net_bar)).sum()
+                den = (w * (g - g_bar) ** 2).sum()
+
+                if den <= 0:
+                    continue
+
+                A1d = float(num / den)
+                B1d = float(net_bar - A1d * g_bar)
+
+                if A1d <= 0:
+                    continue
+
+                N = int(valid.sum())
+                resid = net - (A1d * g + B1d)
+                resid_var = float((w * resid**2).sum()) / max(N - 2, 1)
+                A1d_err = np.sqrt(max(resid_var / den, 0.0))
+                B1d_err = np.sqrt(
+                    max(resid_var * (1.0 / sw + g_bar**2 / den), 0.0)
+                )
+
+                y_hat = (net - B1d) / A1d
+                e_base = np.sqrt(ek**2 + B1d_err**2)
+                e_hat = np.sqrt(
+                    (e_base / A1d) ** 2 + (y_hat * A1d_err / A1d) ** 2
+                )
+
+                zs[k].extend(z[valid].tolist())
+                yns[k].extend(y_hat[valid].tolist())
+                ens[k].extend(e_hat[valid].tolist())
+
+        return (
+            [np.array(zs[k]) for k in range(3)],
+            [np.array(yns[k]) for k in range(3)],
+            [np.array(ens[k]) for k in range(3)],
+        )
+
+    def plot_estimate(self, filename):
+        """
+        Save a 3-panel plot of the normalized 1D peak profiles in z-space.
+
+        Each panel shows (y - B) / A vs z = (x - mu) / sigma accumulated
+        over all high-SNR peaks, which should collapse onto exp(-z^2/2).
+
+        Parameters
+        ----------
+        filename : str
+            Output path (e.g. "run_est.png").
+        """
+
+        zs, yns, ens = self._extract_normalized_profiles()
+        plot = PeakEstimatePlot(zs, yns, ens)
+        plot.save_plot(filename)
+        plot.close()

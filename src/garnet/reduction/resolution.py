@@ -440,20 +440,24 @@ class ResolutionEllipsoid:
             cov_lab = self._predict_cov_lab(peak)
             radii, V_lab = self._ellipsoid_from_covariance(cov_lab)
 
-            # radii = np.clip(radii, lo * self.r_cut, hi * self.r_cut)
-
             V_sample = self._lab_axes_to_sample(R, V_lab)
             V_sample = self._normalize_columns(V_sample)
 
             self._set_peak_shape(ws, i, radii, V_sample)
 
+    def predict_lab_cov(self, peak_index):
+        ws = mtd[self.peaks_ws]
+        peak = ws.getPeak(peak_index)
+        cov_lab = self._predict_cov_lab(peak)
+        return 0.5 * (cov_lab + cov_lab.T)
+
     def predict_sample_cov(self, peak_index):
+        cov_lab = self.predict_lab_cov(peak_index)
         ws = mtd[self.peaks_ws]
         peak = ws.getPeak(peak_index)
         R = peak.getGoniometerMatrix()
-        cov_lab = self._predict_cov_lab(peak)
-        cov_s = R.T @ cov_lab @ R
-        return 0.5 * (cov_s + cov_s.T)
+        cov_sam = R.T @ cov_lab @ R
+        return 0.5 * (cov_sam + cov_sam.T)
 
     def estimate_prior_sigmas(self, moment_covs=None):
         """

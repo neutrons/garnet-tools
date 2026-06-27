@@ -22,6 +22,149 @@ import skimage.measure
 from garnet.plots.base import BasePlot
 
 
+class PeakCentroidPlot(BasePlot):
+    def __init__(self, c0, c1, c2, Q, r_cut, d_min):
+        super(PeakCentroidPlot, self).__init__()
+
+        plt.close("all")
+
+        self.fig, self.ax = plt.subplots(
+            1,
+            3,
+            figsize=(6.4 * 3, 4.8),
+            layout="constrained",
+            sharex=True,
+            sharey=True,
+        )
+
+        self.ax[0].plot(c0, Q, ".", color="C0")
+        self.ax[1].plot(c1, Q, ".", color="C1")
+        self.ax[2].plot(c2, Q, ".", color="C2")
+
+        self.ax[0].minorticks_on()
+        self.ax[2].minorticks_on()
+        self.ax[1].minorticks_on()
+
+        self.ax[0].set_xlabel("$\Delta |Q|$ [$\AA^{-1}$]")
+        self.ax[1].set_xlabel("$\Delta Q_1$ [$\AA^{-1}$]")
+        self.ax[2].set_xlabel("$\Delta Q_2$ [$\AA^{-1}$]")
+
+        self.ax[0].set_ylabel("$|Q|$ [$\AA^{-1}$]")
+
+        self.ax[0].set_xlim(-1.2 * r_cut, 1.2 * r_cut)
+        self.ax[1].set_xlim(-1.2 * r_cut, 1.2 * r_cut)
+        self.ax[2].set_xlim(-1.2 * r_cut, 1.2 * r_cut)
+
+        Q_max = 2 * np.pi / d_min
+
+        self.ax[0].set_ylim(0, 1.2 * Q_max)
+        self.ax[1].set_ylim(0, 1.2 * Q_max)
+        self.ax[2].set_ylim(0, 1.2 * Q_max)
+
+        self.ax[0].axvline(0, linestyle="--", color="k", linewidth=1)
+        self.ax[1].axvline(0, linestyle="--", color="k", linewidth=1)
+        self.ax[2].axvline(0, linestyle="--", color="k", linewidth=1)
+
+
+class PeakProfilePlot(BasePlot):
+    def __init__(self, x, y, e, vol, r, r_cut):
+        super(PeakProfilePlot, self).__init__()
+
+        plt.close("all")
+
+        self.fig, self.ax = plt.subplots(
+            1,
+            3,
+            figsize=(6.4 * 3, 4.8),
+            layout="constrained",
+            sharex=True,
+            sharey=True,
+        )
+
+        self.plot_peaks(*x, *y, *e, r_cut)
+
+        self.plot_peak_bins(*x, *y, *e)
+
+        self.draw_boundary(vol, r)
+
+    def plot_peaks(self, x0, x1, x2, y0, y1, y2, e0, e1, e2, r_cut):
+        self.ax[0].errorbar(x0, y0, e0, fmt=".", color="C0")
+        self.ax[1].errorbar(x1, y1, e1, fmt=".", color="C1")
+        self.ax[2].errorbar(x2, y2, e2, fmt=".", color="C2")
+
+        self.ax[0].minorticks_on()
+        self.ax[2].minorticks_on()
+        self.ax[1].minorticks_on()
+
+        self.ax[0].set_xlabel("$\Delta |Q|$ [$\AA^{-1}$]")
+        self.ax[1].set_xlabel("$\Delta Q_1$ [$\AA^{-1}$]")
+        self.ax[2].set_xlabel("$\Delta Q_2$ [$\AA^{-1}$]")
+
+        self.ax[0].set_ylim(-0.5, 2.5)
+        self.ax[1].set_ylim(-0.5, 2.5)
+        self.ax[2].set_ylim(-0.5, 2.5)
+
+        self.ax[0].set_xlim(-1.2 * r_cut, 1.2 * r_cut)
+        self.ax[1].set_xlim(-1.2 * r_cut, 1.2 * r_cut)
+        self.ax[2].set_xlim(-1.2 * r_cut, 1.2 * r_cut)
+
+    def plot_peak_bins(self, x0, x1, x2, y0, y1, y2, e0, e1, e2):
+        mask0 = y0 > 0
+        mask1 = y1 > 0
+        mask2 = y2 > 0
+
+        w0 = y0.copy()
+        w1 = y1.copy()
+        w2 = y2.copy()
+
+        x0_bins = np.histogram_bin_edges(x0[mask0], bins="auto")
+        x1_bins = np.histogram_bin_edges(x1[mask1], bins="auto")
+        x2_bins = np.histogram_bin_edges(x2[mask2], bins="auto")
+
+        w0_bins, _ = np.histogram(x0[mask0], bins=x0_bins, weights=w0[mask0])
+        w1_bins, _ = np.histogram(x1[mask1], bins=x1_bins, weights=w1[mask1])
+        w2_bins, _ = np.histogram(x2[mask2], bins=x2_bins, weights=w2[mask2])
+
+        w0_bins /= w0_bins.max()
+        w1_bins /= w1_bins.max()
+        w2_bins /= w2_bins.max()
+
+        self.ax[0].stairs(w0_bins, x0_bins, color="k", zorder=100)
+        self.ax[1].stairs(w1_bins, x1_bins, color="k", zorder=100)
+        self.ax[2].stairs(w2_bins, x2_bins, color="k", zorder=100)
+
+    def draw_boundary(self, res, params):
+        (r0, r1, r2), (dr0, dr1, dr2) = params
+
+        res_min, res_max = 0, 0
+        if len(res) > 1:
+            res_min, res_max = np.min(res), np.max(res)
+
+        s0_max = r0 + res_max * dr0
+        s1_max = r1 + res_max * dr1
+        s2_max = r2 + res_max * dr2
+
+        s0_min = r0 + res_min * dr0
+        s1_min = r1 + res_min * dr1
+        s2_min = r2 + res_min * dr2
+
+        self.ax[0].axvline(s0_max, linestyle="--", color="k", linewidth=1)
+        self.ax[1].axvline(s1_max, linestyle="--", color="k", linewidth=1)
+        self.ax[2].axvline(s2_max, linestyle="--", color="k", linewidth=1)
+
+        self.ax[0].axvline(-s0_max, linestyle="--", color="k", linewidth=1)
+        self.ax[1].axvline(-s1_max, linestyle="--", color="k", linewidth=1)
+        self.ax[2].axvline(-s2_max, linestyle="--", color="k", linewidth=1)
+
+        self.ax[0].axvline(s0_min, linestyle=":", color="k", linewidth=1)
+        self.ax[1].axvline(s1_min, linestyle=":", color="k", linewidth=1)
+        self.ax[2].axvline(s2_min, linestyle=":", color="k", linewidth=1)
+
+        self.ax[0].axvline(-s0_min, linestyle=":", color="k", linewidth=1)
+        self.ax[1].axvline(-s1_min, linestyle=":", color="k", linewidth=1)
+        self.ax[2].axvline(-s2_min, linestyle=":", color="k", linewidth=1)
+
+
 class ScanPlot(BasePlot):
     def __init__(self, thresholds, max_peaks, indexed_peaks, cutoff):
         super(ScanPlot, self).__init__()
@@ -1624,3 +1767,65 @@ class PeakPlot(BasePlot):
         reuse the same figure instead of recreating the entire layout for each peak.
         """
         super(PeakPlot, self).save_plot(filename)
+
+
+class PeakEstimatePlot(BasePlot):
+    def __init__(self, zs, yns, ens):
+        super(PeakEstimatePlot, self).__init__()
+
+        plt.close("all")
+
+        self.fig, self.ax = plt.subplots(
+            1,
+            3,
+            figsize=(6.4 * 3, 4.8),
+            layout="constrained",
+            sharex=True,
+            sharey=True,
+        )
+
+        labels = [
+            r"$z_0 = \Delta|Q| / \sigma_0$",
+            r"$z_1 = \Delta Q_1 / \sigma_1$",
+            r"$z_2 = \Delta Q_2 / \sigma_2$",
+        ]
+
+        for k in range(3):
+            ax = self.ax[k]
+            z, yn, en = zs[k], yns[k], ens[k]
+
+            if len(z) > 0:
+                mask = np.isfinite(yn) & np.isfinite(en) & (en > 0)
+                if mask.sum() > 0:
+                    ax.errorbar(
+                        z[mask],
+                        yn[mask],
+                        en[mask],
+                        fmt=".",
+                        color=f"C{k}",
+                        alpha=0.15,
+                        markersize=2,
+                        linewidth=0.5,
+                        zorder=1,
+                    )
+
+                pos_mask = mask & (yn > 0)
+                if pos_mask.sum() > 2:
+                    self.plot_peak_bins(ax, z[pos_mask], yn[pos_mask])
+
+            ax.set_xlabel(labels[k])
+            ax.minorticks_on()
+
+        self.ax[0].set_ylabel(r"$(y - B)\,/\,A$")
+        self.ax[0].set_xlim(-4, 4)
+        self.ax[0].set_ylim(-0.5, 1.5)
+
+    def plot_peak_bins(self, ax, z, yn):
+        z_bins = np.histogram_bin_edges(z, bins="auto")
+        w_sum, _ = np.histogram(z, bins=z_bins, weights=yn)
+        counts, _ = np.histogram(z, bins=z_bins)
+        w_mean = np.where(counts > 0, w_sum / counts, 0.0)
+        peak = w_mean.max()
+        if peak > 0:
+            w_mean = w_mean / peak
+        ax.stairs(w_mean, z_bins, color="k", linewidth=1.5, zorder=100)

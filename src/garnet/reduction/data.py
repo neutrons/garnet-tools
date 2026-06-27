@@ -1390,6 +1390,9 @@ class LaueData(BaseDataModel):
         self.sa_cal = False
         self.flux_cal = False
 
+        self.pc_bkg = None
+        self.pc_ratio = 1.0
+
     def load_data(self, event_name, IPTS, runs, time_cut=None):
         """
         Load raw data into time-of-flight vs counts.
@@ -1451,7 +1454,13 @@ class LaueData(BaseDataModel):
 
         self.monitor = mtd[event_name].run().getProtonCharge()
 
+        if self.pc_bkg is not None and self.pc_bkg > 0:
+            self.pc_ratio = self.monitor / self.pc_bkg
+
         self.set_goniometer(event_name)
+
+    def get_monitor_ratio(self):
+        return self.pc_ratio
 
     def grouping_list(self, ws, cols, rows, lite_c, lite_r, group_c, group_r):
         det_ids_flat = np.asarray(mtd[ws].column(5))
@@ -2347,6 +2356,7 @@ class LaueData(BaseDataModel):
             )
 
             pc_bkg = mtd["bkg"].run().getProperty("gd_prtn_chrg").value
+            self.pc_bkg = pc_bkg
 
             ConvertUnits(
                 InputWorkspace=self.instrument,

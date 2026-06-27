@@ -146,7 +146,7 @@ def bin_extent(
     az_phi : float
         Azimuthal angle in degrees.
     shape : tuple
-        Peak shape parameters (c0..c2, r0..r2, v0..v2).
+        Peak shape parameters (ci, ri, vi).
     dQ : array
         Q-resolution (3-element).
     bin_min, bin_max : int
@@ -161,7 +161,7 @@ def bin_extent(
     projections : list
         Three orthonormal projection vectors.
     transform : list
-        Rows of the HKL→Q projection matrix (for MDNorm/ConvertWANDSCDtoQ).
+        Rows of the HKL to Q projection matrix.
     conversion : array
         Matrix converting HKL offsets to projection-frame Q.
 

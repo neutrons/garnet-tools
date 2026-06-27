@@ -1142,7 +1142,7 @@
 
 <dl class="py class">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">LaueData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">instrument_config</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1384-L2681"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">LaueData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">instrument_config</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1384-L2691"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#garnet.reduction.data.BaseDataModel" title="garnet.reduction.data.BaseDataModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseDataModel</span></code></a></p>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
@@ -1293,28 +1293,31 @@
 <tr class="row-even"><td><p><strong>clear_norm</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>get_volume_in_Q</strong></p></td>
+<tr class="row-odd"><td><p><strong>get_monitor_ratio</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>grouping_list</strong></p></td>
+<tr class="row-even"><td><p><strong>get_volume_in_Q</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>slice_extents</strong></p></td>
+<tr class="row-odd"><td><p><strong>grouping_list</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>slice_roi</strong></p></td>
+<tr class="row-even"><td><p><strong>slice_extents</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>subtract_background</strong></p></td>
+<tr class="row-odd"><td><p><strong>slice_roi</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>update_logs_for_time</strong></p></td>
+<tr class="row-even"><td><p><strong>subtract_background</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>update_wavelength</strong></p></td>
+<tr class="row-odd"><td><p><strong>update_logs_for_time</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>workspace_exists</strong></p></td>
+<tr class="row-even"><td><p><strong>update_wavelength</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p><strong>workspace_exists</strong></p></td>
 <td></td>
 </tr>
 </tbody>
@@ -1322,12 +1325,12 @@
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.absorption_correction">
-<span class="sig-name descname"><span class="pre">absorption_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shapestl</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">angles</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">material</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1936-L1993"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.absorption_correction" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">absorption_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shapestl</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">angles</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">material</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1945-L2002"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.absorption_correction" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.apply_calibration">
-<span class="sig-name descname"><span class="pre">apply_calibration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">detector_calibration</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tube_calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">goniometer_calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1529-L1616"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.apply_calibration" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">apply_calibration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">detector_calibration</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tube_calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">goniometer_calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1538-L1625"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.apply_calibration" title="Link to this definition">#</a></dt>
 <dd><p>Apply detector calibration.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1347,7 +1350,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.apply_mask">
-<span class="sig-name descname"><span class="pre">apply_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">detector_mask</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1735-L1811"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.apply_mask" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">apply_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">detector_mask</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1744-L1820"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.apply_mask" title="Link to this definition">#</a></dt>
 <dd><p>Apply detector mask.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1363,18 +1366,18 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.approximate_norm">
-<span class="sig-name descname"><span class="pre">approximate_norm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lamda</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">two_theta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">det_ID</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L2254-L2262"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.approximate_norm" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">approximate_norm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lamda</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">two_theta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">det_ID</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L2263-L2271"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.approximate_norm" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.calculate_maximum_Q">
-<span class="sig-name descname"><span class="pre">calculate_maximum_Q</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1519-L1527"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.calculate_maximum_Q" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">calculate_maximum_Q</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1528-L1536"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.calculate_maximum_Q" title="Link to this definition">#</a></dt>
 <dd><p>Update maximum Q.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.convert_to_Q_lab">
-<span class="sig-name descname"><span class="pre">convert_to_Q_lab</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">md_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lorentz_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1903-L1934"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.convert_to_Q_lab" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">convert_to_Q_lab</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">md_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lorentz_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1912-L1943"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.convert_to_Q_lab" title="Link to this definition">#</a></dt>
 <dd><p>Convert raw data to Q-lab.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1392,7 +1395,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.convert_to_Q_sample">
-<span class="sig-name descname"><span class="pre">convert_to_Q_sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">md_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lorentz_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">preproc_dets</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1856-L1901"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.convert_to_Q_sample" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">convert_to_Q_sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">md_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lorentz_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">preproc_dets</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1865-L1910"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.convert_to_Q_sample" title="Link to this definition">#</a></dt>
 <dd><p>Convert raw data to Q-sample.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1412,7 +1415,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.convert_to_hkl">
-<span class="sig-name descname"><span class="pre">convert_to_hkl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">md_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lorentz_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">preproc_dets</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1813-L1854"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.convert_to_hkl" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">convert_to_hkl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">md_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lorentz_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">preproc_dets</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1822-L1863"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.convert_to_hkl" title="Link to this definition">#</a></dt>
 <dd><p>Convert raw data to hkl.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1432,7 +1435,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.crop_for_normalization">
-<span class="sig-name descname"><span class="pre">crop_for_normalization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L2264-L2298"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.crop_for_normalization" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">crop_for_normalization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L2273-L2307"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.crop_for_normalization" title="Link to this definition">#</a></dt>
 <dd><p>Convert units to momentum and crop to momentum band.</p>
 <dl class="simple">
 <dt>event_name<span class="classifier">str</span></dt><dd><p>Name of raw event data.</p>
@@ -1442,7 +1445,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.filter_events">
-<span class="sig-name descname"><span class="pre">filter_events</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ws</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">runs</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L2637-L2681"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.filter_events" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">filter_events</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ws</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">runs</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L2647-L2691"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.filter_events" title="Link to this definition">#</a></dt>
 <dd><p>Split workspaces according to log.
 If no splitting, index according to run number.</p>
 <dl class="field-list simple">
@@ -1469,7 +1472,7 @@ If no splitting, index according to run number.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.get_counting_rate">
-<span class="sig-name descname"><span class="pre">get_counting_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1498-L1517"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.get_counting_rate" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">get_counting_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1507-L1526"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.get_counting_rate" title="Link to this definition">#</a></dt>
 <dd><p>Counting rate.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1488,18 +1491,23 @@ If no splitting, index according to run number.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="garnet.reduction.data.LaueData.get_monitor_ratio">
+<span class="sig-name descname"><span class="pre">get_monitor_ratio</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1462-L1463"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.get_monitor_ratio" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.get_volume_in_Q">
-<span class="sig-name descname"><span class="pre">get_volume_in_Q</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lamda</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">two_theta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">det_ID</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L2247-L2252"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.get_volume_in_Q" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">get_volume_in_Q</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lamda</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">two_theta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">det_ID</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L2256-L2261"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.get_volume_in_Q" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.grouping_list">
-<span class="sig-name descname"><span class="pre">grouping_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ws</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cols</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rows</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lite_c</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lite_r</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_c</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_r</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1456-L1496"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.grouping_list" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">grouping_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ws</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cols</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rows</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lite_c</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lite_r</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_c</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_r</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1465-L1505"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.grouping_list" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.load_background">
-<span class="sig-name descname"><span class="pre">load_background</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">detector_calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tube_calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subtract</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L2300-L2522"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.load_background" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">load_background</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">detector_calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tube_calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subtract</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L2309-L2532"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.load_background" title="Link to this definition">#</a></dt>
 <dd><p>Load a background file and scale to data.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1520,7 +1528,7 @@ convert to Q-lab as “bkg_md” for use in normalization.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.load_data">
-<span class="sig-name descname"><span class="pre">load_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">IPTS</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">runs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_cut</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1393-L1454"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.load_data" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">load_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">IPTS</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">runs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_cut</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1396-L1460"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.load_data" title="Link to this definition">#</a></dt>
 <dd><p>Load raw data into time-of-flight vs counts.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1540,7 +1548,7 @@ convert to Q-lab as “bkg_md” for use in normalization.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.load_generate_normalization">
-<span class="sig-name descname"><span class="pre">load_generate_normalization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vanadium_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flux_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1995-L2245"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.load_generate_normalization" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">load_generate_normalization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vanadium_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flux_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L2004-L2254"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.load_generate_normalization" title="Link to this definition">#</a></dt>
 <dd><p>Load a vanadium file and generate normalization data.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1556,7 +1564,7 @@ convert to Q-lab as “bkg_md” for use in normalization.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.mask_to_bank">
-<span class="sig-name descname"><span class="pre">mask_to_bank</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bank_name</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1684-L1710"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.mask_to_bank" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">mask_to_bank</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bank_name</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1693-L1719"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.mask_to_bank" title="Link to this definition">#</a></dt>
 <dd><p>Mask to bank</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1572,7 +1580,7 @@ convert to Q-lab as “bkg_md” for use in normalization.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.normalize_to_hkl">
-<span class="sig-name descname"><span class="pre">normalize_to_hkl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">md</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">projections</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extents</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bins</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">symmetry</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L2562-L2635"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.normalize_to_hkl" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">normalize_to_hkl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">md</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">projections</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extents</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bins</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">symmetry</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L2572-L2645"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.normalize_to_hkl" title="Link to this definition">#</a></dt>
 <dd><p>Normalize to binned hkl.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1594,7 +1602,7 @@ convert to Q-lab as “bkg_md” for use in normalization.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.preprocess_detector_banks">
-<span class="sig-name descname"><span class="pre">preprocess_detector_banks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bank</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1618-L1632"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.preprocess_detector_banks" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">preprocess_detector_banks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bank</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1627-L1641"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.preprocess_detector_banks" title="Link to this definition">#</a></dt>
 <dd><p>Generate detector coordinates for each bank.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1608,7 +1616,7 @@ convert to Q-lab as “bkg_md” for use in normalization.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.preprocess_detectors">
-<span class="sig-name descname"><span class="pre">preprocess_detectors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ws</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1634-L1682"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.preprocess_detectors" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">preprocess_detectors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ws</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L1643-L1691"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.preprocess_detectors" title="Link to this definition">#</a></dt>
 <dd><p>Generate detector coordinates.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1622,7 +1630,7 @@ convert to Q-lab as “bkg_md” for use in normalization.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.data.LaueData.subtract_background">
-<span class="sig-name descname"><span class="pre">subtract_background</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">md_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L2524-L2560"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.subtract_background" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">subtract_background</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">md_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">event_name</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/data.py#L2534-L2570"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.data.LaueData.subtract_background" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -2419,7 +2427,7 @@ cropped to the same region as the fit so x values match best_prof.</p>
 <span id="garnet-reduction-integration-module"></span><h2>garnet.reduction.integration module<a class="headerlink" href="#module-garnet.reduction.integration" title="Link to this heading">#</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="garnet.reduction.integration.Integration">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Integration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plan</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L38-L812"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Integration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plan</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L38-L811"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">IntegrationModel</span></code></p>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
@@ -2536,12 +2544,12 @@ cropped to the same region as the fit so x values match best_prof.</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.integration.Integration.add_with_padding">
-<span class="sig-name descname"><span class="pre">add_with_padding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">b</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fill</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L618-L627"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.add_with_padding" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add_with_padding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">b</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fill</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L617-L626"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.add_with_padding" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.integration.Integration.append_name">
-<span class="sig-name descname"><span class="pre">append_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L402-L426"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.append_name" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">append_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L401-L425"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.append_name" title="Link to this definition">#</a></dt>
 <dd><p>Update filename with identifier name.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2561,7 +2569,7 @@ cropped to the same region as the fit so x values match best_prof.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.integration.Integration.cell_centering_name">
-<span class="sig-name descname"><span class="pre">cell_centering_name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L428-L442"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.cell_centering_name" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">cell_centering_name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L427-L441"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.cell_centering_name" title="Link to this definition">#</a></dt>
 <dd><p>Lattice and reflection condition.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -2585,7 +2593,7 @@ cropped to the same region as the fit so x values match best_prof.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.integration.Integration.extract_peak_info">
-<span class="sig-name descname"><span class="pre">extract_peak_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks_ws</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r_cut</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">norm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bank</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L629-L770"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.extract_peak_info" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">extract_peak_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks_ws</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r_cut</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">norm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bank</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L628-L769"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.extract_peak_info" title="Link to this definition">#</a></dt>
 <dd><p>Obtain peak information for envelope determination.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2601,7 +2609,7 @@ cropped to the same region as the fit so x values match best_prof.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.integration.Integration.get_file">
-<span class="sig-name descname"><span class="pre">get_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ws</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L379-L400"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.get_file" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">get_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ws</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L378-L399"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.get_file" title="Link to this definition">#</a></dt>
 <dd><p>Update filename with identifier name and optional workspace name.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2623,7 +2631,7 @@ cropped to the same region as the fit so x values match best_prof.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.integration.Integration.integrate">
-<span class="sig-name descname"><span class="pre">integrate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L148-L357"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.integrate" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">integrate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L148-L356"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.integrate" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
@@ -2633,12 +2641,12 @@ cropped to the same region as the fit so x values match best_prof.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.integration.Integration.integrate_peaks">
-<span class="sig-name descname"><span class="pre">integrate_peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L493-L610"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.integrate_peaks" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">integrate_peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L492-L609"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.integrate_peaks" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.integration.Integration.modulation_name">
-<span class="sig-name descname"><span class="pre">modulation_name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L444-L470"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.modulation_name" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">modulation_name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L443-L469"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.modulation_name" title="Link to this definition">#</a></dt>
 <dd><p>Modulation vectors.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -2652,17 +2660,17 @@ cropped to the same region as the fit so x values match best_prof.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.integration.Integration.pad_to_shape">
-<span class="sig-name descname"><span class="pre">pad_to_shape</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fill</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L612-L616"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.pad_to_shape" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">pad_to_shape</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fill</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L611-L615"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.pad_to_shape" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.integration.Integration.predict_add_satellite_peaks">
-<span class="sig-name descname"><span class="pre">predict_add_satellite_peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lamda_min</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lamda_max</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L359-L377"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.predict_add_satellite_peaks" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">predict_add_satellite_peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lamda_min</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lamda_max</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L358-L376"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.predict_add_satellite_peaks" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.integration.Integration.resolution_name">
-<span class="sig-name descname"><span class="pre">resolution_name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L472-L486"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.resolution_name" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">resolution_name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L471-L485"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.resolution_name" title="Link to this definition">#</a></dt>
 <dd><p>Minimum d-spacing and starting radii</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -2676,17 +2684,17 @@ cropped to the same region as the fit so x values match best_prof.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.integration.Integration.unit_key">
-<span class="sig-name descname"><span class="pre">unit_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">v</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.01</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L488-L491"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.unit_key" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">unit_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">v</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.01</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L487-L490"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.unit_key" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.integration.Integration.update_peak_info">
-<span class="sig-name descname"><span class="pre">update_peak_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks_ws</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peak_dict</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L792-L812"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.update_peak_info" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">update_peak_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks_ws</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peak_dict</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L791-L811"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.update_peak_info" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.integration.Integration.update_peak_offsets">
-<span class="sig-name descname"><span class="pre">update_peak_offsets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks_ws</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offsets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peak_dict</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L772-L790"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.update_peak_offsets" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">update_peak_offsets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks_ws</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offsets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peak_dict</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/integration.py#L771-L789"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.integration.Integration.update_peak_offsets" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
@@ -5370,7 +5378,7 @@ check(3, lambda v: v % 2 == 1)</p>
 <span id="garnet-reduction-resolution-module"></span><h2>garnet.reduction.resolution module<a class="headerlink" href="#module-garnet.reduction.resolution" title="Link to this heading">#</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="garnet.reduction.resolution.ResolutionEllipsoid">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">ResolutionEllipsoid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks_ws</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r_cut</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sig_noise_cut</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_peaks</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale_bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(0.5,</span> <span class="pre">2.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mosaic</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'isotropic'</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/resolution.py#L18-L777"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.resolution.ResolutionEllipsoid" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">ResolutionEllipsoid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks_ws</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r_cut</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sig_noise_cut</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_peaks</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale_bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(0.5,</span> <span class="pre">2.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mosaic</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'isotropic'</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/resolution.py#L18-L781"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.resolution.ResolutionEllipsoid" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
@@ -5398,7 +5406,10 @@ check(3, lambda v: v % 2 == 1)</p>
 <tr class="row-even"><td><p><strong>plot_diagnostics</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>predict_sample_cov</strong></p></td>
+<tr class="row-odd"><td><p><strong>predict_lab_cov</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p><strong>predict_sample_cov</strong></p></td>
 <td></td>
 </tr>
 </tbody>
@@ -5406,17 +5417,17 @@ check(3, lambda v: v % 2 == 1)</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.resolution.ResolutionEllipsoid.apply">
-<span class="sig-name descname"><span class="pre">apply</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/resolution.py#L430-L448"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.resolution.ResolutionEllipsoid.apply" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">apply</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/resolution.py#L430-L446"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.resolution.ResolutionEllipsoid.apply" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.resolution.ResolutionEllipsoid.diagnostics">
-<span class="sig-name descname"><span class="pre">diagnostics</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/resolution.py#L541-L614"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.resolution.ResolutionEllipsoid.diagnostics" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">diagnostics</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/resolution.py#L545-L618"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.resolution.ResolutionEllipsoid.diagnostics" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.resolution.ResolutionEllipsoid.estimate_prior_sigmas">
-<span class="sig-name descname"><span class="pre">estimate_prior_sigmas</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">moment_covs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/resolution.py#L458-L539"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.resolution.ResolutionEllipsoid.estimate_prior_sigmas" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">estimate_prior_sigmas</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">moment_covs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/resolution.py#L462-L543"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.resolution.ResolutionEllipsoid.estimate_prior_sigmas" title="Link to this definition">#</a></dt>
 <dd><p>Estimate prior width for covariance and centroid parameters.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -5438,12 +5449,17 @@ observations are used instead of the peak shapes in the workspace
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.resolution.ResolutionEllipsoid.plot_diagnostics">
-<span class="sig-name descname"><span class="pre">plot_diagnostics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/resolution.py#L616-L777"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.resolution.ResolutionEllipsoid.plot_diagnostics" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">plot_diagnostics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/resolution.py#L620-L781"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.resolution.ResolutionEllipsoid.plot_diagnostics" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="garnet.reduction.resolution.ResolutionEllipsoid.predict_lab_cov">
+<span class="sig-name descname"><span class="pre">predict_lab_cov</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peak_index</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/resolution.py#L448-L452"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.resolution.ResolutionEllipsoid.predict_lab_cov" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.resolution.ResolutionEllipsoid.predict_sample_cov">
-<span class="sig-name descname"><span class="pre">predict_sample_cov</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peak_index</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/resolution.py#L450-L456"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.resolution.ResolutionEllipsoid.predict_sample_cov" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">predict_sample_cov</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peak_index</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/resolution.py#L454-L460"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.resolution.ResolutionEllipsoid.predict_sample_cov" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
@@ -6671,6 +6687,7 @@ The default is 3.0.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.data.LaueData.crop_for_normalization"><code class="docutils literal notranslate"><span class="pre">LaueData.crop_for_normalization()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.data.LaueData.filter_events"><code class="docutils literal notranslate"><span class="pre">LaueData.filter_events()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.data.LaueData.get_counting_rate"><code class="docutils literal notranslate"><span class="pre">LaueData.get_counting_rate()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.data.LaueData.get_monitor_ratio"><code class="docutils literal notranslate"><span class="pre">LaueData.get_monitor_ratio()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.data.LaueData.get_volume_in_Q"><code class="docutils literal notranslate"><span class="pre">LaueData.get_volume_in_Q()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.data.LaueData.grouping_list"><code class="docutils literal notranslate"><span class="pre">LaueData.grouping_list()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.data.LaueData.load_background"><code class="docutils literal notranslate"><span class="pre">LaueData.load_background()</span></code></a></li>
@@ -6950,6 +6967,7 @@ The default is 3.0.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.resolution.ResolutionEllipsoid.estimate_prior_sigmas"><code class="docutils literal notranslate"><span class="pre">ResolutionEllipsoid.estimate_prior_sigmas()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.resolution.ResolutionEllipsoid.fit"><code class="docutils literal notranslate"><span class="pre">ResolutionEllipsoid.fit()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.resolution.ResolutionEllipsoid.plot_diagnostics"><code class="docutils literal notranslate"><span class="pre">ResolutionEllipsoid.plot_diagnostics()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.resolution.ResolutionEllipsoid.predict_lab_cov"><code class="docutils literal notranslate"><span class="pre">ResolutionEllipsoid.predict_lab_cov()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.resolution.ResolutionEllipsoid.predict_sample_cov"><code class="docutils literal notranslate"><span class="pre">ResolutionEllipsoid.predict_sample_cov()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.resolution.ResolutionEllipsoid.robust_nnls"><code class="docutils literal notranslate"><span class="pre">ResolutionEllipsoid.robust_nnls()</span></code></a></li>
 </ul>

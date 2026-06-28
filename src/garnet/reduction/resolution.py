@@ -565,7 +565,6 @@ class ResolutionEllipsoid:
                 cov_lab_obs = self._covariance_from_ellipsoid(radii, V_lab)
                 cov_lab_obs = 0.5 * (cov_lab_obs + cov_lab_obs.T)
                 cov_w_obs = T @ cov_lab_obs @ T.T
-
             cov_w_pred = T @ cov_lab_pred @ T.T
 
             # Project translation offset along predicted ellipsoid axes

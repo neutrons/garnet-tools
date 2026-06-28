@@ -398,7 +398,7 @@ class PeakEstimator:
                 R = self._peak_data[i]["R"]
 
                 cov = R.T @ cov @ R
-                self.moment_covs[i] = cov
+                self.moment_covs[i] = cov / _R_SCALE_3D**2
 
         results = {}
 

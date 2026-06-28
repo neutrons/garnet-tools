@@ -1,11 +1,18 @@
 import numpy as np
 
+import scipy.stats
+
 from garnet.plots.peaks import PeakEstimatePlot
 from garnet.reduction.peaks import PeakModel
 from garnet.reduction.intensity import (
     bin_extent,
     revert_ellipsoid_parameters,
 )
+
+_CHI2_SCALE_3D = scipy.stats.chi2.ppf(0.997, df=3)  # ≈ 14.16
+_CHI2_SCALE_1D = scipy.stats.chi2.ppf(0.997, df=1)  # ≈ 8.81
+_R_SCALE_3D = np.sqrt(_CHI2_SCALE_3D)  # ≈ 3.76
+_R_SCALE_1D = np.sqrt(_CHI2_SCALE_1D)  # ≈ 2.97
 
 
 def predict_local_cov(res, peak_index, projections):
@@ -58,7 +65,6 @@ def fit_peak_3d(d, b, x0, x1, x2, cov_local):
     chi2_nu : float
     snr : float
     """
-
     s = d - b
 
     valid = np.isfinite(s) & (s >= 0)
@@ -74,26 +80,27 @@ def fit_peak_3d(d, b, x0, x1, x2, cov_local):
 
     Q0, Q1, Q2 = np.meshgrid(x0, x1, x2, indexing="ij")
 
-    # centroid: weight by squared excess above background
     w = np.where(valid, np.maximum(s - B, 0.0) ** 2, 0.0)
-    wsum = float(w.sum())
+    wsum = w.sum()
 
     if wsum > 0:
-        c = np.array(
-            [
-                float(np.sum(w * Q0)) / wsum,
-                float(np.sum(w * Q1)) / wsum,
-                float(np.sum(w * Q2)) / wsum,
-            ]
+        c = (
+            np.array(
+                [
+                    np.sum(w * Q0),
+                    np.sum(w * Q1),
+                    np.sum(w * Q2),
+                ]
+            )
+            / wsum
         )
     else:
         c = np.zeros(3)
 
-    # Gaussian template centered at c with fixed Σ
     dx = np.stack([Q0 - c[0], Q1 - c[1], Q2 - c[2]], axis=-1)
 
     try:
-        Sigma_inv = np.linalg.inv(cov_local)
+        Sigma_inv = np.linalg.inv(cov_local / _R_SCALE_3D**2)
     except np.linalg.LinAlgError:
         return zero
 
@@ -104,20 +111,18 @@ def fit_peak_3d(d, b, x0, x1, x2, cov_local):
     gv = g[valid]
     dv_flat = dv[valid]
 
-    # Poisson MLE via IRLS: weights w_i = 1/mu_i converge to the deviance MLE.
-    # Initialise with unweighted WLS.
     eps = 1e-6
     A, B_fit = B, B
     for _ in range(10):
         mu = np.maximum(A * gv + B_fit, eps)
         w = 1.0 / mu
-        sw = float(w.sum())
+        sw = w.sum()
         if sw <= 0.0:
             break
-        d_bar = float((w * dv_flat).sum()) / sw
-        g_bar = float((w * gv).sum()) / sw
-        num = float((w * (gv - g_bar) * (dv_flat - d_bar)).sum())
-        den = float((w * (gv - g_bar) ** 2).sum())
+        d_bar = (w * dv_flat).sum() / sw
+        g_bar = (w * gv).sum() / sw
+        num = (w * (gv - g_bar) * (dv_flat - d_bar)).sum()
+        den = (w * (gv - g_bar) ** 2).sum()
         if den <= 0.0:
             break
         A_new = max(num / den, 0.0)
@@ -134,8 +139,8 @@ def fit_peak_3d(d, b, x0, x1, x2, cov_local):
 
     # Fisher-information standard errors for the Poisson MLE
     mu_fit = np.maximum(A * gv + B_fit, eps)
-    fisher_A = float(np.sum(gv**2 / mu_fit))
-    fisher_B = float(np.sum(1.0 / mu_fit))
+    fisher_A = np.sum(gv**2 / mu_fit)
+    fisher_B = np.sum(1.0 / mu_fit)
     A_err = 1.0 / np.sqrt(max(fisher_A, eps))
     B_err = 1.0 / np.sqrt(max(fisher_B, eps))
 
@@ -160,13 +165,12 @@ def moment_covariance(d, b, x0, x1, x2, c, W):
     -------
     cov : (3, 3) array or None
     """
-
     s = d - b
 
-    B = np.nanpercentile(d[np.isfinite(s)], 15)
+    B = np.nanpercentile(s[np.isfinite(s)], 15)
     sig = np.maximum(s - max(B, 0.0), 0.0)
     noise = np.sqrt(np.maximum(d + b, 1.0))
-    w = np.where(np.isfinite(d), sig / noise, 0.0)
+    w = np.where(np.isfinite(s), sig / noise, 0.0)
     wsum = w.sum()
 
     if wsum <= 0.0:
@@ -183,7 +187,7 @@ def moment_covariance(d, b, x0, x1, x2, c, W):
     )
 
     w_flat = w.ravel()
-    cov_local = (dx * w_flat) @ dx.T / wsum
+    cov_local = (dx * w_flat) @ dx.T / wsum * _R_SCALE_3D**2
     cov_local = 0.5 * (cov_local + cov_local.T)
 
     cov = W @ cov_local @ W.T
@@ -251,12 +255,20 @@ class PeakEstimator:
             shape = peak.get_peak_shape(i)
             dQ = data.get_resolution_in_Q(lamda, two_theta)
 
-            bin_params = UB, hkl, lamda, I, two_theta, az_phi, shape, dQ
-            bins, extents, projections, transform, conversion = bin_extent(
-                *bin_params
-            )
+            c0, c1, c2, r0, r1, r2, v0, v1, v2 = shape
+
+            c0, c1, c2 = R @ [c0, c1, c2]
+            v0, v1, v2 = (R @ np.column_stack([v0, v1, v2])).T
+
+            shape = c0, c1, c2, r0, r1, r2, v0, v1, v2
+
+            bin_params = R @ UB, hkl, lamda, I, two_theta, az_phi, shape, dQ
+            bins, extents, projections, _, _ = bin_extent(*bin_params)
 
             result = data.bin_in_Q(md_ws, extents, bins, projections)
+
+            if result is None:
+                continue
 
             d, _, Q0, Q1, Q2 = result
 
@@ -266,15 +278,15 @@ class PeakEstimator:
             if data.workspace_exists("bkg_md"):
                 result = data.bin_in_Q("bkg_md", extents, bins, projections)
 
-                b, _, Q0, Q1, Q2 = result
-
-                data.delete_workspace("bkg_md_bin")
+                if result is not None:
+                    b, _, _, _, _ = result
+                    data.delete_workspace("bkg_md_bin")
 
             b *= pc_ratio
 
             x0 = Q0[:, 0, 0] - Q_mod
-            x1 = Q1[0, :, 0]
-            x2 = Q2[0, 0, :]
+            x1 = Q1[0, :, 0].copy()
+            x2 = Q2[0, 0, :].copy()
 
             self._peak_data[i] = {
                 "d": d,
@@ -383,6 +395,9 @@ class PeakEstimator:
                 pd["W"],
             )
             if cov is not None:
+                R = self._peak_data[i]["R"]
+
+                cov = R.T @ cov @ R
                 self.moment_covs[i] = cov
 
         results = {}
@@ -393,14 +408,16 @@ class PeakEstimator:
             cov_local = fit["cov_local"]
             pd = self._peak_data[i]
 
-            det_cov = np.linalg.det(cov_local)
+            cov = cov_local / _R_SCALE_3D**2
+
+            det_cov = np.linalg.det(cov)
             scale = (2.0 * np.pi) ** 1.5 * np.sqrt(max(det_cov, 0.0))
 
             I = A * scale
             sigma_I = A_err * scale
 
             c = fit["c"]
-            radii, V = res._ellipsoid_from_covariance(cov_local)
+            radii, V = res._ellipsoid_from_covariance(cov)
             local_params = (
                 c[0],
                 c[1],
@@ -419,8 +436,8 @@ class PeakEstimator:
             info = {
                 "bkg": fit["B"],
                 "bkg_err": fit["B_err"],
-                "I_ell": I,
-                "s_ell": sigma_I,
+                "intens": I,
+                "intens_err": sigma_I,
                 "snr": fit["snr"],
             }
 
@@ -432,7 +449,10 @@ class PeakEstimator:
         """Write empirical sample-frame covariance as peak shape."""
 
         pk = PeakModel(peaks_ws)
-        radii, V_sample = res._ellipsoid_from_covariance(cov_sample)
+
+        cov = cov_sample / _R_SCALE_3D**2
+
+        radii, V_s = res._ellipsoid_from_covariance(cov)
 
         Q_s = np.array(pk.get_sample_Q(peak_index))
 
@@ -442,15 +462,15 @@ class PeakEstimator:
             radii[0],
             radii[1],
             radii[2],
-            list(V_sample[:, 0]),
-            list(V_sample[:, 1]),
-            list(V_sample[:, 2]),
+            V_s[:, 0],
+            V_s[:, 1],
+            V_s[:, 2],
         )
 
     def _extract_normalized_profiles(self):
         """
         For all high-SNR peaks collect 1D marginal profiles normalized to
-        (y - B) / A vs z = (x - mu) / sigma.
+        (y - b) / A vs z = (x - mu) / sigma.
 
         Returns
         -------
@@ -470,11 +490,11 @@ class PeakEstimator:
 
             c = fit["c"]
             cov_local = fit["cov_local"]
-            sigmas = np.sqrt(np.maximum(np.diag(cov_local), 0.0))
+            sigmas = np.sqrt(np.maximum(np.diag(cov_local), 0.0)) / _R_SCALE_1D
 
             pd = self._peak_data[i]
             d = pd["d"]
-            b = pd.get("b", np.zeros_like(d))
+            b = pd["b"]
             xs = [pd["x0"], pd["x1"], pd["x2"]]
 
             for k in range(3):
@@ -505,15 +525,15 @@ class PeakEstimator:
                 if den <= 0:
                     continue
 
-                A1d = float(num / den)
-                B1d = float(net_bar - A1d * g_bar)
+                A1d = num / den
+                B1d = net_bar - A1d * g_bar
 
                 if A1d <= 0:
                     continue
 
                 N = int(valid.sum())
                 resid = net - (A1d * g + B1d)
-                resid_var = float((w * resid**2).sum()) / max(N - 2, 1)
+                resid_var = (w * resid**2).sum() / max(N - 2, 1)
                 A1d_err = np.sqrt(max(resid_var / den, 0.0))
                 B1d_err = np.sqrt(
                     max(resid_var * (1.0 / sw + g_bar**2 / den), 0.0)
@@ -539,7 +559,7 @@ class PeakEstimator:
         """
         Save a 3-panel plot of the normalized 1D peak profiles in z-space.
 
-        Each panel shows (y - B) / A vs z = (x - mu) / sigma accumulated
+        Each panel shows (y - b) / A vs z = (x - mu) / sigma accumulated
         over all high-SNR peaks, which should collapse onto exp(-z^2/2).
 
         Parameters

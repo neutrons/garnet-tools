@@ -3,7 +3,6 @@ import numpy as np
 
 import scipy.optimize
 import scipy.spatial.transform
-import scipy.special
 import scipy.stats
 import scipy.signal
 import scipy.ndimage

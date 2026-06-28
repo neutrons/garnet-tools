@@ -1770,7 +1770,7 @@ class PeakPlot(BasePlot):
 
 
 class PeakEstimatePlot(BasePlot):
-    def __init__(self, zs, yns, ens):
+    def __init__(self, zs, ys, es):
         super(PeakEstimatePlot, self).__init__()
 
         plt.close("all")
@@ -1785,44 +1785,41 @@ class PeakEstimatePlot(BasePlot):
         )
 
         labels = [
-            r"$z_0 = \Delta|Q| / \sigma_0$",
-            r"$z_1 = \Delta Q_1 / \sigma_1$",
-            r"$z_2 = \Delta Q_2 / \sigma_2$",
+            r"$z_0$",
+            r"$z_1$",
+            r"$z_2$",
         ]
 
         for k in range(3):
             ax = self.ax[k]
-            z, yn, en = zs[k], yns[k], ens[k]
+            z, y, e = zs[k], ys[k], es[k]
 
             if len(z) > 0:
-                mask = np.isfinite(yn) & np.isfinite(en) & (en > 0)
+                mask = np.isfinite(y) & np.isfinite(e) & (e > 0)
                 if mask.sum() > 0:
                     ax.errorbar(
                         z[mask],
-                        yn[mask],
-                        en[mask],
+                        y[mask],
+                        e[mask],
                         fmt=".",
                         color=f"C{k}",
-                        alpha=0.15,
-                        markersize=2,
-                        linewidth=0.5,
                         zorder=1,
                     )
 
-                pos_mask = mask & (yn > 0)
+                pos_mask = mask & (y > 0)
                 if pos_mask.sum() > 2:
-                    self.plot_peak_bins(ax, z[pos_mask], yn[pos_mask])
+                    self.plot_peak_bins(ax, z[pos_mask], y[pos_mask])
 
             ax.set_xlabel(labels[k])
             ax.minorticks_on()
 
-        self.ax[0].set_ylabel(r"$(y - B)\,/\,A$")
-        self.ax[0].set_xlim(-4, 4)
+        self.ax[0].set_ylabel(r"$\hat{y}$")
+        self.ax[0].set_xlim(-6.0, 6.0)
         self.ax[0].set_ylim(-0.5, 1.5)
 
-    def plot_peak_bins(self, ax, z, yn):
+    def plot_peak_bins(self, ax, z, y):
         z_bins = np.histogram_bin_edges(z, bins="auto")
-        w_sum, _ = np.histogram(z, bins=z_bins, weights=yn)
+        w_sum, _ = np.histogram(z, bins=z_bins, weights=y)
         counts, _ = np.histogram(z, bins=z_bins)
         w_mean = np.where(counts > 0, w_sum / counts, 0.0)
         peak = w_mean.max()

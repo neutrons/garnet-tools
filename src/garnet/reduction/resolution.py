@@ -8,9 +8,6 @@ from mantid.dataobjects import PeakShapeEllipsoid
 
 from scipy.optimize import nnls
 
-# r0,r1,r2 stored in the peak workspace are 99.7% containment radii,
-# matching the convention in ellipsoid.py (S_matrix = U diag(r²) U.T,
-# mah²≤1 ↔ 99.7% ellipsoid).
 _CHI2_SCALE_3D = scipy.stats.chi2.ppf(0.997, df=3)  # ≈ 14.16
 _R_SCALE = np.sqrt(_CHI2_SCALE_3D)  # ≈ 3.76
 

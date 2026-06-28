@@ -220,13 +220,13 @@ class Integration(IntegrationModel):
                 lamda_max,
             )
 
+            self.predict_add_satellite_peaks(lamda_min, lamda_max)
+
             pk = PeakModel("peaks")
             self.orig_d = {
                 pk.get_hklmnp(i): pk.get_d_from_ub(i)
                 for i in range(pk.get_number_peaks())
             }
-
-            self.predict_add_satellite_peaks(lamda_min, lamda_max)
 
             peaks.integrate_peaks(
                 "md",
@@ -245,8 +245,10 @@ class Integration(IntegrationModel):
             estimator = PeakEstimator()
             estimator.collect_peaks("peaks", data, "md", monitor_ratio)
             estimator.estimate("peaks", res)
+
             est_file = self.get_plot_file("run#{}_est".format(run))
             estimator.plot_estimate(est_file)
+
             moment_covs = estimator.moment_covs
 
             del estimator

@@ -2313,7 +2313,7 @@ class LaueData(BaseDataModel):
         detector_calibration=None,
         tube_calibration=None,
         save=False,
-        subtract=False,
+        remove=False,
     ):
         """
         Load a background file and scale to data.
@@ -2324,11 +2324,8 @@ class LaueData(BaseDataModel):
             Background file.
         event_name : str
             Name of raw event data.
-        subtract : bool
-            If True, scale background by run proton charge and subtract
-            directly from event_name (event-space subtraction, one-time
-            load kept as "bkg").  If False, restore original counts and
-            convert to Q-lab as "bkg_md" for use in normalization.
+        remove : bool
+            Delete raw background workspace.
 
         """
 
@@ -2346,7 +2343,7 @@ class LaueData(BaseDataModel):
         n_det_inst //= cols // c * rows // r
         n_det_inst *= cols // c * rows // r
 
-        guard_ws = "bkg" if subtract else "bkg_md"
+        guard_ws = "bkg_md" if remove else "bkg"
 
         if not mtd.doesExist(guard_ws) and filename is not None:
             Load(
@@ -2475,74 +2472,37 @@ class LaueData(BaseDataModel):
             if not mtd["bkg"].run().hasProperty("NormalizationFactor"):
                 NormaliseByCurrent(InputWorkspace="bkg", OutputWorkspace="bkg")
 
-            if not subtract:
-                CreateSingleValuedWorkspace(
-                    DataValue=pc_bkg, OutputWorkspace="pc_scale"
-                )
-
-                Multiply(
-                    LHSWorkspace="bkg",
-                    RHSWorkspace="pc_scale",
-                    OutputWorkspace="bkg",
-                )
-
-                DeleteWorkspace(Workspace="pc_scale")
-
-                mtd["bkg"].run()["NormalizationFactor"] = pc_bkg
-                mtd["bkg"].run()["gd_prtn_chrg"] = pc_bkg
-
-                self.convert_to_Q_lab("bkg", "bkg_md")
-
-                if save:
-                    SaveNexus(Filename="/tmp/bkg.nxs", InputWorkspace="bkg")
-
-                DeleteWorkspace(Workspace="bkg")
-
-            DeleteWorkspace(Workspace="_detectors")
-
-        if subtract and filename is not None and event_name is not None:
-            pc_run = mtd[event_name].run().getProtonCharge()
-
             CreateSingleValuedWorkspace(
-                DataValue=pc_run, OutputWorkspace="pc_run_scale"
+                DataValue=pc_bkg, OutputWorkspace="pc_scale"
             )
 
             Multiply(
                 LHSWorkspace="bkg",
-                RHSWorkspace="pc_run_scale",
-                OutputWorkspace="bkg_scaled",
+                RHSWorkspace="pc_scale",
+                OutputWorkspace="bkg",
             )
 
-            DeleteWorkspace(Workspace="pc_run_scale")
+            DeleteWorkspace(Workspace="pc_scale")
 
-            sub_name = event_name + "_sub"
+            mtd["bkg"].run()["NormalizationFactor"] = pc_bkg
+            mtd["bkg"].run()["gd_prtn_chrg"] = pc_bkg
 
-            Minus(
-                LHSWorkspace=event_name,
-                RHSWorkspace="bkg_scaled",
-                OutputWorkspace=sub_name,
-            )
+            self.convert_to_Q_lab("bkg", "bkg_md")
 
-            DeleteWorkspace(Workspace="bkg_scaled")
+            if save:
+                SaveNexus(Filename="/tmp/bkg.nxs", InputWorkspace="bkg")
 
-            DeleteWorkspace(Workspace=event_name)
+            if remove:
+                DeleteWorkspace(Workspace="bkg")
 
-            RenameWorkspace(
-                InputWorkspace=sub_name, OutputWorkspace=event_name
-            )
+        DeleteWorkspace(Workspace="_detectors")
 
-    def subtract_background(self, md_name, event_name):
-        if not mtd.doesExist("bkg_md") or not mtd.doesExist(md_name):
+    def subtract_background(self, event_name):
+        if not mtd.doesExist("bkg") or not mtd.doesExist(event_name):
             return
 
         pc_signal = mtd[event_name].run().getProtonCharge()
-        pc_bkg = (
-            mtd["bkg_md"]
-            .getExperimentInfo(0)
-            .run()
-            .getProperty("gd_prtn_chrg")
-            .value
-        )
+        pc_bkg = self.pc_bkg
 
         if not (np.isfinite(pc_bkg) and pc_bkg > 0):
             return
@@ -2553,21 +2513,25 @@ class LaueData(BaseDataModel):
             DataValue=ratio, OutputWorkspace="pc_ratio"
         )
 
-        MultiplyMD(
-            LHSWorkspace="bkg_md",
+        Multiply(
+            LHSWorkspace="bkg",
             RHSWorkspace="pc_ratio",
-            OutputWorkspace="bkg_md_scaled",
+            OutputWorkspace="bkg_scaled",
         )
 
         DeleteWorkspace(Workspace="pc_ratio")
 
-        MinusMD(
-            LHSWorkspace=md_name,
-            RHSWorkspace="bkg_md_scaled",
-            OutputWorkspace=md_name,
+        sub_name = event_name + "_sub"
+
+        Minus(
+            LHSWorkspace=event_name,
+            RHSWorkspace="bkg_scaled",
+            OutputWorkspace=sub_name,
         )
 
-        DeleteWorkspace(Workspace="bkg_md_scaled")
+        DeleteWorkspace(Workspace="bkg_scaled")
+
+        self.crop_for_normalization(sub_name)
 
     def normalize_to_hkl(self, md, projections, extents, bins, symmetry=None):
         """

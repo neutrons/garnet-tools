@@ -824,8 +824,8 @@ class Peaks:
 
             vol_obs = 4 / 3 * np.pi * r0 * r1 * r2
 
-            cov = res.predict_sample_cov(i)
-            radii, _ = res._ellipsoid_from_covariance(cov)
+            S = res.predict_sample_S(i)
+            radii, _ = res._ellipsoid_from_S(S)
             vol_model = 4 / 3 * np.pi * np.prod(radii)
 
             if vol_model <= 0:

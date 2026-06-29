@@ -193,6 +193,7 @@ class Integration(IntegrationModel):
                 "data",
                 self.plan.get("DetectorCalibration"),
                 self.plan.get("TubeCalibration"),
+                remove=False,
             )
 
             lamda_min, lamda_max = data.wavelength_band
@@ -209,7 +210,13 @@ class Integration(IntegrationModel):
 
             r_cut = self.params["Radius"]
 
-            data.convert_to_Q_lab("data", "md")
+            data.subtract_background("data")
+
+            app = "_sub" if data.workspace_exists("data_sub") else ""
+
+            data.convert_to_Q_sample("data" + app, "md")
+
+            data.delete_workspace("data_sub")
 
             peaks.predict_peaks(
                 "data",
@@ -223,6 +230,7 @@ class Integration(IntegrationModel):
             self.predict_add_satellite_peaks(lamda_min, lamda_max)
 
             pk = PeakModel("peaks")
+
             self.orig_d = {
                 pk.get_hklmnp(i): pk.get_d_from_ub(i)
                 for i in range(pk.get_number_peaks())
@@ -234,29 +242,16 @@ class Integration(IntegrationModel):
                 r_cut / np.cbrt(3),
                 method="ellipsoid",
                 centroid=True,
-                update=False,
+                update=True,
             )
 
-            res = ResolutionEllipsoid("peaks", r_cut=np.inf)
+            res = ResolutionEllipsoid("peaks", r_cut=r_cut)
             res.fit()
-
-            monitor_ratio = data.get_monitor_ratio()
-
-            estimator = PeakEstimator()
-            estimator.collect_peaks("peaks", data, "md", monitor_ratio)
-            estimator.estimate("peaks", res)
-
-            est_file = self.get_plot_file("run#{}_est".format(run))
-            estimator.plot_estimate(est_file)
-
-            moment_covs = estimator.moment_covs
-
-            del estimator
 
             data.delete_workspace("md")
 
             res_file = self.get_plot_file("run#{}_res".format(run))
-            self.res_sigma = res.estimate_prior_sigmas(moment_covs)
+            self.res_sigma = res.estimate_prior_sigmas()
             res.plot_diagnostics(res_file)
 
             pk_file = self.get_diagnostic_file("run#{}_peaks".format(run))
@@ -275,7 +270,6 @@ class Integration(IntegrationModel):
 
                 data.load_clear_UB(ub_file, "data", run)
 
-            # re-predict with refined UB
             peaks.predict_peaks(
                 "data",
                 "peaks",

@@ -9,6 +9,8 @@ import scipy.ndimage
 
 from lmfit import Minimizer, Parameters, fit_report
 
+_R_SCALE_3D = np.sqrt(scipy.stats.chi2.ppf(0.997, df=3))
+
 
 class PeakEllipsoid:
     def __init__(self):
@@ -21,9 +23,19 @@ class PeakEllipsoid:
         self.mode_weights_2d = 1.0
         self.mode_weights_3d = 1.0
 
+        # prior_center_sigma: allowed center motion in whitened units (scalar)
+        # prior_cov_sigma: allowed log-scale covariance change (scalar)
         self.prior_center_sigma = 1.0
         self.prior_cov = np.eye(3)
-        self.prior_cov_sigma = 1.0
+        self.prior_cov_sigma = 0.3
+
+        # Eigendecomposition of prior_cov (cached by update_estimate)
+        self._prior_radii = np.ones(3)
+        self._prior_inv_sqrt = np.eye(3)
+
+        # Bounds for SNR-adaptive prior (set by set_resolution_sigma)
+        self._sigma_center_max = 1.0
+        self._sigma_log_s_max = 0.3
 
     def vech6(self, M):
         return np.array(
@@ -109,13 +121,15 @@ class PeakEllipsoid:
             self.S_matrix(r0, r1, r2, u0, u1, u2),
         )
 
-        self.prior_center_sigma = np.array([r0, r1, r2]) / 3
-        self.prior_cov_sigma = (
-            np.array([r0**2, r1**2, r2**2, r1 * r2, r0 * r2, r0 * r1])
-            / 3
-        )
-
         self.prior_cov = self.S_matrix(r0, r1, r2, u0, u1, u2)
+
+        r_sq, U0 = np.linalg.eigh(self.prior_cov)
+        self._prior_radii = np.sqrt(np.maximum(r_sq, 1e-12))
+        self._prior_inv_sqrt = U0 @ np.diag(1.0 / self._prior_radii) @ U0.T
+
+        # Scalar defaults (overridden by set_resolution_sigma / update_adaptive_prior)
+        self.prior_center_sigma = 1.0
+        self.prior_cov_sigma = 0.3
 
     def prior_residual(self, params):
         terms = []
@@ -123,49 +137,51 @@ class PeakEllipsoid:
         c0 = params["c0"].value
         c1 = params["c1"].value
         c2 = params["c2"].value
-
         c = np.array([c0, c1, c2])
 
+        # Whitened center: r_μ = sqrt(λ_c) * R * S₀^{-1/2} @ c / σ_μ
+        u_mu = _R_SCALE_3D * self._prior_inv_sqrt @ c
         terms += (
-            np.sqrt(self.lamda_center) * c / self.prior_center_sigma
+            np.sqrt(self.lamda_center) * u_mu / self.prior_center_sigma
         ).tolist()
 
         r0 = params["r0"].value
         r1 = params["r1"].value
         r2 = params["r2"].value
-        u0 = params["u0"].value
-        u1 = params["u1"].value
-        u2 = params["u2"].value
 
-        S = self.S_matrix(r0, r1, r2, u0, u1, u2)
-        dS = self.vech6(S - self.prior_cov)
-        terms += (np.sqrt(self.lamda_cov) * dS / self.prior_cov_sigma).tolist()
+        # Log-scale penalty: r_s = sqrt(λ_cov) * log(s) / σ_{log s}
+        # s = (r0 r1 r2 / r00 r10 r20)^{1/3}
+        log_s = (
+            np.log(max(r0, 1e-12))
+            + np.log(max(r1, 1e-12))
+            + np.log(max(r2, 1e-12))
+            - np.sum(np.log(self._prior_radii))
+        ) / 3.0
+        terms.append(
+            float(np.sqrt(self.lamda_cov) * log_s / self.prior_cov_sigma)
+        )
 
         return np.asarray(terms, dtype=float)
 
     def prior_jacobian(self, params, S, dr, du):
-        names = ["c0", "c1", "c2", "S00", "S11", "S22", "S12", "S02", "S01"]
+        # Residuals: [r_μ0, r_μ1, r_μ2, r_s]  (4 columns)
         params_list = [name for name, _ in params.items()]
-        jac = np.zeros((len(params_list), len(names)), dtype=float)
+        jac = np.zeros((len(params_list), 4), dtype=float)
 
-        for i, name in enumerate(["c0", "c1", "c2"]):
-            jac[params_list.index(name), i] = (
-                np.sqrt(self.lamda_center) / self.prior_center_sigma[i]
-            )
+        # Center: ∂r_μ_i/∂c_j = sqrt(λ_c) * R * (S₀^{-1/2})_{i,j} / σ_μ
+        center_scale = (
+            np.sqrt(self.lamda_center) * _R_SCALE_3D / self.prior_center_sigma
+        )
+        for j, cname in enumerate(["c0", "c1", "c2"]):
+            idx = params_list.index(cname)
+            jac[idx, :3] = center_scale * self._prior_inv_sqrt[:, j]
 
-        d_inv_S = {
-            "r0": dr[0],
-            "r1": dr[1],
-            "r2": dr[2],
-            "u0": du[0],
-            "u1": du[1],
-            "u2": du[2],
-        }
-
-        cov_scale = np.sqrt(self.lamda_cov) / self.prior_cov_sigma
-        for name in ["r0", "r1", "r2", "u0", "u1", "u2"]:
-            dS = -S @ d_inv_S[name] @ S
-            jac[params_list.index(name), 3:] = cov_scale * self.vech6(dS)
+        # Log-scale: ∂r_s/∂r_k = sqrt(λ_cov) / (3 * r_k * σ_{log s})
+        log_s_scale = np.sqrt(self.lamda_cov) / (3.0 * self.prior_cov_sigma)
+        for k, rname in enumerate(["r0", "r1", "r2"]):
+            rk = params[rname].value
+            idx = params_list.index(rname)
+            jac[idx, 3] = log_s_scale / max(rk, 1e-12)
 
         ind = [i for i, (_, par) in enumerate(params.items()) if par.vary]
         return jac[ind]
@@ -209,8 +225,33 @@ class PeakEllipsoid:
     def set_resolution_sigma(
         self, prior_center_sigma, prior_cov_sigma, Q_mag=1.0
     ):
-        self.prior_center_sigma = prior_center_sigma * Q_mag
-        self.prior_cov_sigma = prior_cov_sigma * Q_mag**2
+        # prior_center_sigma: (3,) RMS offsets in Q-normalized SW frame → physical
+        # prior_cov_sigma: (6,) RMS S residuals in Q-normalized SW frame → physical
+        center_phys = np.asarray(prior_center_sigma) * Q_mag
+        S_phys = np.asarray(prior_cov_sigma) * Q_mag**2
+
+        r_char = float(np.prod(self._prior_radii) ** (1.0 / 3.0))
+        r_char = max(r_char, 1e-12)
+
+        # Convert to whitened units: σ_μ = R * mean(center_phys) / r_char
+        self._sigma_center_max = float(
+            _R_SCALE_3D * np.mean(center_phys) / r_char
+        )
+        # Convert to log-scale units: σ_{log s} ≈ mean(diag S_phys) / (2 r_char²)
+        self._sigma_log_s_max = float(
+            np.mean(S_phys[:3]) / (2.0 * r_char**2)
+        )
+
+        # Clamp to sensible bounds
+        self._sigma_center_max = float(
+            np.clip(self._sigma_center_max, 0.05, 5.0)
+        )
+        self._sigma_log_s_max = float(
+            np.clip(self._sigma_log_s_max, 0.02, 2.0)
+        )
+
+        self.prior_center_sigma = self._sigma_center_max
+        self.prior_cov_sigma = self._sigma_log_s_max
 
     def data_norm(self, d, n, v, rel_err=30):
         mask = (n > 0) & np.isfinite(n)
@@ -1253,12 +1294,16 @@ class PeakEllipsoid:
         c1_err = self.params["c1"].stderr
         c2_err = self.params["c2"].stderr
 
+        # Convert whitened σ_μ back to approximate physical scale per axis
+        _c_err_scale = (
+            self._prior_radii * self.prior_center_sigma / _R_SCALE_3D
+        )
         if c0_err is None:
-            c0_err = abs(c0) if c0 != 0 else self.prior_center_sigma[0]
+            c0_err = abs(c0) if c0 != 0 else float(_c_err_scale[0])
         if c1_err is None:
-            c1_err = abs(c1) if c1 != 0 else self.prior_center_sigma[1]
+            c1_err = abs(c1) if c1 != 0 else float(_c_err_scale[1])
         if c2_err is None:
-            c2_err = abs(c2) if c2 != 0 else self.prior_center_sigma[2]
+            c2_err = abs(c2) if c2 != 0 else float(_c_err_scale[2])
 
         r0 = self.params["r0"].value
         r1 = self.params["r1"].value
@@ -1769,9 +1814,28 @@ class PeakEllipsoid:
 
     def update_adaptive_prior(self, args_1d, args_2d, args_3d):
         sn = self._isig_3d(self.params, args_3d)
-        scale = self.prior_strength_from_sn(sn)
-        self.lamda_cov = scale / 10
-        self.lamda_center = scale / 10
+        self.prior_center_sigma = self._sigma_center_from_sn(sn)
+        self.prior_cov_sigma = self._sigma_log_s_from_sn(sn)
+        self.lamda_center = 1.0
+        self.lamda_cov = 1.0
+
+    def _sigma_center_from_sn(self, sn_eff, sn_cut=20.0, power=2.0):
+        """σ_μ(S₀): whitened center prior width as a function of peak SNR."""
+        sn_eff = self.safe_sn(sn_eff)
+        sigma_max = self._sigma_center_max
+        sigma_min = max(0.05, sigma_max / 10.0)
+        eps = 1e-6
+        g = 1.0 / (1.0 + (sn_cut / (sn_eff + eps)) ** power)
+        return float(sigma_min + g * (sigma_max - sigma_min))
+
+    def _sigma_log_s_from_sn(self, sn_eff, sn_cut=20.0, power=2.0):
+        """σ_{log s}(S₀): log-scale prior width as a function of peak SNR."""
+        sn_eff = self.safe_sn(sn_eff)
+        sigma_max = self._sigma_log_s_max
+        sigma_min = max(0.02, sigma_max / 10.0)
+        eps = 1e-6
+        g = 1.0 / (1.0 + (sn_cut / (sn_eff + eps)) ** power)
+        return float(sigma_min + g * (sigma_max - sigma_min))
 
     def safe_sn(self, sn, floor=1.0, ceiling=1e4):
         sn = np.nan_to_num(sn, nan=floor, posinf=ceiling, neginf=floor)

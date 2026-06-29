@@ -2527,6 +2527,7 @@ class LaueData(BaseDataModel):
             LHSWorkspace=event_name,
             RHSWorkspace="bkg_scaled",
             OutputWorkspace=sub_name,
+            AllowDifferentNumberSpectra=True,
         )
 
         DeleteWorkspace(Workspace="bkg_scaled")

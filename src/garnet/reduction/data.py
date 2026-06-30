@@ -2495,7 +2495,7 @@ class LaueData(BaseDataModel):
             if remove:
                 DeleteWorkspace(Workspace="bkg")
 
-        DeleteWorkspace(Workspace="_detectors")
+        self.delete_workspace("_detectors")
 
     def subtract_background(self, event_name):
         if not mtd.doesExist("bkg") or not mtd.doesExist(event_name):

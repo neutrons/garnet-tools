@@ -24,10 +24,12 @@ class PeakEllipsoid:
         self.mode_weights_3d = 1.0
 
         # prior_center_sigma: allowed center motion in whitened units (scalar)
-        # prior_cov_sigma: allowed log-scale covariance change (scalar)
+        # prior_cov_sigma: σ_η, allowed log-scale (trace of L) change
+        # prior_distortion_sigma: σ_D, allowed anisotropic shape change (‖D‖_F)
         self.prior_center_sigma = 1.0
         self.prior_cov = np.eye(3)
         self.prior_cov_sigma = 0.3
+        self.prior_distortion_sigma = 0.1
 
         # Eigendecomposition of prior_cov (cached by update_estimate)
         self._prior_radii = np.ones(3)
@@ -36,6 +38,7 @@ class PeakEllipsoid:
         # Bounds for SNR-adaptive prior (set by set_resolution_sigma)
         self._sigma_center_max = 1.0
         self._sigma_log_s_max = 0.3
+        self._sigma_distortion_max = 0.1
 
     def vech6(self, M):
         return np.array(
@@ -130,6 +133,41 @@ class PeakEllipsoid:
         # Scalar defaults (overridden by set_resolution_sigma / update_adaptive_prior)
         self.prior_center_sigma = 1.0
         self.prior_cov_sigma = 0.3
+        self.prior_distortion_sigma = 0.1
+
+    def _log_matrix_decomp(self, S):
+        """
+        Compute L = log(S₀^{-1/2} S S₀^{-1/2}) and return scale/distortion split.
+
+        Returns eta (tr(L)/3), D (traceless part), Q, lam, log_lam from the
+        eigendecomposition of M = S₀^{-1/2} S S₀^{-1/2}.
+        """
+        P = self._prior_inv_sqrt
+        M = P @ S @ P
+        M = 0.5 * (M + M.T)
+        lam, Q = np.linalg.eigh(M)
+        lam = np.maximum(lam, 1e-12)
+        log_lam = np.log(lam)
+        L = Q @ np.diag(log_lam) @ Q.T
+        eta = float(np.sum(log_lam) / 3.0)
+        D = L - eta * np.eye(3)
+        return eta, D, Q, lam, log_lam
+
+    def _loewner_jac(self, Q, lam, log_lam, dM):
+        """Apply Loewner-matrix derivative of matrix log: dL = Q*(Φ⊙Q^T dM Q)*Q^T."""
+        dM_eb = Q.T @ dM @ Q
+        Phi = np.empty((3, 3))
+        for i in range(3):
+            for j in range(3):
+                if i == j:
+                    Phi[i, j] = 1.0 / lam[i]
+                else:
+                    dlam = lam[i] - lam[j]
+                    if abs(dlam) < 1e-10 * max(lam[i], lam[j]):
+                        Phi[i, j] = 1.0 / lam[i]
+                    else:
+                        Phi[i, j] = (log_lam[i] - log_lam[j]) / dlam
+        return Q @ (Phi * dM_eb) @ Q.T
 
     def prior_residual(self, params):
         terms = []
@@ -148,25 +186,37 @@ class PeakEllipsoid:
         r0 = params["r0"].value
         r1 = params["r1"].value
         r2 = params["r2"].value
+        u0 = params["u0"].value
+        u1 = params["u1"].value
+        u2 = params["u2"].value
+        S = self.S_matrix(r0, r1, r2, u0, u1, u2)
 
-        # Log-scale penalty: r_s = sqrt(λ_cov) * log(s) / σ_{log s}
-        # s = (r0 r1 r2 / r00 r10 r20)^{1/3}
-        log_s = (
-            np.log(max(r0, 1e-12))
-            + np.log(max(r1, 1e-12))
-            + np.log(max(r2, 1e-12))
-            - np.sum(np.log(self._prior_radii))
-        ) / 3.0
+        # L = log(S₀^{-1/2} S S₀^{-1/2}), split into scale η and distortion D
+        eta, D, _, _, _ = self._log_matrix_decomp(S)
+
+        # Scale residual: r_η = sqrt(λ_cov) * η / σ_η
         terms.append(
-            float(np.sqrt(self.lamda_cov) * log_s / self.prior_cov_sigma)
+            float(np.sqrt(self.lamda_cov) * eta / self.prior_cov_sigma)
         )
+
+        # Distortion residuals: √2 on off-diagonal so ‖r_D‖² = ‖D‖_F² / σ_D²
+        cov_d = np.sqrt(self.lamda_cov) / self.prior_distortion_sigma
+        terms += [
+            float(cov_d * D[0, 0]),
+            float(cov_d * D[1, 1]),
+            float(cov_d * D[2, 2]),
+            float(cov_d * np.sqrt(2.0) * D[1, 2]),
+            float(cov_d * np.sqrt(2.0) * D[0, 2]),
+            float(cov_d * np.sqrt(2.0) * D[0, 1]),
+        ]
 
         return np.asarray(terms, dtype=float)
 
     def prior_jacobian(self, params, S, dr, du):
-        # Residuals: [r_μ0, r_μ1, r_μ2, r_s]  (4 columns)
+        # Residuals: [r_μ0, r_μ1, r_μ2, r_η, r_D00, r_D11, r_D22, r_D12, r_D02, r_D01]
+        # 3 center + 1 scale + 6 distortion = 10 columns
         params_list = [name for name, _ in params.items()]
-        jac = np.zeros((len(params_list), 4), dtype=float)
+        jac = np.zeros((len(params_list), 10), dtype=float)
 
         # Center: ∂r_μ_i/∂c_j = sqrt(λ_c) * R * (S₀^{-1/2})_{i,j} / σ_μ
         center_scale = (
@@ -176,12 +226,37 @@ class PeakEllipsoid:
             idx = params_list.index(cname)
             jac[idx, :3] = center_scale * self._prior_inv_sqrt[:, j]
 
-        # Log-scale: ∂r_s/∂r_k = sqrt(λ_cov) / (3 * r_k * σ_{log s})
-        log_s_scale = np.sqrt(self.lamda_cov) / (3.0 * self.prior_cov_sigma)
-        for k, rname in enumerate(["r0", "r1", "r2"]):
-            rk = params[rname].value
-            idx = params_list.index(rname)
-            jac[idx, 3] = log_s_scale / max(rk, 1e-12)
+        # Covariance: Loewner-matrix Jacobian of L = log(S₀^{-1/2} S S₀^{-1/2})
+        P = self._prior_inv_sqrt
+        eta, _, Q, lam, log_lam = self._log_matrix_decomp(S)
+
+        d_inv_S = {
+            "r0": dr[0],
+            "r1": dr[1],
+            "r2": dr[2],
+            "u0": du[0],
+            "u1": du[1],
+            "u2": du[2],
+        }
+        eta_scale = np.sqrt(self.lamda_cov) / self.prior_cov_sigma
+        cov_d = np.sqrt(self.lamda_cov) / self.prior_distortion_sigma
+        sq2 = np.sqrt(2.0)
+
+        for name in ["r0", "r1", "r2", "u0", "u1", "u2"]:
+            dS = -S @ d_inv_S[name] @ S  # d(S)/d(param)
+            dM = P @ dS @ P  # d(S₀^{-1/2} S S₀^{-1/2})/d(param)
+            dL = self._loewner_jac(Q, lam, log_lam, dM)
+            d_eta = float(np.trace(dL) / 3.0)
+            dD = dL - d_eta * np.eye(3)
+
+            idx = params_list.index(name)
+            jac[idx, 3] = eta_scale * d_eta
+            jac[idx, 4] = cov_d * dD[0, 0]
+            jac[idx, 5] = cov_d * dD[1, 1]
+            jac[idx, 6] = cov_d * dD[2, 2]
+            jac[idx, 7] = cov_d * sq2 * dD[1, 2]
+            jac[idx, 8] = cov_d * sq2 * dD[0, 2]
+            jac[idx, 9] = cov_d * sq2 * dD[0, 1]
 
         ind = [i for i, (_, par) in enumerate(params.items()) if par.vary]
         return jac[ind]
@@ -237,9 +312,13 @@ class PeakEllipsoid:
         self._sigma_center_max = float(
             _R_SCALE_3D * np.mean(center_phys) / r_char
         )
-        # Convert to log-scale units: σ_{log s} ≈ mean(diag S_phys) / (2 r_char²)
+        # σ_η ≈ mean(diag S_phys) / (2 r_char²)   [log-scale: tr(L)/3]
         self._sigma_log_s_max = float(
             np.mean(S_phys[:3]) / (2.0 * r_char**2)
+        )
+        # σ_D ≈ RMS(off-diag S_phys) / r_char²   [distortion: ‖D‖_F]
+        self._sigma_distortion_max = float(
+            np.sqrt(np.mean(S_phys[3:] ** 2)) / r_char**2
         )
 
         # Clamp to sensible bounds
@@ -249,9 +328,13 @@ class PeakEllipsoid:
         self._sigma_log_s_max = float(
             np.clip(self._sigma_log_s_max, 0.02, 2.0)
         )
+        self._sigma_distortion_max = float(
+            np.clip(self._sigma_distortion_max, 0.01, 1.0)
+        )
 
         self.prior_center_sigma = self._sigma_center_max
         self.prior_cov_sigma = self._sigma_log_s_max
+        self.prior_distortion_sigma = self._sigma_distortion_max
 
     def data_norm(self, d, n, v, rel_err=30):
         mask = (n > 0) & np.isfinite(n)
@@ -1790,17 +1873,9 @@ class PeakEllipsoid:
 
             self.update_adaptive_prior(args_1d, args_2d, args_3d)
 
-            protocol = [False] * 3 + [True] * 3 + [False] * 3
+            protocol = [False] * 3 + [True] * 3 + [True] * 3
 
             self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
-
-            self.update_adaptive_prior(args_1d, args_2d, args_3d)
-
-            protocol = [False] * 3 + [False] * 3 + [True] * 3
-
-            self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
-
-            self.update_adaptive_prior(args_1d, args_2d, args_3d)
 
         return args_1d, args_2d, args_3d
 
@@ -1816,6 +1891,7 @@ class PeakEllipsoid:
         sn = self._isig_3d(self.params, args_3d)
         self.prior_center_sigma = self._sigma_center_from_sn(sn)
         self.prior_cov_sigma = self._sigma_log_s_from_sn(sn)
+        self.prior_distortion_sigma = self._sigma_distortion_from_sn(sn)
         self.lamda_center = 1.0
         self.lamda_cov = 1.0
 
@@ -1829,10 +1905,19 @@ class PeakEllipsoid:
         return float(sigma_min + g * (sigma_max - sigma_min))
 
     def _sigma_log_s_from_sn(self, sn_eff, sn_cut=20.0, power=2.0):
-        """σ_{log s}(S₀): log-scale prior width as a function of peak SNR."""
+        """σ_η(S₀): log-scale (trace of L) prior width as a function of peak SNR."""
         sn_eff = self.safe_sn(sn_eff)
         sigma_max = self._sigma_log_s_max
         sigma_min = max(0.02, sigma_max / 10.0)
+        eps = 1e-6
+        g = 1.0 / (1.0 + (sn_cut / (sn_eff + eps)) ** power)
+        return float(sigma_min + g * (sigma_max - sigma_min))
+
+    def _sigma_distortion_from_sn(self, sn_eff, sn_cut=20.0, power=2.0):
+        """σ_D(S₀): distortion (‖D‖_F) prior width as a function of peak SNR."""
+        sn_eff = self.safe_sn(sn_eff)
+        sigma_max = self._sigma_distortion_max
+        sigma_min = max(0.01, sigma_max / 10.0)
         eps = 1e-6
         g = 1.0 / (1.0 + (sn_cut / (sn_eff + eps)) ** power)
         return float(sigma_min + g * (sigma_max - sigma_min))

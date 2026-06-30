@@ -16,6 +16,7 @@ from mantid.simpleapi import (
     ConvertPeaksWorkspace,
     CopySample,
     CloneWorkspace,
+    RenameWorkspace,
     SaveNexus,
     SaveHKLCW,
     LoadNexus,
@@ -314,9 +315,9 @@ class PeaksModel:
         radius_scale : float, optional
             Radius scale factor with \|Q\|. The default is 0.
         background_inner_fact : float, optional
-            Factor of peak radius for background shell. The default is 1.
+            Factor of peak radius for background shell. The default is cbrt(2).
         background_outer_fact : float, optional
-            Factor of peak radius for background shell. The default is 1.5.
+            Factor of peak radius for background shell. The default is cbrt(3).
         method : str, optional
             Integration method. The default is 'sphere'.
         centroid : bool, optional
@@ -374,6 +375,74 @@ class PeaksModel:
 
                     if -4 * np.pi * Qz / np.linalg.norm(Q) ** 2 > 0:
                         peak.setQSampleFrame(V3D(Q0, Q1, Q2))
+
+    def integrate_peaks_with_radii(
+        self,
+        md,
+        peaks,
+        peak_radii,
+        background_inner_fact=np.cbrt(2),
+        background_outer_fact=np.cbrt(3),
+        centroid=True,
+        update=True,
+    ):
+        """
+        Integrate peaks using sp ellipsoidal regions.
+        Ellipsoid integration adapts itself to the peak distribution.
+
+        Parameters
+        ----------
+        md : str
+            Name of Q-sample.
+        peaks : str
+            Name of peaks table.
+        peak_radii : list
+            Integration region radii.
+        background_inner_fact : float, optional
+            Factor of peak radius for background shell. The default is cbrt(2).
+        background_outer_fact : float, optional
+            Factor of peak radius for background shell. The default is cbrt(3).
+        centroid : bool, optional
+            Shift peak position to centroid. The default is True.
+        update : bool, optional
+            Update peak position. The defualt is True.
+
+        """
+
+        for i, radius in enumerate(peak_radii):
+            FilterPeaks(
+                InputWorkspace=peaks,
+                OutputWorkspace="tmp",
+                FilterVariable="RunNumber",
+                FilterValue=i + 1,
+                Operator="=",
+            )
+
+            self.integrate_peaks(
+                md,
+                "tmp",
+                radius,
+                method="ellipsoid",
+                background_inner_fact=background_inner_fact,
+                background_outer_fact=background_outer_fact,
+                centroid=centroid,
+                update=update,
+            )
+
+            if i == 0:
+                CloneWorkspace(
+                    InputWorkspace="tmp", OutputWorkspace=peaks + "_tmp"
+                )
+            else:
+                CombinePeaksWorkspaces(
+                    LHSWorkspace="tmp",
+                    RHSWorkspace=peaks + "_tmp",
+                    OutputWorkspace=peaks + "_tmp",
+                )
+
+        RenameWorkspace(InputWorkspace=peaks + "_tmp", OutputWorkspace=peaks)
+
+        DeleteWorkspace(Workspace="tmp")
 
     def intensity_vs_radius(
         self,

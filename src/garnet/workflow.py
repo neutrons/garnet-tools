@@ -18,7 +18,6 @@ config["Q.convention"] = "Crystallography"
 from garnet.reduction.plan import ReductionPlan
 from garnet.reduction.parallel import ParallelTasks
 from garnet.reduction.integration import Integration
-from garnet.reduction.combination import Combination
 from garnet.reduction.normalization import Normalization
 from garnet.reduction.parametrization import Parametrization
 from garnet.reduction.data import DataModel
@@ -42,7 +41,7 @@ reduction_types = {
     "param": "Parameterization",
 }
 
-valid_reductions = set(reduction_types.keys()) | {"comb"}
+valid_reductions = set(reduction_types.keys())
 
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn", force=True)
@@ -70,11 +69,7 @@ if __name__ == "__main__":
     else:
         rp.load_plan(filename)
 
-        section_needed = (
-            "Integration"
-            if reduction in ("int", "comb")
-            else reduction_types.get(reduction)
-        )
+        section_needed = reduction_types.get(reduction)
 
         seen = set()
         for section in reduction_types.values():
@@ -89,47 +84,39 @@ if __name__ == "__main__":
 
         pprint.pp(rp.plan)
 
-        if reduction == "comb":
-            rp.plan["Integration"]["NumProcesses"] = n_proc
-            inst = Combination(rp.plan)
-            inst.create_directories()
-            inst.combine()
-
+        if reduction == "norm":
+            func = Normalization.normalize_parallel
+            comb = Normalization.combine_parallel
+            inst = Normalization(rp.plan)
+        elif reduction == "param":
+            func = Parametrization.parametrize_parallel
+            comb = Parametrization.combine_parallel
+            inst = Parametrization(rp.plan)
         else:
-            if reduction == "norm":
-                func = Normalization.normalize_parallel
-                comb = Normalization.combine_parallel
-                inst = Normalization(rp.plan)
-            elif reduction == "param":
-                func = Parametrization.parametrize_parallel
-                comb = Parametrization.combine_parallel
-                inst = Parametrization(rp.plan)
-            else:
-                func = Integration.integrate_parallel
-                comb = Integration.combine_parallel
-                inst = Integration(rp.plan)
+            func = Integration.integrate_parallel
+            comb = Integration.combine_parallel
+            inst = Integration(rp.plan)
 
-            inst.create_directories()
+        inst.create_directories()
 
-            data = DataModel(beamlines[rp.plan["Instrument"]])
-            data.update_raw_path(rp.plan)
+        data = DataModel(beamlines[rp.plan["Instrument"]])
+        data.update_raw_path(rp.plan)
 
-            pt = ParallelTasks(func, comb)
+        pt = ParallelTasks(func, comb)
 
-            n_runs = len(rp.plan["Runs"])
+        n_runs = len(rp.plan["Runs"])
 
-            max_proc = min(os.cpu_count(), n_runs)
+        max_proc = min(os.cpu_count(), n_runs)
 
-            if n_proc > max_proc:
-                n_proc = max_proc
+        if n_proc > max_proc:
+            n_proc = max_proc
 
-            pt.run_tasks(rp.plan, n_proc)
+        pt.run_tasks(rp.plan, n_proc)
 
         reduction_suffix = {
             "int": "_integration",
             "norm": "_normalization",
             "param": "_parametrization",
-            "comb": "_combination",
         }
         fname = os.path.join(
             inst.get_output_path(),

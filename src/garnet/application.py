@@ -630,6 +630,15 @@ class FormView(QWidget):
         int_layout.addWidget(self.mod_32_line, 3, 6)
         int_layout.addWidget(self.mod_33_line, 3, 7)
 
+        self.optimize_ub_box = QCheckBox("Optimize UB", self)
+        self.optimize_ub_box.setChecked(False)
+
+        self.optimize_peaks_box = QCheckBox("Optimize Peaks", self)
+        self.optimize_peaks_box.setChecked(False)
+
+        int_layout.addWidget(self.optimize_ub_box, 4, 0)
+        int_layout.addWidget(self.optimize_peaks_box, 4, 1)
+
         self.int_run_button = QPushButton("Run Integration", self)
         self.int_run_button.setIcon(qta.icon("fa6s.play"))
 
@@ -778,6 +787,18 @@ class FormView(QWidget):
 
     def set_cross_terms(self, state):
         self.cross_box.setChecked(state)
+
+    def get_optimize_ub(self):
+        return self.optimize_ub_box.isChecked()
+
+    def set_optimize_ub(self, state):
+        self.optimize_ub_box.setChecked(state)
+
+    def get_optimize_peaks(self):
+        return self.optimize_peaks_box.isChecked()
+
+    def set_optimize_peaks(self, state):
+        self.optimize_peaks_box.setChecked(state)
 
     def get_max_order(self):
         if self.max_order_line.hasAcceptableInput():
@@ -3120,6 +3141,8 @@ class FormPresenter:
                 min_d,
                 sat_min_d,
                 radius,
+                optimize_ub,
+                optimize_peaks,
             ) = params
             self.view.set_satellite(max_order > 0)
             self.view.clear_satellite()
@@ -3133,6 +3156,8 @@ class FormPresenter:
             self.view.set_min_d(min_d)
             self.view.set_sat_min_d(sat_min_d)
             self.view.set_radius(radius)
+            self.view.set_optimize_ub(optimize_ub)
+            self.view.set_optimize_peaks(optimize_peaks)
 
     def save_int(self):
         centering = self.view.get_centering()
@@ -3145,6 +3170,8 @@ class FormPresenter:
         min_d = self.view.get_min_d()
         sat_min_d = self.view.get_sat_min_d()
         radius = self.view.get_radius()
+        optimize_ub = self.view.get_optimize_ub()
+        optimize_peaks = self.view.get_optimize_peaks()
         self.model.set_int(
             cell,
             centering,
@@ -3156,6 +3183,8 @@ class FormPresenter:
             min_d,
             sat_min_d,
             radius,
+            optimize_ub,
+            optimize_peaks,
         )
 
     def load_param(self):
@@ -3251,6 +3280,8 @@ class FormModel:
                 min_d = params["MinD"]
                 sat_min_d = params.get("SatMinD")
                 radius = params["Radius"]
+                optimize_ub = params.get("OptimizeUB", False)
+                optimize_peaks = params.get("OptimizePeaks", False)
                 return (
                     cell,
                     centering,
@@ -3262,6 +3293,8 @@ class FormModel:
                     min_d,
                     sat_min_d,
                     radius,
+                    optimize_ub,
+                    optimize_peaks,
                 )
 
     def set_int(
@@ -3276,6 +3309,8 @@ class FormModel:
         min_d,
         sat_min_d,
         radius,
+        optimize_ub=False,
+        optimize_peaks=False,
     ):
         if self.reduction.plan is not None:
             params = {}
@@ -3289,6 +3324,8 @@ class FormModel:
             params["MinD"] = min_d
             params["SatMinD"] = sat_min_d
             params["Radius"] = radius
+            params["OptimizeUB"] = optimize_ub
+            params["OptimizePeaks"] = optimize_peaks
             self.reduction.plan["Integration"] = params
 
     def get_param(self):

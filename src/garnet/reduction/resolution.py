@@ -419,6 +419,64 @@ class ResolutionEllipsoid:
         }
         return self.model
 
+    def renumber_by_size(self, n=None):
+        """
+        Renumber peak runNumbers 1..n ordered by model ellipsoid size.
+
+        Each peak's predicted largest principal radius is computed from the
+        resolution model.  Peaks are sorted from smallest to largest and
+        divided into n equal-count bins; all peaks in the same bin get the
+        same runNumber (1 = smallest, n = largest).  When n is None each
+        peak gets its own unique rank (equivalent to n = n_peaks).  Call
+        after fit() (and optionally apply()).
+
+        Parameters
+        ----------
+        n : int or None
+            Number of size bins.  Defaults to one bin per peak.
+
+        Returns
+        -------
+        radii_bins : ndarray, shape (n_bins,)
+            Mean largest radius of the peaks assigned to each bin,
+            ordered from smallest (bin 1) to largest (bin n).
+        """
+        if self.model is None:
+            raise RuntimeError("Call fit() before renumber_by_size().")
+
+        ws = mtd[self.peaks_ws]
+        n_peaks = ws.getNumberPeaks()
+
+        max_radii = np.empty(n_peaks)
+        for i in range(n_peaks):
+            peak = ws.getPeak(i)
+            S_lab = self._predict_S_lab(peak)
+            radii, _ = self._ellipsoid_from_S(S_lab)
+            max_radii[i] = float(np.max(radii))
+
+        n_bins = n_peaks if (n is None) else int(n)
+        n_bins = max(1, min(n_bins, n_peaks))
+
+        order = np.argsort(max_radii)
+        sorted_radii = max_radii[order]
+
+        # Assign each sorted position to a bin 1..n_bins (equal-count split)
+        bin_number = np.empty(n_peaks, dtype=int)
+        bin_indices = [[] for _ in range(n_bins)]
+        for rank, peak_idx in enumerate(order):
+            b = rank * n_bins // n_peaks
+            bin_number[peak_idx] = b + 1
+            bin_indices[b].append(rank)
+
+        for i in range(n_peaks):
+            ws.getPeak(i).setRunNumber(int(bin_number[i]))
+
+        # Representative radius for each bin: mean of the sorted radii in that bin
+        radii_bins = np.array(
+            [sorted_radii[idx].mean() for idx in bin_indices]
+        )
+        return radii_bins
+
     def apply(self):
         if self.model is None:
             raise RuntimeError("Call fit() before apply().")
@@ -471,18 +529,13 @@ class ResolutionEllipsoid:
             result[i] = self._model_design_lab(peak)
         return result
 
-    def estimate_prior_sigmas(self, moment_S=None):
+    def estimate_prior_sigmas(self):
         """
         Estimate prior width for S matrix and centroid parameters.
 
-        Parameters
-        ----------
-        moment_S : dict or None
-            {peak_index: (3,3) sample-frame S matrix (r²)} from
-            PeakEstimator.moment_covs.  When provided these empirical
-            second-moment observations are used instead of the peak shapes in
-            the workspace (which are set by res.apply() and are trivially
-            1:1 with the model).
+        Uses the peak shapes stored in the workspace (set by apply()) against
+        the model predictions to compute RMS residuals for both the covariance
+        and centroid.
         """
         if self.model is None:
             raise RuntimeError("Call fit() before estimate_prior_sigmas().")
@@ -491,15 +544,9 @@ class ResolutionEllipsoid:
         S_obs_vecs = []
         offset_vecs = []
 
-        S_indices = (
-            list(moment_S.keys())
-            if moment_S is not None
-            else self.model["used_peaks"]
-        )
-
         moment_S_obs = {}
 
-        for i in S_indices:
+        for i in self.model["used_peaks"]:
             peak = ws.getPeak(i)
             R = peak.getGoniometerMatrix()
             Q_mag = np.linalg.norm(peak.getQLabFrame())
@@ -508,12 +555,9 @@ class ResolutionEllipsoid:
 
             T = self._stoica_wilkinson_transform_from_peak(peak)
 
-            if moment_S is not None:
-                S_lab = R @ moment_S[i] @ R.T  # sample → lab
-            else:
-                radii, V_s = self._get_peak_shape(ws, i, self.r_cut)
-                V_lab = self._sample_axes_to_lab(R, V_s)
-                S_lab = self._S_from_ellipsoid(radii, V_lab)
+            radii, V_s = self._get_peak_shape(ws, i, self.r_cut)
+            V_lab = self._sample_axes_to_lab(R, V_s)
+            S_lab = self._S_from_ellipsoid(radii, V_lab)
 
             S_lab = 0.5 * (S_lab + S_lab.T)
             S_w = T @ S_lab @ T.T
@@ -551,12 +595,12 @@ class ResolutionEllipsoid:
         S_obs_vecs = np.array(S_obs_vecs)  # (n_peaks, 6)
         offset_vecs = np.array(offset_vecs)  # (n_peaks, 3)
 
-        self.prior_S_sigma = np.sqrt(np.mean(S_obs_vecs**2, axis=0))
+        self.prior_ellipsoid_sigma = np.sqrt(np.mean(S_obs_vecs**2, axis=0))
         self.prior_center_sigma = np.sqrt(np.mean(offset_vecs**2, axis=0))
 
         self._offset_vecs = offset_vecs
 
-        return self.prior_center_sigma, self.prior_S_sigma
+        return self.prior_center_sigma, self.prior_ellipsoid_sigma
 
     def diagnostics(self):
         if self.model is None:

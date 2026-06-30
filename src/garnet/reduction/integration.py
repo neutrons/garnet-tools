@@ -16,7 +16,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["TBB_THREAD_ENABLED"] = "0"
 
-from garnet.plots.peaks import PeakPlot
+from garnet.plots.peaks import PeakPlot, ScanPlot
 from garnet.config.instruments import beamlines
 from garnet.reduction.ub import UBModel, Optimization, lattice_group
 from garnet.reduction.peaks import PeaksModel, PeakModel, centering_reflection
@@ -24,7 +24,6 @@ from garnet.reduction.ellipsoid import PeakEllipsoid
 from garnet.reduction.resolution import ResolutionEllipsoid
 from garnet.reduction.data import DataModel
 from garnet.reduction.intensity import IntegrationModel
-from garnet.reduction.estimator import PeakEstimator
 
 INTEGRATION = os.path.abspath(__file__)
 directory = os.path.dirname(INTEGRATION)
@@ -70,6 +69,8 @@ class Integration(IntegrationModel):
             self.params["CrossTerms"] = False
         if self.params.get("OptimizeUB") is None:
             self.params["OptimizeUB"] = False
+        if self.params.get("OptimizePeaks") is None:
+            self.params["OptimizePeaks"] = False
 
         self.check(
             self.params["MaxOrder"], ">=", 0, "MaxOrder must be non-negative"
@@ -214,7 +215,7 @@ class Integration(IntegrationModel):
 
             app = "_sub" if data.workspace_exists("data_sub") else ""
 
-            data.convert_to_Q_sample("data" + app, "md")
+            data.convert_to_Q_sample("data" + app, "md", lorentz_corr=True)
 
             data.delete_workspace("data_sub")
 
@@ -229,12 +230,47 @@ class Integration(IntegrationModel):
 
             self.predict_add_satellite_peaks(lamda_min, lamda_max)
 
-            pk = PeakModel("peaks")
+            peak = PeakModel("peaks")
 
             self.orig_d = {
-                pk.get_hklmnp(i): pk.get_d_from_ub(i)
-                for i in range(pk.get_number_peaks())
+                peak.get_hklmnp(i): peak.get_d_from_ub(i)
+                for i in range(peak.get_number_peaks())
             }
+
+            if self.params["OptimizePeaks"]:
+                ub = UBModel("peaks")
+
+                Q_min, hkl_tol = ub.shortest_reciprocal_spacing(centering)
+
+                result = peaks.scan_threshold("md", "peaks", Q_min)
+
+                scan_file = self.get_plot_file("run#{}_scan".format(run))
+
+                scan_plot = ScanPlot(*result)
+                scan_plot.save_plot(scan_file)
+
+                opt = Optimization("peaks", tol=0.5 / np.cbrt(3))
+                opt.optimize_lattice("Fixed")
+                opt.optimize_lattice_only(cell)
+
+                ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
+                ub_file = os.path.splitext(ub_file)[0] + ".mat"
+
+                ub = UBModel("peaks")
+                ub.save_UB(ub_file)
+
+                data.load_clear_UB(ub_file, "data", run)
+
+            peaks.predict_peaks(
+                "data",
+                "peaks",
+                centering,
+                d_min,
+                lamda_min,
+                lamda_max,
+            )
+
+            self.predict_add_satellite_peaks(lamda_min, lamda_max)
 
             peaks.integrate_peaks(
                 "md",
@@ -248,8 +284,18 @@ class Integration(IntegrationModel):
             res = ResolutionEllipsoid("peaks", r_cut=r_cut)
             res.fit()
 
+            radii = res.renumber_by_size(5)
+
+            peaks.integrate_peaks_with_radii(
+                "md",
+                "peaks",
+                radii,
+                centroid=True,
+                update=True,
+            )
             data.delete_workspace("md")
 
+            res.fit()
             res_file = self.get_plot_file("run#{}_res".format(run))
             self.res_sigma = res.estimate_prior_sigmas()
             res.plot_diagnostics(res_file)

@@ -115,6 +115,9 @@ class FormView(QWidget):
 
         layout.addWidget(setup_widget)
 
+        mat_tab = self.init_info()
+        setup_widget.addTab(mat_tab, "Sample/Material")
+
         norm_tab = self.norm_plan()
         param_tab = self.param_plan()
         int_tab = self.int_plan()
@@ -479,6 +482,15 @@ class FormView(QWidget):
         memory = overhead_factor * (inst_bytes + task_bytes)
 
         self.mem_label.setText(self._format_bytes(memory))
+
+    def init_info(self):
+        tab = QWidget()
+
+        layout = QVBoxLayout()
+
+        tab.setLayout(layout)
+
+        return tab
 
     def int_plan(self):
         tab = QWidget()

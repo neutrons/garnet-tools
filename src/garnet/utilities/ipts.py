@@ -348,7 +348,7 @@ class View(QWidget):
                 if len(other_values) > 0:
                     ax_log2 = ax_log.twinx()
                     other_colors = [
-                        self._log_series_color(name, i)
+                        self._log_series_color(name, i + 1)
                         for i, name in enumerate(other_names)
                     ]
                     for vals, name, c in zip(
@@ -550,7 +550,7 @@ class View(QWidget):
                     if len(other_values) > 0:
                         ax_log2 = ax_log.twinx()
                         other_colors = [
-                            self._log_series_color(name, i)
+                            self._log_series_color(name, i + 1)
                             for i, name in enumerate(other_names)
                         ]
                         for vals, name, c in zip(

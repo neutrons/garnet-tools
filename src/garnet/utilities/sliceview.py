@@ -3,7 +3,7 @@ import os
 import tempfile
 
 from qtpy.QtWidgets import QApplication, QComboBox, QMainWindow
-from qtpy.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
+from qtpy.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QPalette
 from qtpy.QtCore import Qt, QSettings
 
 _local_cfg = os.path.join(
@@ -25,6 +25,7 @@ from mantidqt.plotting.functions import plot_md_ws_from_names
 theme = True
 try:
     from qdarkstyle.light.palette import LightPalette
+    from qdarkstyle.dark.palette import DarkPalette
     import qdarkstyle
 except ImportError:
     theme = False
@@ -81,10 +82,11 @@ class MainWindow(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    window = MainWindow(sys.argv[1])
-
     if theme:
-        app.setStyleSheet(qdarkstyle.load_stylesheet(palette=LightPalette))
+        bg = app.palette().color(QPalette.Window)
+        palette = DarkPalette if bg.lightness() < 128 else LightPalette
+        app.setStyleSheet(qdarkstyle.load_stylesheet(palette=palette))
 
+    window = MainWindow(sys.argv[1])
     window.show()
     sys.exit(app.exec())

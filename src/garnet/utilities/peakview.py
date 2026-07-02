@@ -24,7 +24,7 @@ from qtpy.QtWidgets import (
     QComboBox,
     QTextEdit,
 )
-from qtpy.QtGui import QIntValidator, QTextCursor
+from qtpy.QtGui import QIntValidator, QTextCursor, QPalette
 
 import matplotlib
 
@@ -43,6 +43,7 @@ import numpy as np
 
 try:
     from qdarkstyle.light.palette import LightPalette
+    from qdarkstyle.dark.palette import DarkPalette
     import qdarkstyle
 
     theme = True
@@ -385,7 +386,9 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     if theme:
-        app.setStyleSheet(qdarkstyle.load_stylesheet(palette=LightPalette))
+        bg = app.palette().color(QPalette.Window)
+        palette = DarkPalette if bg.lightness() < 128 else LightPalette
+        app.setStyleSheet(qdarkstyle.load_stylesheet(palette=palette))
 
     window = IntegratedPeaksViewer()
     window.show()

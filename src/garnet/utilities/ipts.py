@@ -22,7 +22,7 @@ from qtpy.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
 )
-from qtpy.QtGui import QIcon
+from qtpy.QtGui import QIcon, QPalette
 from qtpy.QtCore import Qt, QSettings
 
 _local_cfg = os.path.join(
@@ -47,6 +47,7 @@ from matplotlib.ticker import MaxNLocator
 
 try:
     from qdarkstyle.light.palette import LightPalette
+    from qdarkstyle.dark.palette import DarkPalette
     import qdarkstyle
 
     style = True
@@ -1728,7 +1729,9 @@ if __name__ == "__main__":
     sys.excepthook = handle_exception
     app = QApplication(sys.argv)
     if style:
-        app.setStyleSheet(qdarkstyle.load_stylesheet(palette=LightPalette))
+        bg = app.palette().color(QPalette.Window)
+        palette = DarkPalette if bg.lightness() < 128 else LightPalette
+        app.setStyleSheet(qdarkstyle.load_stylesheet(palette=palette))
     window = ExperimentBrowser()
     window.show()
     sys.exit(app.exec())

@@ -50,6 +50,7 @@ from qtpy.QtGui import (
     QPixmap,
     QPainter,
     QColor,
+    QPalette,
 )
 from qtpy.QtCore import Qt, QProcess, QElapsedTimer, QSettings
 
@@ -62,6 +63,7 @@ QSettings.setPath(
 )
 
 from qdarkstyle.light.palette import LightPalette
+from qdarkstyle.dark.palette import DarkPalette
 import qdarkstyle
 import qtawesome as qta
 
@@ -216,6 +218,13 @@ class FormView(QWidget):
         self._preview_T = None
         self._preview_UB = None
 
+        self._save_button = QPushButton("Save Screenshot", self)
+        self._save_button.setToolTip(
+            "Save a screenshot of the current 3D view."
+        )
+        self._save_button.setIcon(qta.icon("fa6s.floppy-disk"))
+        self._save_button.clicked.connect(self._on_save_screenshot)
+
         self._reset_view_button = QPushButton("Reset View", self)
         self._reset_view_button.setToolTip("Reset to isometric view")
         self._reset_view_button.setIcon(qta.icon("fa6s.house"))
@@ -230,12 +239,32 @@ class FormView(QWidget):
         self._plot_button.setToolTip("Replot the current view")
         self._plot_button.setIcon(qta.icon("fa6s.rotate"))
 
+        self._theme_combo = QComboBox(self)
+        self._theme_combo.addItem("default")
+        self._theme_combo.addItem("document")
+        self._theme_combo.addItem("dark")
+        self._theme_combo.addItem("paraview")
+        self._theme_combo.setCurrentText("document")
+        self._theme_combo.setToolTip("Select 3D view theme.")
+
+        self._ui_combo = QComboBox(self)
+        self._ui_combo.addItem("Light")
+        self._ui_combo.addItem("Dark")
+        _app = QApplication.instance()
+        _is_dark = bool(_app.property("ui_dark")) if _app else False
+        self._ui_combo.setCurrentText("Dark" if _is_dark else "Light")
+        self._ui_combo.setToolTip(
+            "Switch the application between light and dark mode."
+        )
+
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(2)
+        left_layout.addWidget(self._save_button)
         left_layout.addWidget(self._reset_view_button)
         left_layout.addWidget(self._camera_button)
-        left_layout.addWidget(self._plot_button)
+        left_layout.addWidget(self._theme_combo)
+        left_layout.addWidget(self._ui_combo)
 
         directions_widget = QWidget(self)
         directions_layout = QGridLayout(directions_widget)
@@ -348,6 +377,107 @@ class FormView(QWidget):
             button.clicked.connect(slot)
             directions_layout.addWidget(button, row, col)
 
+        manual_tab = QWidget(self)
+        manual_layout = QGridLayout()
+
+        notation = QDoubleValidator.StandardNotation
+        manual_validator = QDoubleValidator(-100, 100, 5, notation=notation)
+
+        self._view_combo = QComboBox(self)
+        self._view_combo.addItem("[hkl]")
+        self._view_combo.addItem("[uvw]")
+        self._view_combo.setToolTip("Select axis notation for view direction.")
+        self._view_combo.currentIndexChanged.connect(
+            self._update_manual_labels
+        )
+
+        self._viewup_combo = QComboBox(self)
+        self._viewup_combo.addItem("[hkl]")
+        self._viewup_combo.addItem("[uvw]")
+        self._viewup_combo.setToolTip("Select axis notation for up direction.")
+        self._viewup_combo.currentIndexChanged.connect(
+            self._update_manual_labels
+        )
+
+        self._axis1_line = QLineEdit(self)
+        self._axis2_line = QLineEdit(self)
+        self._axis3_line = QLineEdit(self)
+        for w in (self._axis1_line, self._axis2_line, self._axis3_line):
+            w.setValidator(manual_validator)
+        self._axis1_line.setToolTip(
+            "First component of the view direction (e.g., h or u)"
+        )
+        self._axis2_line.setToolTip(
+            "Second component of the view direction (e.g., k or v)"
+        )
+        self._axis3_line.setToolTip(
+            "Third component of the view direction (e.g., l or w)"
+        )
+
+        self._axis1_label = QLabel("h", self)
+        self._axis2_label = QLabel("k", self)
+        self._axis3_label = QLabel("l", self)
+
+        self._axisup1_line = QLineEdit(self)
+        self._axisup2_line = QLineEdit(self)
+        self._axisup3_line = QLineEdit(self)
+        for w in (self._axisup1_line, self._axisup2_line, self._axisup3_line):
+            w.setValidator(manual_validator)
+        self._axisup1_line.setToolTip(
+            "First component of the up direction (e.g., h or u)"
+        )
+        self._axisup2_line.setToolTip(
+            "Second component of the up direction (e.g., k or v)"
+        )
+        self._axisup3_line.setToolTip(
+            "Third component of the up direction (e.g., l or w)"
+        )
+
+        self._axisup1_label = QLabel("h", self)
+        self._axisup2_label = QLabel("k", self)
+        self._axisup3_label = QLabel("l", self)
+
+        self._manual_button = QPushButton("View Axis", self)
+        self._manual_button.setToolTip(
+            "Set the view direction using the specified axis components."
+        )
+        self._manual_button.setIcon(qta.icon("fa6s.right-long"))
+        self._manual_button.clicked.connect(self._on_manual_view)
+
+        self._manualup_button = QPushButton("View Up Axis", self)
+        self._manualup_button.setToolTip(
+            "Set the up direction using the specified axis components."
+        )
+        self._manualup_button.setIcon(qta.icon("fa6s.up-long"))
+        self._manualup_button.clicked.connect(self._on_manual_up_view)
+
+        manual_layout.addWidget(self._axis1_label, 0, 0, Qt.AlignCenter)
+        manual_layout.addWidget(self._axis2_label, 0, 1, Qt.AlignCenter)
+        manual_layout.addWidget(self._axis3_label, 0, 2, Qt.AlignCenter)
+
+        manual_layout.addWidget(self._axis1_line, 1, 0)
+        manual_layout.addWidget(self._axis2_line, 1, 1)
+        manual_layout.addWidget(self._axis3_line, 1, 2)
+
+        manual_layout.addWidget(self._view_combo, 0, 3)
+        manual_layout.addWidget(self._manual_button, 1, 3)
+
+        manual_layout.addWidget(self._axisup1_label, 0, 4, Qt.AlignCenter)
+        manual_layout.addWidget(self._axisup2_label, 0, 5, Qt.AlignCenter)
+        manual_layout.addWidget(self._axisup3_label, 0, 6, Qt.AlignCenter)
+
+        manual_layout.addWidget(self._axisup1_line, 1, 4)
+        manual_layout.addWidget(self._axisup2_line, 1, 5)
+        manual_layout.addWidget(self._axisup3_line, 1, 6)
+
+        manual_layout.addWidget(self._viewup_combo, 0, 7)
+        manual_layout.addWidget(self._manualup_button, 1, 7)
+
+        manual_values_layout = QVBoxLayout()
+        manual_values_layout.addLayout(manual_layout)
+        manual_values_layout.addStretch(1)
+        manual_tab.setLayout(manual_values_layout)
+
         rotate_widget = QWidget(self)
         rotate_layout = QGridLayout(rotate_widget)
         rotate_layout.setContentsMargins(2, 2, 2, 2)
@@ -404,6 +534,7 @@ class FormView(QWidget):
 
         view_tab = QTabWidget(self)
         view_tab.addTab(directions_widget, "Direction View")
+        view_tab.addTab(manual_tab, "Manual View")
         view_tab.addTab(rotate_widget, "Rotate View")
 
         self._recip_box = QCheckBox("Toggle Reciprocal Lattice", self)
@@ -413,60 +544,168 @@ class FormView(QWidget):
         )
         self._recip_box.stateChanged.connect(self._show_compass)
 
+        self._axes_box = QCheckBox("Show Axes", self)
+        self._axes_box.setChecked(True)
+        self._axes_box.setToolTip(
+            "Show or hide the coordinate axes in the plot."
+        )
+        self._axes_box.stateChanged.connect(self._show_compass)
+
         self._parallel_box = QCheckBox("Enable Parallel Projection", self)
         self._parallel_box.setChecked(True)
         self._parallel_box.setToolTip("Toggle parallel projection")
         self._parallel_box.stateChanged.connect(self._on_projection_changed)
 
+        self._joystick_box = QCheckBox("Disable Joystick", self)
+        self._joystick_box.setChecked(True)
+        self._joystick_box.setToolTip(
+            "Uncheck to use joystick-style camera interaction "
+            "(hold mouse button for continuous motion) "
+            "instead of the default trackball style"
+        )
+        self._joystick_box.stateChanged.connect(
+            self._on_joystick_style_changed
+        )
+
+        self._cons_box = QCheckBox("Expand Console", self)
+        self._cons_box.setChecked(True)
+        self._cons_box.setToolTip("Show or hide console output.")
+
         right_layout = QVBoxLayout()
-        right_layout.addStretch(1)
         right_layout.addWidget(self._recip_box)
+        right_layout.addWidget(self._axes_box)
         right_layout.addWidget(self._parallel_box)
+        right_layout.addWidget(self._joystick_box)
+        right_layout.addWidget(self._cons_box)
+
+        camera_info_font = QFont("Courier New")
+        camera_info_font.setStyleHint(QFont.Monospace)
+        camera_info_font.setPointSize(9)
+        camera_info_tip = (
+            "Current camera view/up direction in Cartesian and [hkl] "
+            "coordinates (unscaled)."
+        )
+
+        self._view_xyz_label = QLabel(self)
+        self._up_xyz_label = QLabel(self)
+        self._view_hkl_label = QLabel(self)
+        self._up_hkl_label = QLabel(self)
+
+        camera_info_layout = QGridLayout()
+        camera_info_layout.setContentsMargins(0, 0, 0, 0)
+        camera_info_layout.setColumnStretch(0, 1)
+        camera_info_layout.setColumnStretch(1, 1)
+        for label in (
+            self._view_xyz_label,
+            self._up_xyz_label,
+            self._view_hkl_label,
+            self._up_hkl_label,
+        ):
+            label.setFont(camera_info_font)
+            label.setToolTip(camera_info_tip)
+        camera_info_layout.addWidget(self._view_xyz_label, 0, 0)
+        camera_info_layout.addWidget(self._up_xyz_label, 0, 1)
+        camera_info_layout.addWidget(self._view_hkl_label, 1, 0)
+        camera_info_layout.addWidget(self._up_hkl_label, 1, 1)
+
+        self._update_camera_info(None, None, None, None)
+
+        middle_layout = QVBoxLayout()
+        middle_layout.addWidget(view_tab)
+        middle_layout.addLayout(camera_info_layout)
 
         ctrl_bar = QHBoxLayout()
         ctrl_bar.setContentsMargins(4, 2, 4, 2)
         ctrl_bar.setSpacing(6)
         ctrl_bar.addLayout(left_layout)
-        ctrl_bar.addWidget(view_tab, stretch=1)
+        ctrl_bar.addLayout(middle_layout, stretch=1)
         ctrl_bar.addLayout(right_layout)
 
-        latt_bar = QHBoxLayout()
-        latt_bar.setContentsMargins(6, 2, 6, 2)
-        latt_bar.setSpacing(4)
+        lattice_tab = QWidget(self)
+        lattice_layout = QGridLayout(lattice_tab)
 
-        latt_bar.addStretch(1)
-        for lbl, attr in [
-            ("a", "_latt_a"),
-            ("b", "_latt_b"),
-            ("c", "_latt_c"),
-        ]:
-            latt_bar.addWidget(QLabel(lbl, self))
+        for col, (lbl, attr) in enumerate(
+            [
+                ("a", "_latt_a"),
+                ("b", "_latt_b"),
+                ("c", "_latt_c"),
+            ]
+        ):
+            lattice_layout.addWidget(QLabel(lbl + ":", self), 0, col * 2)
             w = QLineEdit(self)
             w.setReadOnly(True)
-            w.setFixedWidth(110)
             setattr(self, attr, w)
-            latt_bar.addWidget(w)
-        latt_bar.addWidget(QLabel("Å", self))
-        latt_bar.addSpacing(10)
-        for lbl, attr in [
-            ("α", "_latt_alpha"),
-            ("β", "_latt_beta"),
-            ("γ", "_latt_gamma"),
-        ]:
-            latt_bar.addWidget(QLabel(lbl, self))
+            lattice_layout.addWidget(w, 0, col * 2 + 1)
+        lattice_layout.addWidget(QLabel("Å", self), 0, 6)
+
+        for col, (lbl, attr) in enumerate(
+            [
+                ("α", "_latt_alpha"),
+                ("β", "_latt_beta"),
+                ("γ", "_latt_gamma"),
+            ]
+        ):
+            lattice_layout.addWidget(QLabel(lbl + ":", self), 1, col * 2)
             w = QLineEdit(self)
             w.setReadOnly(True)
-            w.setFixedWidth(110)
             setattr(self, attr, w)
-            latt_bar.addWidget(w)
-        latt_bar.addWidget(QLabel("°", self))
+            lattice_layout.addWidget(w, 1, col * 2 + 1)
+        lattice_layout.addWidget(QLabel("°", self), 1, 6)
+
+        orientation_tab = QWidget(self)
+        orientation_layout = QGridLayout(orientation_tab)
+
+        self._orient_u1_line = QLineEdit(self)
+        self._orient_u2_line = QLineEdit(self)
+        self._orient_u3_line = QLineEdit(self)
+        self._orient_v1_line = QLineEdit(self)
+        self._orient_v2_line = QLineEdit(self)
+        self._orient_v3_line = QLineEdit(self)
+        for w in (
+            self._orient_u1_line,
+            self._orient_u2_line,
+            self._orient_u3_line,
+            self._orient_v1_line,
+            self._orient_v2_line,
+            self._orient_v3_line,
+        ):
+            w.setReadOnly(True)
+
+        orient_u_label = QLabel("u:", self)
+        orient_u_label.setToolTip("Sample orientation along thickness (hkl)")
+        orient_v_label = QLabel("v:", self)
+        orient_v_label.setToolTip("Sample orientation in-plane lateral (hkl)")
+
+        orientation_layout.addWidget(orient_u_label, 0, 0)
+        orientation_layout.addWidget(self._orient_u1_line, 0, 1)
+        orientation_layout.addWidget(self._orient_u2_line, 0, 2)
+        orientation_layout.addWidget(self._orient_u3_line, 0, 3)
+        orientation_layout.addWidget(orient_v_label, 1, 0)
+        orientation_layout.addWidget(self._orient_v1_line, 1, 1)
+        orientation_layout.addWidget(self._orient_v2_line, 1, 2)
+        orientation_layout.addWidget(self._orient_v3_line, 1, 3)
+
+        self._update_sample_orientation_display()
+        for w in (
+            self.hu_line,
+            self.ku_line,
+            self.lu_line,
+            self.hv_line,
+            self.kv_line,
+            self.lv_line,
+        ):
+            w.editingFinished.connect(self._update_sample_orientation_display)
+
+        info_tab = QTabWidget(self)
+        info_tab.addTab(lattice_tab, "Lattice Parameters")
+        info_tab.addTab(orientation_tab, "Sample Orientation")
 
         _pl = QVBoxLayout()
         _pl.setContentsMargins(0, 0, 0, 0)
         _pl.setSpacing(0)
         _pl.addLayout(ctrl_bar)
         _pl.addWidget(self.plotter.interactor, stretch=1)
-        _pl.addLayout(latt_bar)
+        _pl.addWidget(info_tab)
         self._plotter_frame.setLayout(_pl)
 
         name_label = QLabel("Config File:")
@@ -517,6 +756,7 @@ class FormView(QWidget):
         process_layout.addWidget(self.mem_label)
         process_layout.addStretch(1)
         process_layout.addWidget(self.dev_box)
+        process_layout.addWidget(self._plot_button)
         process_layout.addWidget(self.generate_button)
         process_layout.addWidget(self.stop_button)
 
@@ -531,6 +771,10 @@ class FormView(QWidget):
         self.output.setFont(font)
 
         layout.addWidget(self.output)
+
+        self._cons_box.stateChanged.connect(
+            lambda state: self.output.setVisible(bool(state))
+        )
 
         layout.addStretch(1)
 
@@ -554,6 +798,8 @@ class FormView(QWidget):
         self.process.finished.connect(self.process_finished)
 
         self.stop_button.clicked.connect(self.stop_process)
+        self._theme_combo.currentIndexChanged.connect(self.update_pv_theme)
+        self._ui_combo.currentIndexChanged.connect(self.update_ui_theme)
 
         self.cpu_line.editingFinished.connect(self.update_mem_estimate)
         self.instrument_combo.activated.connect(
@@ -583,6 +829,23 @@ class FormView(QWidget):
         self.process.terminate()
         if not self.process.waitForFinished(3000):
             self.process.kill()
+
+    def update_pv_theme(self):
+        theme = self._theme_combo.currentText()
+        pv.set_plot_theme(theme)
+        bg = pv.global_theme.background
+        self.plotter.set_background(bg)
+        self.plotter.render()
+
+    def update_ui_theme(self, _index=None):
+        mode = self._ui_combo.currentText()
+        app = QApplication.instance()
+        if mode == "Dark":
+            app.setStyleSheet(qdarkstyle.load_stylesheet(palette=DarkPalette))
+            app.setProperty("ui_dark", True)
+        else:
+            app.setStyleSheet(qdarkstyle.load_stylesheet(palette=LightPalette))
+            app.setProperty("ui_dark", False)
 
     @staticmethod
     def _format_bytes(n):
@@ -769,22 +1032,21 @@ class FormView(QWidget):
         ]:
             dim_layout.addWidget(QLabel(lbl, self))
             dim_layout.addWidget(w)
-        dim_layout.addWidget(QLabel("cm", self))
-        dim_layout.addStretch(1)
+        dim_layout.addWidget(QLabel("mm", self))
 
         orient_layout = QGridLayout()
-        a_star_lbl = QLabel("a*", self)
-        b_star_lbl = QLabel("b*", self)
-        c_star_lbl = QLabel("c*", self)
+        a_star_label = QLabel("a*", self)
+        b_star_label = QLabel("b*", self)
+        c_star_label = QLabel("c*", self)
         orient_layout.addWidget(QLabel("", self), 0, 0)
-        orient_layout.addWidget(a_star_lbl, 0, 1, Qt.AlignCenter)
-        orient_layout.addWidget(b_star_lbl, 0, 2, Qt.AlignCenter)
-        orient_layout.addWidget(c_star_lbl, 0, 3, Qt.AlignCenter)
+        orient_layout.addWidget(a_star_label, 0, 1, Qt.AlignCenter)
+        orient_layout.addWidget(b_star_label, 0, 2, Qt.AlignCenter)
+        orient_layout.addWidget(c_star_label, 0, 3, Qt.AlignCenter)
 
-        u_lbl = QLabel("Along Thickness (u):", self)
-        v_lbl = QLabel("In-plane Lateral (v):", self)
-        orient_layout.addWidget(u_lbl, 1, 0)
-        orient_layout.addWidget(v_lbl, 2, 0)
+        u_label = QLabel("Along Thickness (u):", self)
+        v_label = QLabel("In-plane Lateral (v):", self)
+        orient_layout.addWidget(u_label, 1, 0)
+        orient_layout.addWidget(v_label, 2, 0)
 
         validator_idx = QIntValidator(-20, 20, self)
         self.hu_line = QLineEdit("0")
@@ -1269,11 +1531,36 @@ class FormView(QWidget):
             w.setText(str(int(val)))
         for w, val in zip((self.hv_line, self.kv_line, self.lv_line), v):
             w.setText(str(int(val)))
+        self._update_sample_orientation_display()
 
     def get_sample_orientation(self):
         u = [int(w.text()) for w in (self.hu_line, self.ku_line, self.lu_line)]
         v = [int(w.text()) for w in (self.hv_line, self.kv_line, self.lv_line)]
         return u, v
+
+    def _update_sample_orientation_display(self):
+        try:
+            u, v = self.get_sample_orientation()
+        except ValueError:
+            return
+        for w, val in zip(
+            (
+                self._orient_u1_line,
+                self._orient_u2_line,
+                self._orient_u3_line,
+            ),
+            u,
+        ):
+            w.setText(str(val))
+        for w, val in zip(
+            (
+                self._orient_v1_line,
+                self._orient_v2_line,
+                self._orient_v3_line,
+            ),
+            v,
+        ):
+            w.setText(str(val))
 
     def get_refine_shape(self):
         return self.refine_shape_box.isChecked()
@@ -2904,9 +3191,31 @@ class FormView(QWidget):
     def _on_reset_view(self):
         self.plotter.reset_camera()
         self.plotter.view_isometric()
+        self._update_camera_display()
 
     def _on_reset_camera(self):
         self.plotter.reset_camera()
+        self._update_camera_display()
+
+    def _on_save_screenshot(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+
+        file_dialog = QFileDialog()
+        file_dialog.setFileMode(QFileDialog.AnyFile)
+
+        filename, _ = file_dialog.getSaveFileName(
+            self,
+            "Save PNG file",
+            "",
+            "PNG files (*.png)",
+            options=options,
+        )
+
+        if filename:
+            if not filename.endswith(".png"):
+                filename += ".png"
+            self.plotter.screenshot(filename)
 
     # --- Camera rotation helpers (Rodrigues formula) ---
 
@@ -2997,13 +3306,107 @@ class FormView(QWidget):
             cam = self.plotter.camera
             roll = cam.roll
             d = np.array(cam.direction)
+            up = np.array(cam.up)
             elevation = np.degrees(np.arcsin(np.clip(d[2], -1.0, 1.0)))
             azimuth = np.degrees(np.arctan2(d[1], d[0]))
             self._camera_pos_line.setText(
                 f"{roll:.1f},{elevation:.1f},{azimuth:.1f}"
             )
+            view_hkl = self._hkl_from_vector(d)
+            up_hkl = self._hkl_from_vector(up)
+            self._update_camera_info(d, up, view_hkl, up_hkl)
         except Exception:
             pass
+
+    def _hkl_from_vector(self, vec):
+        """[hkl] indices (unscaled) of a display-world Cartesian vector."""
+
+        if self._preview_UB is None:
+            return None
+        T = self._crystal_T()
+        try:
+            return np.linalg.solve(T, vec)
+        except np.linalg.LinAlgError:
+            return None
+
+    _CAMERA_INFO_FIELD_WIDTH = 6
+
+    @classmethod
+    def _format_vector(cls, vec, decimals):
+        width = cls._CAMERA_INFO_FIELD_WIDTH
+        if vec is None:
+            field = "{:>{width}}".format("--", width=width)
+            return "({0},{0},{0})".format(field)
+        fmt = "({{:>{1}.{0}f}},{{:>{1}.{0}f}},{{:>{1}.{0}f}})".format(
+            decimals, width
+        )
+        return fmt.format(*vec)
+
+    @staticmethod
+    def _snap_to_integers(vec, tol=0.03, max_index=9):
+        """Best-effort snap of a direction vector to small integer ratios.
+
+        Components under ``tol`` (relative to the largest component) are
+        treated as zero, then the remaining components are rationalized
+        against the smallest of them by trying denominators up to
+        ``max_index``. Falls back to plain rounding if nothing rationalizes
+        cleanly (e.g. an irrational direction).
+        """
+
+        v = np.asarray(vec, dtype=float)
+        scale = np.max(np.abs(v))
+        if scale < 1e-8:
+            return np.zeros(3, dtype=int)
+
+        v = v / scale
+        mask = np.abs(v) >= tol
+        v = np.where(mask, v, 0.0)
+        if not np.any(mask):
+            return np.zeros(3, dtype=int)
+
+        base = np.min(np.abs(v[mask]))
+        for d in range(1, max_index + 1):
+            candidate = v / base * d
+            rounded = np.round(candidate)
+            err = np.max(np.abs(candidate - rounded)[mask])
+            if err < tol:
+                ints = rounded.astype(int)
+                nz = np.abs(ints[ints != 0])
+                g = max(int(np.gcd.reduce(nz)), 1) if nz.size else 1
+                return ints // g
+
+        return np.round(v / base).astype(int)
+
+    @classmethod
+    def _format_hkl_vector(cls, vec):
+        width = cls._CAMERA_INFO_FIELD_WIDTH
+        if vec is None:
+            field = "{:>{width}}".format("--", width=width)
+            return "({0},{0},{0})".format(field)
+        ints = cls._snap_to_integers(vec)
+        fmt = "({{:>{0}d}},{{:>{0}d}},{{:>{0}d}})".format(width)
+        return fmt.format(*ints.tolist())
+
+    def _update_camera_info(self, view_xyz, up_xyz, view_hkl, up_hkl):
+        """Update the read-only camera view/up direction display.
+
+        Shows the camera view and up vectors in Cartesian coordinates
+        and, when a UB matrix is set, in [hkl] coordinates (snapped to
+        small integers, since only the ratio is meaningful).
+        """
+
+        self._view_xyz_label.setText(
+            "View(xyz)={}".format(self._format_vector(view_xyz, 3))
+        )
+        self._up_xyz_label.setText(
+            "Up(xyz)={}".format(self._format_vector(up_xyz, 3))
+        )
+        self._view_hkl_label.setText(
+            "View(hkl)={}".format(self._format_hkl_vector(view_hkl))
+        )
+        self._up_hkl_label.setText(
+            "Up(hkl)={}".format(self._format_hkl_vector(up_hkl))
+        )
 
     def _on_roll_ccw(self):
         self._apply_rotation(self._rotate_roll)
@@ -3045,6 +3448,7 @@ class FormView(QWidget):
         self.plotter.view_vector(
             (sign * M[:, col]).tolist(), viewup=M[:, viewup_col].tolist()
         )
+        self._update_camera_display()
 
     def _crystal_T(self):
         """Return T_crystal: crystal axes (a*, b*, c*) in the display world frame.
@@ -3058,11 +3462,95 @@ class FormView(QWidget):
         _, T, _ = _compute_preview_transforms(self._preview_UB, np.eye(3))
         return T
 
+    def _real_T(self):
+        """Return real-lattice axes (a, b, c) in the display world frame.
+
+        a = b*×c*, b = c*×a*, c = a*×b*, matching _show_compass/_real_axis_view.
+        """
+        T = self._crystal_T()
+        a_dir = np.cross(T[:, 1], T[:, 2])
+        b_dir = np.cross(T[:, 2], T[:, 0])
+        c_dir = np.cross(T[:, 0], T[:, 1])
+        cols = np.column_stack([a_dir, b_dir, c_dir])
+        norms = np.linalg.norm(cols, axis=0)
+        norms[norms < 1e-10] = 1.0
+        return cols / norms
+
+    def _get_manual_vector(self, axes_type, ind):
+        """Cartesian display-world vector for manually entered [hkl]/[uvw] indices."""
+
+        if self._preview_UB is None:
+            return None
+        matrix = self._crystal_T() if axes_type == "[hkl]" else self._real_T()
+        return matrix @ np.asarray(ind, dtype=float)
+
+    @staticmethod
+    def _get_manual_axis_indices(combo, lines):
+        axes_type = combo.currentText()
+        if all(w.hasAcceptableInput() for w in lines):
+            return axes_type, np.array([float(w.text()) for w in lines])
+        return None, None
+
+    def _update_manual_labels(self, *_):
+        view_labels = (
+            ("h", "k", "l")
+            if self._view_combo.currentText() == "[hkl]"
+            else ("u", "v", "w")
+        )
+        for label, text in zip(
+            (self._axis1_label, self._axis2_label, self._axis3_label),
+            view_labels,
+        ):
+            label.setText(text)
+
+        up_labels = (
+            ("h", "k", "l")
+            if self._viewup_combo.currentText() == "[hkl]"
+            else ("u", "v", "w")
+        )
+        for label, text in zip(
+            (self._axisup1_label, self._axisup2_label, self._axisup3_label),
+            up_labels,
+        ):
+            label.setText(text)
+
+    def _on_manual_view(self):
+        axes_type, ind = self._get_manual_axis_indices(
+            self._view_combo,
+            (self._axis1_line, self._axis2_line, self._axis3_line),
+        )
+        if axes_type is None:
+            return
+        vec = self._get_manual_vector(axes_type, ind)
+        if vec is None:
+            return
+        self.plotter.view_vector(vec.tolist())
+        self._update_camera_display()
+
+    def _on_manual_up_view(self):
+        axes_type, ind = self._get_manual_axis_indices(
+            self._viewup_combo,
+            (self._axisup1_line, self._axisup2_line, self._axisup3_line),
+        )
+        if axes_type is None:
+            return
+        vec = self._get_manual_vector(axes_type, ind)
+        if vec is None:
+            return
+        n = np.linalg.norm(vec)
+        if n < 1e-10:
+            return
+        self.plotter.set_viewup((vec / n).tolist())
+        self._update_camera_display()
+
     def _show_compass(self, *_):
         if self._preview_UB is None:
             return
-        T = self._crystal_T()
         self.plotter.hide_axes()
+        if not self._axes_box.isChecked():
+            self.plotter.render()
+            return
+        T = self._crystal_T()
         if self._recip_box.isChecked():
             # T columns are already unit-norm a*, b*, c* in display world frame
             cols = T
@@ -3092,6 +3580,12 @@ class FormView(QWidget):
         else:
             self.plotter.disable_parallel_projection()
 
+    def _on_joystick_style_changed(self):
+        if self._joystick_box.isChecked():
+            self.plotter.enable_trackball_style()
+        else:
+            self.plotter.enable_joystick_style()
+
     def _axis_view(self, col, up_col):
         """View along crystal reciprocal axis col with up = axis up_col.
 
@@ -3103,6 +3597,7 @@ class FormView(QWidget):
         self.plotter.view_vector(
             T[:, col].tolist(), viewup=T[:, up_col].tolist()
         )
+        self._update_camera_display()
 
     def _real_axis_view(self, col):
         """View along real lattice axis a/b/c (cross-products of T_crystal columns).
@@ -3125,6 +3620,7 @@ class FormView(QWidget):
         self.plotter.view_vector(
             (direction / n).tolist(), viewup=(viewup / vn).tolist()
         )
+        self._update_camera_display()
 
     def _draw_box_with_grid(
         self, P, T, S, min_lim, max_lim, labels, label_limits=None
@@ -5085,7 +5581,13 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 def gui():
     sys.excepthook = handle_exception
     app = QApplication(sys.argv)
-    app.setStyleSheet(qdarkstyle.load_stylesheet(palette=LightPalette))
+    bg = app.palette().color(QPalette.Window)
+    system_is_dark = bg.lightness() < 128
+    app.setProperty("ui_dark", system_is_dark)
+    if system_is_dark:
+        app.setStyleSheet(qdarkstyle.load_stylesheet(palette=DarkPalette))
+    else:
+        app.setStyleSheet(qdarkstyle.load_stylesheet(palette=LightPalette))
     window = Garnet()
     window.show()
     sys.exit(app.exec())

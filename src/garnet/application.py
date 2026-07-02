@@ -1,5 +1,6 @@
 import os
 import sys
+import subprocess
 import tempfile
 import traceback
 
@@ -161,16 +162,16 @@ class PeriodicTableDialog(QDialog):
             grid.addWidget(lbl, row, 0)
 
         for elem, (row, col) in atom_indexing.items():
-            btn = QPushButton(elem, table_widget)
-            btn.setFixedSize(44, 36)
+            button = QPushButton(elem, table_widget)
+            button.setFixedSize(44, 36)
             group = atom_groups.get(elem)
             bg = _PT_COLORS.get(group, "#E8E8E8") if group else "#E8E8E8"
-            btn.setStyleSheet(
+            button.setStyleSheet(
                 f"QPushButton {{ background-color: {bg}; font-size: 11px; }}"
                 f"QPushButton:hover {{ background-color: {bg}; border: 2px solid black; }}"
             )
-            btn.clicked.connect(lambda checked, e=elem: self._pick(e))
-            grid.addWidget(btn, row, col)
+            button.clicked.connect(lambda checked, e=elem: self._pick(e))
+            grid.addWidget(button, row, col)
 
         scroll.setWidget(table_widget)
         outer.addWidget(scroll)
@@ -209,34 +210,33 @@ class FormView(QWidget):
         self.plan_widget.addTab(int_tab, "Integration")
 
         self._plotter_frame = QFrame(self)
+        pv.global_theme.smooth_shading = True
         self.plotter = QtInteractor(self._plotter_frame)
         self.plotter.enable_parallel_projection()
         self._preview_T = None
         self._preview_UB = None
 
-        # --- Left column: camera action buttons ---
-        self._reset_view_btn = QPushButton("Reset View", self)
-        self._reset_view_btn.setToolTip("Reset to isometric view")
-        self._reset_view_btn.setIcon(qta.icon("fa6s.house"))
-        self._reset_view_btn.clicked.connect(self._on_reset_view)
+        self._reset_view_button = QPushButton("Reset View", self)
+        self._reset_view_button.setToolTip("Reset to isometric view")
+        self._reset_view_button.setIcon(qta.icon("fa6s.house"))
+        self._reset_view_button.clicked.connect(self._on_reset_view)
 
-        self._camera_btn = QPushButton("Reset Camera", self)
-        self._camera_btn.setToolTip("Reset camera (fit to scene)")
-        self._camera_btn.setIcon(qta.icon("fa6s.camera"))
-        self._camera_btn.clicked.connect(self._on_reset_camera)
+        self._camera_button = QPushButton("Reset Camera", self)
+        self._camera_button.setToolTip("Reset camera (fit to scene)")
+        self._camera_button.setIcon(qta.icon("fa6s.camera"))
+        self._camera_button.clicked.connect(self._on_reset_camera)
 
-        self._plot_btn = QPushButton("Replot Preview", self)
-        self._plot_btn.setToolTip("Replot the current view")
-        self._plot_btn.setIcon(qta.icon("fa6s.rotate"))
+        self._plot_button = QPushButton("Replot Preview", self)
+        self._plot_button.setToolTip("Replot the current view")
+        self._plot_button.setIcon(qta.icon("fa6s.rotate"))
 
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(2)
-        left_layout.addWidget(self._reset_view_btn)
-        left_layout.addWidget(self._camera_btn)
-        left_layout.addWidget(self._plot_btn)
+        left_layout.addWidget(self._reset_view_button)
+        left_layout.addWidget(self._camera_button)
+        left_layout.addWidget(self._plot_button)
 
-        # --- Centre tab 1: Direction View (2×6 grid: ±Q + crystal axes) ---
         directions_widget = QWidget(self)
         directions_layout = QGridLayout(directions_widget)
         directions_layout.setContentsMargins(2, 2, 2, 2)
@@ -286,11 +286,11 @@ class FormView(QWidget):
                 2,
             ),
         ]:
-            btn = QPushButton(label, directions_widget)
-            btn.setToolTip(tip)
-            btn.setIcon(qta.icon("fa6s.right-long"))
-            btn.clicked.connect(slot)
-            directions_layout.addWidget(btn, row, col)
+            button = QPushButton(label, directions_widget)
+            button.setToolTip(tip)
+            button.setIcon(qta.icon("fa6s.right-long"))
+            button.clicked.connect(slot)
+            directions_layout.addWidget(button, row, col)
 
         for label, tip, slot, color, row, col in [
             (
@@ -342,13 +342,12 @@ class FormView(QWidget):
                 5,
             ),
         ]:
-            btn = QPushButton(label, directions_widget)
-            btn.setToolTip(tip)
-            btn.setIcon(qta.icon("fa6s.right-long", color=color))
-            btn.clicked.connect(slot)
-            directions_layout.addWidget(btn, row, col)
+            button = QPushButton(label, directions_widget)
+            button.setToolTip(tip)
+            button.setIcon(qta.icon("fa6s.right-long", color=color))
+            button.clicked.connect(slot)
+            directions_layout.addWidget(button, row, col)
 
-        # --- Centre tab 2: Rotate View ---
         rotate_widget = QWidget(self)
         rotate_layout = QGridLayout(rotate_widget)
         rotate_layout.setContentsMargins(2, 2, 2, 2)
@@ -368,36 +367,36 @@ class FormView(QWidget):
             "Current camera roll, elevation, and azimuth in degrees"
         )
 
-        self._roll_ccw_btn = QPushButton("Roll CCW", self)
-        self._roll_ccw_btn.setIcon(qta.icon("fa6s.rotate-left"))
-        self._roll_ccw_btn.clicked.connect(self._on_roll_ccw)
+        self._roll_ccw_button = QPushButton("Roll CCW", self)
+        self._roll_ccw_button.setIcon(qta.icon("fa6s.rotate-left"))
+        self._roll_ccw_button.clicked.connect(self._on_roll_ccw)
 
-        self._roll_cw_btn = QPushButton("Roll CW", self)
-        self._roll_cw_btn.setIcon(qta.icon("fa6s.rotate-right"))
-        self._roll_cw_btn.clicked.connect(self._on_roll_cw)
+        self._roll_cw_button = QPushButton("Roll CW", self)
+        self._roll_cw_button.setIcon(qta.icon("fa6s.rotate-right"))
+        self._roll_cw_button.clicked.connect(self._on_roll_cw)
 
-        self._elev_up_btn = QPushButton("Elevate Up", self)
-        self._elev_up_btn.setIcon(qta.icon("fa6s.arrow-up"))
-        self._elev_up_btn.clicked.connect(self._on_elev_up)
+        self._elev_up_button = QPushButton("Elevate Up", self)
+        self._elev_up_button.setIcon(qta.icon("fa6s.arrow-up"))
+        self._elev_up_button.clicked.connect(self._on_elev_up)
 
-        self._elev_down_btn = QPushButton("Elevate Down", self)
-        self._elev_down_btn.setIcon(qta.icon("fa6s.arrow-down"))
-        self._elev_down_btn.clicked.connect(self._on_elev_down)
+        self._elev_down_button = QPushButton("Elevate Down", self)
+        self._elev_down_button.setIcon(qta.icon("fa6s.arrow-down"))
+        self._elev_down_button.clicked.connect(self._on_elev_down)
 
-        self._az_left_btn = QPushButton("Azimuth Left", self)
-        self._az_left_btn.setIcon(qta.icon("fa6s.arrow-left"))
-        self._az_left_btn.clicked.connect(self._on_az_left)
+        self._az_left_button = QPushButton("Azimuth Left", self)
+        self._az_left_button.setIcon(qta.icon("fa6s.arrow-left"))
+        self._az_left_button.clicked.connect(self._on_az_left)
 
-        self._az_right_btn = QPushButton("Azimuth Right", self)
-        self._az_right_btn.setIcon(qta.icon("fa6s.arrow-right"))
-        self._az_right_btn.clicked.connect(self._on_az_right)
+        self._az_right_button = QPushButton("Azimuth Right", self)
+        self._az_right_button.setIcon(qta.icon("fa6s.arrow-right"))
+        self._az_right_button.clicked.connect(self._on_az_right)
 
-        rotate_layout.addWidget(self._roll_ccw_btn, 0, 0)
-        rotate_layout.addWidget(self._roll_cw_btn, 1, 0)
-        rotate_layout.addWidget(self._elev_up_btn, 0, 1)
-        rotate_layout.addWidget(self._elev_down_btn, 1, 1)
-        rotate_layout.addWidget(self._az_left_btn, 0, 2)
-        rotate_layout.addWidget(self._az_right_btn, 1, 2)
+        rotate_layout.addWidget(self._roll_ccw_button, 0, 0)
+        rotate_layout.addWidget(self._roll_cw_button, 1, 0)
+        rotate_layout.addWidget(self._elev_up_button, 0, 1)
+        rotate_layout.addWidget(self._elev_down_button, 1, 1)
+        rotate_layout.addWidget(self._az_left_button, 0, 2)
+        rotate_layout.addWidget(self._az_right_button, 1, 2)
         rotate_layout.addWidget(QLabel("Step [°]", self), 0, 3, Qt.AlignCenter)
         rotate_layout.addWidget(self._rotate_step_line, 1, 3)
         rotate_layout.addWidget(QLabel("Camera [°]", self), 0, 4)
@@ -407,7 +406,6 @@ class FormView(QWidget):
         view_tab.addTab(directions_widget, "Direction View")
         view_tab.addTab(rotate_widget, "Rotate View")
 
-        # --- Right column: display checkboxes ---
         self._recip_box = QCheckBox("Toggle Reciprocal Lattice", self)
         self._recip_box.setChecked(True)
         self._recip_box.setToolTip(
@@ -432,7 +430,6 @@ class FormView(QWidget):
         ctrl_bar.addWidget(view_tab, stretch=1)
         ctrl_bar.addLayout(right_layout)
 
-        # Lattice constants + uncertainties display (lower right, under plotter)
         latt_bar = QHBoxLayout()
         latt_bar.setContentsMargins(6, 2, 6, 2)
         latt_bar.setSpacing(4)
@@ -477,6 +474,13 @@ class FormView(QWidget):
         self.load_button = QPushButton("Load", self)
         self.save_button = QPushButton("Save", self)
         self.save_as_button = QPushButton("Save As", self)
+        self.generate_button = QPushButton("Generate Output", self)
+        self.generate_button.setIcon(qta.icon("fa6s.circle-play"))
+        self.generate_button.setToolTip(
+            "Save config and run view.py (Normalization/Parametrization) "
+            "or structure.py (Integration)"
+        )
+
         self.stop_button = QPushButton("Stop Process", self)
         self.stop_button.setIcon(qta.icon("fa6s.stop"))
 
@@ -498,7 +502,7 @@ class FormView(QWidget):
 
         validator = QIntValidator(1, 64, self)
         self.cpu_line.setValidator(validator)
-        self.dev_box = QCheckBox("vDev", self)
+        self.dev_box = QCheckBox("ver. dev.", self)
 
         self.mem_label = QLabel("~? GB")
         self.mem_label.setToolTip(
@@ -508,11 +512,12 @@ class FormView(QWidget):
             "Integration: N_peaks(d_min, centering) × 21³ × 8 B"
         )
 
-        process_layout.addStretch(1)
         process_layout.addWidget(QLabel("Processes:"))
         process_layout.addWidget(self.cpu_line)
         process_layout.addWidget(self.mem_label)
+        process_layout.addStretch(1)
         process_layout.addWidget(self.dev_box)
+        process_layout.addWidget(self.generate_button)
         process_layout.addWidget(self.stop_button)
 
         layout.addLayout(process_layout)
@@ -708,11 +713,12 @@ class FormView(QWidget):
 
         formula_layout = QHBoxLayout()
         self.mat_formula_line = QLineEdit()
-        self.mat_formula_line.setReadOnly(True)
         self.mat_formula_line.setPlaceholderText("Chemical formula")
         self.mat_z_line = QLineEdit()
+        self.mat_z_line.setPlaceholderText("Z")
         self.mat_z_line.setValidator(QIntValidator(1, 10000, self))
         self.mat_vol_line = QLineEdit()
+        self.mat_vol_line.setPlaceholderText("Volume")
         self.mat_vol_line.setReadOnly(True)
         formula_layout.addWidget(self.mat_formula_line)
         formula_layout.addWidget(QLabel("Z", self))
@@ -1494,6 +1500,9 @@ class FormView(QWidget):
         self.miller_h_line = QLineEdit("")
         self.miller_k_line = QLineEdit("")
         self.miller_l_line = QLineEdit("")
+        self.miller_h_line.setPlaceholderText("h")
+        self.miller_k_line.setPlaceholderText("k")
+        self.miller_l_line.setPlaceholderText("l")
 
         self.miller_h_line.setEnabled(False)
         self.miller_k_line.setEnabled(False)
@@ -2119,24 +2128,42 @@ class FormView(QWidget):
         validator = QIntValidator(1, 1000000000, self)
 
         self.runs_line = QLineEdit("")
+        self.runs_line.setPlaceholderText("e.g. 12345,12346 or 12345:12400")
 
         self.ipts_line = QLineEdit("")
+        self.ipts_line.setPlaceholderText("IPTS number")
         self.ipts_line.setValidator(validator)
 
         self.exp_line = QLineEdit("")
+        self.exp_line.setPlaceholderText("Experiment number")
         self.exp_line.setValidator(validator)
 
         self.ub_line = QLineEdit("")
+        self.ub_line.setPlaceholderText("Path to UB matrix (.mat)")
         self.bkg_line = QLineEdit("")
+        self.bkg_line.setPlaceholderText("Path to background file (.nxs)")
         self.van_line = QLineEdit("")
+        self.van_line.setPlaceholderText("Path to solid angle file (.nxs)")
         self.flux_line = QLineEdit("")
+        self.flux_line.setPlaceholderText("Path to flux file (.nxs)")
         self.eff_line = QLineEdit("")
+        self.eff_line.setPlaceholderText(
+            "Path to efficiency calibration (.nxs)"
+        )
         self.spec_line = QLineEdit("")
+        self.spec_line.setPlaceholderText("Path to spectrum file (.nxs)")
         self.cal_line = QLineEdit("")
+        self.cal_line.setPlaceholderText("Path to detector calibration (.xml)")
         self.tube_line = QLineEdit("")
+        self.tube_line.setPlaceholderText("Path to tube calibration (.nxs)")
         self.mask_line = QLineEdit("")
+        self.mask_line.setPlaceholderText("Path to mask file (.xml)")
         self.output_line = QLineEdit("")
+        self.output_line.setPlaceholderText("Path to config file (.yaml)")
         self.gonio_line = QLineEdit("")
+        self.gonio_line.setPlaceholderText(
+            "Path to goniometer calibration (.xml)"
+        )
 
         self.wl_min_line = QLineEdit("0.3")
         self.wl_max_line = QLineEdit("3.5")
@@ -2215,7 +2242,10 @@ class FormView(QWidget):
 
     def run_command(self, command):
         self.output.appendPlainText("Running shell command...\n")
-        script, *args = command.split(" ")
+        if isinstance(command, list):
+            script, args = command[0], command[1:]
+        else:
+            script, *args = command.split(" ")
         if self.process.state() == QProcess.NotRunning:
             self._elapsed_timer = QElapsedTimer()
             self._elapsed_timer.start()
@@ -2253,6 +2283,9 @@ class FormView(QWidget):
 
     def connect_norm_run_button(self, run):
         self.norm_run_button.clicked.connect(run)
+
+    def connect_generate_output(self, generate_output):
+        self.generate_button.clicked.connect(generate_output)
 
     def connect_load_config(self, load_config):
         self.load_button.clicked.connect(load_config)
@@ -2429,7 +2462,10 @@ class FormView(QWidget):
 
         multiblock = pv.MultiBlock(geoms)
         _, mapper = self.plotter.add_composite(
-            multiblock, smooth_shading=True, show_scalar_bar=False
+            multiblock,
+            smooth_shading=True,
+            lighting=True,
+            show_scalar_bar=False,
         )
 
         for i, item in enumerate(rendering_data, start=1):
@@ -2440,7 +2476,7 @@ class FormView(QWidget):
                 continue
 
     def draw_crystal(self, rendering_data, A):
-        self.plotter.clear()
+        self.plotter.clear_actors()
         if A is not None:
             self.draw_cell(A)
         if rendering_data:
@@ -2449,13 +2485,16 @@ class FormView(QWidget):
         self.plotter.render()
 
     def draw_sample(self, geometry):
-        self.plotter.clear()
+        self.plotter.clear_actors()
         T_ell = np.eye(4)
         T_ell[:3, :3] = geometry["ellipsoid_transform"]
         sphere = pv.Sphere(theta_resolution=30, phi_resolution=30)
         ellipsoid = sphere.copy().transform(T_ell)
         self.plotter.add_mesh(
-            ellipsoid, color="lightsteelblue", smooth_shading=True
+            ellipsoid,
+            color="lightsteelblue",
+            smooth_shading=True,
+            lighting=True,
         )
 
         arrow_dirs = geometry["arrow_directions"]
@@ -2860,7 +2899,7 @@ class FormView(QWidget):
         ]:
             line.editingFinished.connect(callback)
         self.centering_combo.currentIndexChanged.connect(lambda *_: callback())
-        self._plot_btn.clicked.connect(lambda *_: callback())
+        self._plot_button.clicked.connect(lambda *_: callback())
 
     def _on_reset_view(self):
         self.plotter.reset_camera()
@@ -3148,7 +3187,7 @@ class FormView(QWidget):
         return center
 
     def update_norm_preview(self, UB, W, extents, labels):
-        self.plotter.clear()
+        self.plotter.clear_actors()
         if UB is None or W is None:
             self.plotter.render()
             return
@@ -3166,7 +3205,7 @@ class FormView(QWidget):
     def update_param_preview(
         self, UB, W, extents, bins, labels, log_extents, log_bins, log_name
     ):
-        self.plotter.clear()
+        self.plotter.clear_actors()
         if UB is None:
             self.plotter.render()
             return
@@ -3300,7 +3339,7 @@ class FormView(QWidget):
     def update_int_preview(
         self, UB, centering, d_min, mod_vecs, max_order, sat_min_d=None
     ):
-        self.plotter.clear()
+        self.plotter.clear_actors()
         if UB is None or d_min is None:
             self.plotter.render()
             return
@@ -3335,13 +3374,15 @@ class FormView(QWidget):
         self._preview_T = T
         positions = (P @ hkl.astype(float).T).T
 
-        peak_colors = ["steelblue", "tomato", "darkorange", "gold"]
+        peak_colors = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
         pd_main = pv.PolyData(positions)
         self.plotter.add_mesh(
             pd_main,
             color=peak_colors[0],
             point_size=8,
             render_points_as_spheres=True,
+            smooth_shading=True,
+            lighting=True,
         )
 
         if max_order and max_order > 0:
@@ -3370,7 +3411,9 @@ class FormView(QWidget):
                     color=peak_colors[(mv_i + 1) % len(peak_colors)],
                     point_size=5,
                     render_points_as_spheres=True,
-                    opacity=0.7,
+                    smooth_shading=True,
+                    lighting=True,
+                    opacity=1.0,
                 )
 
         lims = [h_max, k_max, l_max]
@@ -3433,6 +3476,7 @@ class FormPresenter:
         self.view.connect_show_crystal(self.show_crystal)
         self.view.connect_show_sample(self.show_sample)
         self.view.connect_material_changed(self.update_formula_z)
+        self.view.connect_generate_output(self.generate_output)
         self.view.connect_load_config(self.load_config)
         self.view.connect_save_config(self.save_config)
         self.view.connect_save_as_config(self.save_config_as)
@@ -3927,6 +3971,29 @@ class FormPresenter:
         if filename and valid:
             self.view.set_config(filename)
             self.save_config()
+
+    def generate_output(self):
+        self.save_config()
+
+        filename = self.view.get_config()
+        if not filename or not os.path.isfile(filename):
+            return
+
+        _utils = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "utilities"
+        )
+
+        tab = self.view.get_plan_tab_index()
+        # 0 = Normalization, 1 = Parametrization, 2 = Integration
+        if tab == 2:
+            script = os.path.join(_utils, "structure.py")
+            cmd = [sys.executable, script, filename]
+        else:
+            script = os.path.join(_utils, "view.py")
+            mode = "normalization" if tab == 0 else "parametrization"
+            cmd = [sys.executable, script, filename, mode]
+
+        self.view.run_command(cmd)
 
     def load_int(self):
         params = self.model.get_int()

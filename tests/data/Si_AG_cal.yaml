@@ -1,0 +1,57 @@
+Instrument: TOPAZ
+IPTS: 31856
+Runs: 57882:58014
+UBFile: /SNS/TOPAZ/IPTS-31856/shared/2026A_Si_cal/Si_AG.mat
+Integration:
+  Cell: Cubic
+  Centering: F
+  ModVec1: [0.0, 0.0, 0.0]
+  ModVec2: [0.0, 0.0, 0.0]
+  ModVec3: [0.0, 0.0, 0.0]
+  MaxOrder: 0
+  CrossTerms: false
+  MinD: 0.5
+  SatMinD: 1.0
+  Radius: 0.25
+Normalization:
+  Symmetry: null
+  Projections:
+  - [1, 0, 0]
+  - [0, 1, 0]
+  - [0, 0, 1]
+  Extents:
+  - [-8.0, 8.0]
+  - [-8.0, 8.0]
+  - [-2.0, 2.0]
+  Bins: [501, 501, 101]
+Parametrization:
+  LogName: sample_temperature
+  LogExtents: [5.0, 300.0]
+  LogBins: 60
+  MillerIndex: null
+  Projections:
+  - [1, 0, 0]
+  - [0, 1, 0]
+  - [0, 0, 1]
+  Extents:
+  - [-0.1, 0.1]
+  - [-0.1, 0.1]
+  - [0.5, 1.5]
+  Bins: [1, 1, 51]
+Wavelength: [0.4, 3.5]
+Grouping: 2x2
+Sample:
+  ThicknessWidthHeight: 1
+  Refine: true
+Material:
+  ChemicalFormula: Si1
+  ZParameter: 2
+  SpaceGroup: Fd-3m
+  Sites:
+  - [Si, 0.0, 0.0, 0.0, 1.0]
+YAML: /SNS/TOPAZ/IPTS-31856/shared/2026A_Si_cal/Si_AG_cal.yaml
+MaskFile: /SNS/TOPAZ/shared/Vanadium/2026A_AG/mask_edges.xml
+BackgroundFile: /SNS/TOPAZ/shared/Vanadium/2026A_AG/background.nxs
+DetectorCalibration: /SNS/TOPAZ/shared/calibration/2026A_AG/calibration.DetCal
+FluxFile: /SNS/TOPAZ/shared/Vanadium/2026A_AG/flux.nxs
+VanadiumFile: /SNS/TOPAZ/shared/Vanadium/2026A_AG/solid_angle.nxs

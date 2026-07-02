@@ -22,12 +22,16 @@ for point_group in point_groups:
 
 space_point = {}
 space_number = {}
+space_hm = (
+    {}
+)  # no-spaces key → full HM symbol with spaces (for CrystalStructure)
 
 for space_group in space_groups:
     sg = SpaceGroupFactory.createSpaceGroup(space_group)
     sg_name = sg.getHMSymbol().replace(" ", "")
     space_point[sg_name] = sg.getPointGroup().getHMSymbol().replace(" ", "")
     space_number[sg_name] = sg.getNumber()
+    space_hm[sg_name] = sg.getHMSymbol()
 
 mantid_to_gemmi = {}
 gemmi_misses = []

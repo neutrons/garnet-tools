@@ -3,14 +3,17 @@ import sys
 import tempfile
 import traceback
 
+import re
+
 import numpy as np
 import itertools
 import scipy.linalg
+import matplotlib.colors as mpl_colors
 
 import pyvista as pv
 from pyvistaqt import QtInteractor
 
-os.environ["QT_API"] = "pyqt6"
+os.environ.setdefault("QT_API", "pyside6")
 
 from qtpy.QtWidgets import (
     QApplication,
@@ -31,6 +34,11 @@ from qtpy.QtWidgets import (
     QMessageBox,
     QSplitter,
     QFrame,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QDialog,
+    QScrollArea,
 )
 
 from qtpy.QtGui import (
@@ -59,11 +67,19 @@ import qtawesome as qta
 from garnet._version import __version__
 
 from garnet.config.instruments import beamlines
+from garnet.config.atoms import (
+    colors as atom_colors,
+    radii as atom_radii,
+    indexing as atom_indexing,
+    groups as atom_groups,
+)
 from garnet.reduction.plan import ReductionPlan
+from garnet.utilities.crystal import CrystalStructure
 from garnet.reduction.crystallography import (
     space_point,
     point_laue,
     space_number,
+    space_hm,
 )
 
 
@@ -100,6 +116,71 @@ def _centering_mask(hkl, centering):
     return np.ones(len(hkl), dtype=bool)
 
 
+_PT_COLORS = {
+    "Transition Metals": "#A1C9F4",
+    "Alkaline Earth Metals": "#FFB482",
+    "Nonmetals": "#8DE5A1",
+    "Alkali Metals": "#FF9F9B",
+    "Lanthanides": "#D0BBFF",
+    "Metalloids": "#DEBB9B",
+    "Actinides": "#FAB0E4",
+    "Other Metals": "#CFCFCF",
+    "Halogens": "#FFFEA3",
+    "Noble Gases": "#B9F2F0",
+}
+
+
+class PeriodicTableDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Select Element")
+        self.selected = None
+
+        outer = QVBoxLayout(self)
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+
+        table_widget = QWidget()
+        grid = QGridLayout(table_widget)
+        grid.setSpacing(2)
+
+        # Column headers (1-18)
+        for col in range(1, 19):
+            lbl = QLabel(str(col), table_widget)
+            lbl.setAlignment(Qt.AlignCenter)
+            grid.addWidget(lbl, 0, col)
+
+        # Row labels (periods 1-7 + lanthanide/actinide rows)
+        for row in range(1, 8):
+            lbl = QLabel(str(row), table_widget)
+            lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            grid.addWidget(lbl, row, 0)
+        for row, sym in [(8, "Ln"), (9, "An")]:
+            lbl = QLabel(sym, table_widget)
+            lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            grid.addWidget(lbl, row, 0)
+
+        for elem, (row, col) in atom_indexing.items():
+            btn = QPushButton(elem, table_widget)
+            btn.setFixedSize(44, 36)
+            group = atom_groups.get(elem)
+            bg = _PT_COLORS.get(group, "#E8E8E8") if group else "#E8E8E8"
+            btn.setStyleSheet(
+                f"QPushButton {{ background-color: {bg}; font-size: 11px; }}"
+                f"QPushButton:hover {{ background-color: {bg}; border: 2px solid black; }}"
+            )
+            btn.clicked.connect(lambda checked, e=elem: self._pick(e))
+            grid.addWidget(btn, row, col)
+
+        scroll.setWidget(table_widget)
+        outer.addWidget(scroll)
+        self.setMinimumSize(900, 450)
+
+    def _pick(self, element):
+        self.selected = element
+        self.accept()
+
+
 class FormView(QWidget):
     def __init__(self):
         super().__init__()
@@ -129,62 +210,38 @@ class FormView(QWidget):
 
         self._plotter_frame = QFrame(self)
         self.plotter = QtInteractor(self._plotter_frame)
-        self.plotter.set_background("white")
         self.plotter.enable_parallel_projection()
         self._preview_T = None
         self._preview_UB = None
 
-        self._reset_view_btn = QPushButton(
-            qta.icon("fa6s.house"), "Isometric View", self
-        )
+        # --- Left column: camera action buttons ---
+        self._reset_view_btn = QPushButton("Reset View", self)
         self._reset_view_btn.setToolTip("Reset to isometric view")
+        self._reset_view_btn.setIcon(qta.icon("fa6s.house"))
         self._reset_view_btn.clicked.connect(self._on_reset_view)
 
-        self._camera_btn = QPushButton(
-            qta.icon("fa6s.camera"), "Reset Camera", self
-        )
+        self._camera_btn = QPushButton("Reset Camera", self)
         self._camera_btn.setToolTip("Reset camera (fit to scene)")
+        self._camera_btn.setIcon(qta.icon("fa6s.camera"))
         self._camera_btn.clicked.connect(self._on_reset_camera)
 
-        self._plot_btn = QPushButton(
-            qta.icon("fa6s.rotate"), "Relot Preview", self
-        )
-        self._plot_btn.setToolTip("Refresh preview")
+        self._plot_btn = QPushButton("Replot Preview", self)
+        self._plot_btn.setToolTip("Replot the current view")
+        self._plot_btn.setIcon(qta.icon("fa6s.rotate"))
 
-        self._parallel_box = QCheckBox("Parallel Projection", self)
-        self._parallel_box.setChecked(True)
-        self._parallel_box.setToolTip("Toggle parallel projection")
-        self._parallel_box.stateChanged.connect(self._on_projection_changed)
+        left_layout = QVBoxLayout()
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(2)
+        left_layout.addWidget(self._reset_view_btn)
+        left_layout.addWidget(self._camera_btn)
+        left_layout.addWidget(self._plot_btn)
 
-        self._recip_box = QCheckBox("Reciprocal Lattice", self)
-        self._recip_box.setChecked(True)
-        self._recip_box.setToolTip(
-            "Toggle reciprocal lattice compass labels (a*/b*/c* vs a/b/c)"
-        )
-        self._recip_box.stateChanged.connect(self._show_compass)
+        # --- Centre tab 1: Direction View (2×6 grid: ±Q + crystal axes) ---
+        directions_widget = QWidget(self)
+        directions_layout = QGridLayout(directions_widget)
+        directions_layout.setContentsMargins(2, 2, 2, 2)
+        directions_layout.setSpacing(2)
 
-        # --- Group 1: camera controls (2×2) + plot button ---
-        cam_widget = QWidget(self)
-        cam_grid = QGridLayout(cam_widget)
-        cam_grid.setContentsMargins(0, 0, 0, 0)
-        cam_grid.setSpacing(2)
-        cam_grid.addWidget(self._reset_view_btn, 0, 0)
-        cam_grid.addWidget(self._camera_btn, 1, 0)
-        cam_grid.addWidget(self._parallel_box, 0, 2)
-        cam_grid.addWidget(self._recip_box, 1, 2)
-        cam_grid.addWidget(self._plot_btn, 0, 1)
-
-        def _vsep():
-            s = QFrame(self)
-            s.setFrameShape(QFrame.VLine)
-            s.setFrameShadow(QFrame.Sunken)
-            return s
-
-        # --- Group 2: ±Qx/y/z Cartesian views (2×3) ---
-        qxyz_widget = QWidget(self)
-        qxyz_layout = QGridLayout(qxyz_widget)
-        qxyz_layout.setContentsMargins(0, 0, 0, 0)
-        qxyz_layout.setSpacing(2)
         for label, tip, slot, row, col in [
             (
                 "+Qx",
@@ -229,18 +286,12 @@ class FormView(QWidget):
                 2,
             ),
         ]:
-            btn = QPushButton(label, qxyz_widget)
+            btn = QPushButton(label, directions_widget)
             btn.setToolTip(tip)
-            btn.setFixedHeight(24)
             btn.setIcon(qta.icon("fa6s.right-long"))
             btn.clicked.connect(slot)
-            qxyz_layout.addWidget(btn, row, col)
+            directions_layout.addWidget(btn, row, col)
 
-        # --- Group 3: crystal axis views (2×3, colored) ---
-        crys_widget = QWidget(self)
-        crys_layout = QGridLayout(crys_widget)
-        crys_layout.setContentsMargins(0, 0, 0, 0)
-        crys_layout.setSpacing(2)
         for label, tip, slot, color, row, col in [
             (
                 "a*",
@@ -248,7 +299,7 @@ class FormView(QWidget):
                 lambda: self._axis_view(0, 1),
                 QColor("red"),
                 0,
-                0,
+                3,
             ),
             (
                 "b*",
@@ -256,7 +307,7 @@ class FormView(QWidget):
                 lambda: self._axis_view(1, 2),
                 QColor("green"),
                 0,
-                1,
+                4,
             ),
             (
                 "c*",
@@ -264,7 +315,7 @@ class FormView(QWidget):
                 lambda: self._axis_view(2, 0),
                 QColor("blue"),
                 0,
-                2,
+                5,
             ),
             (
                 "a",
@@ -272,7 +323,7 @@ class FormView(QWidget):
                 lambda: self._real_axis_view(0),
                 QColor("red"),
                 1,
-                0,
+                3,
             ),
             (
                 "b",
@@ -280,7 +331,7 @@ class FormView(QWidget):
                 lambda: self._real_axis_view(1),
                 QColor("green"),
                 1,
-                1,
+                4,
             ),
             (
                 "c",
@@ -288,32 +339,137 @@ class FormView(QWidget):
                 lambda: self._real_axis_view(2),
                 QColor("blue"),
                 1,
-                2,
+                5,
             ),
         ]:
-            btn = QPushButton(label, crys_widget)
+            btn = QPushButton(label, directions_widget)
             btn.setToolTip(tip)
-            btn.setFixedHeight(24)
-            btn.setMaximumWidth(36)
             btn.setIcon(qta.icon("fa6s.right-long", color=color))
             btn.clicked.connect(slot)
-            crys_layout.addWidget(btn, row, col)
+            directions_layout.addWidget(btn, row, col)
+
+        # --- Centre tab 2: Rotate View ---
+        rotate_widget = QWidget(self)
+        rotate_layout = QGridLayout(rotate_widget)
+        rotate_layout.setContentsMargins(2, 2, 2, 2)
+        rotate_layout.setSpacing(2)
+
+        self._rotate_step_line = QLineEdit("5.0", self)
+        self._rotate_step_line.setValidator(
+            QDoubleValidator(
+                -360.0, 360.0, 2, notation=QDoubleValidator.StandardNotation
+            )
+        )
+        self._rotate_step_line.setToolTip("Rotation step in degrees")
+
+        self._camera_pos_line = QLineEdit(self)
+        self._camera_pos_line.setReadOnly(True)
+        self._camera_pos_line.setToolTip(
+            "Current camera roll, elevation, and azimuth in degrees"
+        )
+
+        self._roll_ccw_btn = QPushButton("Roll CCW", self)
+        self._roll_ccw_btn.setIcon(qta.icon("fa6s.rotate-left"))
+        self._roll_ccw_btn.clicked.connect(self._on_roll_ccw)
+
+        self._roll_cw_btn = QPushButton("Roll CW", self)
+        self._roll_cw_btn.setIcon(qta.icon("fa6s.rotate-right"))
+        self._roll_cw_btn.clicked.connect(self._on_roll_cw)
+
+        self._elev_up_btn = QPushButton("Elevate Up", self)
+        self._elev_up_btn.setIcon(qta.icon("fa6s.arrow-up"))
+        self._elev_up_btn.clicked.connect(self._on_elev_up)
+
+        self._elev_down_btn = QPushButton("Elevate Down", self)
+        self._elev_down_btn.setIcon(qta.icon("fa6s.arrow-down"))
+        self._elev_down_btn.clicked.connect(self._on_elev_down)
+
+        self._az_left_btn = QPushButton("Azimuth Left", self)
+        self._az_left_btn.setIcon(qta.icon("fa6s.arrow-left"))
+        self._az_left_btn.clicked.connect(self._on_az_left)
+
+        self._az_right_btn = QPushButton("Azimuth Right", self)
+        self._az_right_btn.setIcon(qta.icon("fa6s.arrow-right"))
+        self._az_right_btn.clicked.connect(self._on_az_right)
+
+        rotate_layout.addWidget(self._roll_ccw_btn, 0, 0)
+        rotate_layout.addWidget(self._roll_cw_btn, 1, 0)
+        rotate_layout.addWidget(self._elev_up_btn, 0, 1)
+        rotate_layout.addWidget(self._elev_down_btn, 1, 1)
+        rotate_layout.addWidget(self._az_left_btn, 0, 2)
+        rotate_layout.addWidget(self._az_right_btn, 1, 2)
+        rotate_layout.addWidget(QLabel("Step [°]", self), 0, 3, Qt.AlignCenter)
+        rotate_layout.addWidget(self._rotate_step_line, 1, 3)
+        rotate_layout.addWidget(QLabel("Camera [°]", self), 0, 4)
+        rotate_layout.addWidget(self._camera_pos_line, 1, 4)
+
+        view_tab = QTabWidget(self)
+        view_tab.addTab(directions_widget, "Direction View")
+        view_tab.addTab(rotate_widget, "Rotate View")
+
+        # --- Right column: display checkboxes ---
+        self._recip_box = QCheckBox("Toggle Reciprocal Lattice", self)
+        self._recip_box.setChecked(True)
+        self._recip_box.setToolTip(
+            "Toggle reciprocal lattice compass labels (a*/b*/c* vs a/b/c)"
+        )
+        self._recip_box.stateChanged.connect(self._show_compass)
+
+        self._parallel_box = QCheckBox("Enable Parallel Projection", self)
+        self._parallel_box.setChecked(True)
+        self._parallel_box.setToolTip("Toggle parallel projection")
+        self._parallel_box.stateChanged.connect(self._on_projection_changed)
+
+        right_layout = QVBoxLayout()
+        right_layout.addStretch(1)
+        right_layout.addWidget(self._recip_box)
+        right_layout.addWidget(self._parallel_box)
 
         ctrl_bar = QHBoxLayout()
         ctrl_bar.setContentsMargins(4, 2, 4, 2)
-        ctrl_bar.setSpacing(4)
-        ctrl_bar.addWidget(cam_widget)
-        ctrl_bar.addStretch(1)
-        ctrl_bar.addWidget(_vsep())
-        ctrl_bar.addWidget(qxyz_widget)
-        ctrl_bar.addWidget(_vsep())
-        ctrl_bar.addWidget(crys_widget)
+        ctrl_bar.setSpacing(6)
+        ctrl_bar.addLayout(left_layout)
+        ctrl_bar.addWidget(view_tab, stretch=1)
+        ctrl_bar.addLayout(right_layout)
+
+        # Lattice constants + uncertainties display (lower right, under plotter)
+        latt_bar = QHBoxLayout()
+        latt_bar.setContentsMargins(6, 2, 6, 2)
+        latt_bar.setSpacing(4)
+
+        latt_bar.addStretch(1)
+        for lbl, attr in [
+            ("a", "_latt_a"),
+            ("b", "_latt_b"),
+            ("c", "_latt_c"),
+        ]:
+            latt_bar.addWidget(QLabel(lbl, self))
+            w = QLineEdit(self)
+            w.setReadOnly(True)
+            w.setFixedWidth(110)
+            setattr(self, attr, w)
+            latt_bar.addWidget(w)
+        latt_bar.addWidget(QLabel("Å", self))
+        latt_bar.addSpacing(10)
+        for lbl, attr in [
+            ("α", "_latt_alpha"),
+            ("β", "_latt_beta"),
+            ("γ", "_latt_gamma"),
+        ]:
+            latt_bar.addWidget(QLabel(lbl, self))
+            w = QLineEdit(self)
+            w.setReadOnly(True)
+            w.setFixedWidth(110)
+            setattr(self, attr, w)
+            latt_bar.addWidget(w)
+        latt_bar.addWidget(QLabel("°", self))
 
         _pl = QVBoxLayout()
         _pl.setContentsMargins(0, 0, 0, 0)
         _pl.setSpacing(0)
         _pl.addLayout(ctrl_bar)
         _pl.addWidget(self.plotter.interactor, stretch=1)
+        _pl.addLayout(latt_bar)
         self._plotter_frame.setLayout(_pl)
 
         name_label = QLabel("Config File:")
@@ -485,10 +641,191 @@ class FormView(QWidget):
 
     def init_info(self):
         tab = QWidget()
+        outer_layout = QVBoxLayout()
 
-        layout = QVBoxLayout()
+        info_widget = QTabWidget(self)
 
-        tab.setLayout(layout)
+        mat_tab = QWidget()
+        mat_layout = QVBoxLayout()
+
+        self.load_cif_button = QPushButton("Load CIF", self)
+        self.load_cif_button.setIcon(qta.icon("fa6s.folder-open"))
+
+        notation = QDoubleValidator.StandardNotation
+
+        sg_layout = QHBoxLayout()
+        self.mat_space_group_combo = QComboBox(self)
+        for sg in sorted(space_number.keys(), key=lambda s: space_number[s]):
+            self.mat_space_group_combo.addItem(sg)
+        self.auto_scale_dropdown(self.mat_space_group_combo)
+        sg_layout.addWidget(QLabel("Space Group:", self))
+        sg_layout.addWidget(self.mat_space_group_combo)
+        sg_layout.addStretch(1)
+
+        self.add_site_button = QPushButton("Add", self)
+        self.add_site_button.setIcon(qta.icon("fa6s.plus"))
+        self.del_site_button = QPushButton("Delete", self)
+        self.del_site_button.setIcon(qta.icon("fa6s.minus"))
+
+        sg_layout.addWidget(self.add_site_button)
+        sg_layout.addWidget(self.del_site_button)
+
+        stretch = QHeaderView.Stretch
+        self.sites_table = QTableWidget()
+        self.sites_table.setColumnCount(5)
+        self.sites_table.setHorizontalHeaderLabels(
+            ["atom", "x", "y", "z", "occ"]
+        )
+        self.sites_table.horizontalHeader().setSectionResizeMode(stretch)
+        self.sites_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.sites_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.sites_table.cellClicked.connect(self._on_site_selected)
+
+        site_edit_layout = QHBoxLayout()
+        self.site_atom_button = QPushButton("?", self)
+        self.site_atom_button.setToolTip("Click to select element")
+        self.site_atom_button.setFixedWidth(70)
+        self.site_atom_button.clicked.connect(self._open_periodic_table)
+        site_edit_layout.addWidget(self.site_atom_button)
+        validator_frac = QDoubleValidator(-1, 1, 5, notation=notation)
+        validator_occ = QDoubleValidator(0, 1, 5, notation=notation)
+        self.site_x_line = QLineEdit("0.0")
+        self.site_y_line = QLineEdit("0.0")
+        self.site_z_line = QLineEdit("0.0")
+        self.site_occ_line = QLineEdit("1.0")
+        for w in (self.site_x_line, self.site_y_line, self.site_z_line):
+            w.setValidator(validator_frac)
+        self.site_occ_line.setValidator(validator_occ)
+        for lbl, w in [
+            ("x", self.site_x_line),
+            ("y", self.site_y_line),
+            ("z", self.site_z_line),
+            ("occ", self.site_occ_line),
+        ]:
+            site_edit_layout.addWidget(QLabel(lbl, self))
+            site_edit_layout.addWidget(w)
+            w.editingFinished.connect(self._update_selected_row)
+
+        formula_layout = QHBoxLayout()
+        self.mat_formula_line = QLineEdit()
+        self.mat_formula_line.setReadOnly(True)
+        self.mat_formula_line.setPlaceholderText("Chemical formula")
+        self.mat_z_line = QLineEdit()
+        self.mat_z_line.setValidator(QIntValidator(1, 10000, self))
+        self.mat_vol_line = QLineEdit()
+        self.mat_vol_line.setReadOnly(True)
+        formula_layout.addWidget(self.mat_formula_line)
+        formula_layout.addWidget(QLabel("Z", self))
+        formula_layout.addWidget(self.mat_z_line)
+        formula_layout.addWidget(QLabel("Ω", self))
+        formula_layout.addWidget(self.mat_vol_line)
+        formula_layout.addWidget(QLabel("Å³", self))
+
+        self.refine_structure_box = QCheckBox("Refine Structure", self)
+        self.refine_structure_box.setChecked(False)
+        self.refine_structure_box.setToolTip(
+            "Write Sites and SpaceGroup to YAML for structure refinement."
+        )
+
+        mat_ctrl_layout = QHBoxLayout()
+        self.show_crystal_button = QPushButton("Show Crystal", self)
+        self.show_crystal_button.setIcon(qta.icon("fa6s.eye"))
+        mat_ctrl_layout.addWidget(self.load_cif_button)
+        mat_ctrl_layout.addWidget(self.show_crystal_button)
+        mat_ctrl_layout.addStretch(1)
+        mat_ctrl_layout.addWidget(self.refine_structure_box)
+
+        mat_layout.addLayout(sg_layout)
+        mat_layout.addWidget(self.sites_table)
+        mat_layout.addLayout(site_edit_layout)
+        mat_layout.addLayout(formula_layout)
+        mat_layout.addLayout(mat_ctrl_layout)
+        mat_tab.setLayout(mat_layout)
+
+        samp_tab = QWidget()
+        samp_layout = QVBoxLayout()
+
+        dim_layout = QHBoxLayout()
+        validator_dim = QDoubleValidator(0.001, 100, 5, notation=notation)
+        self.samp_thickness_line = QLineEdit("0.1")
+        self.samp_width_line = QLineEdit("0.5")
+        self.samp_height_line = QLineEdit("0.5")
+        for w in (
+            self.samp_thickness_line,
+            self.samp_width_line,
+            self.samp_height_line,
+        ):
+            w.setValidator(validator_dim)
+        for lbl, w in [
+            ("Thickness:", self.samp_thickness_line),
+            ("Width:", self.samp_width_line),
+            ("Height:", self.samp_height_line),
+        ]:
+            dim_layout.addWidget(QLabel(lbl, self))
+            dim_layout.addWidget(w)
+        dim_layout.addWidget(QLabel("cm", self))
+        dim_layout.addStretch(1)
+
+        orient_layout = QGridLayout()
+        a_star_lbl = QLabel("a*", self)
+        b_star_lbl = QLabel("b*", self)
+        c_star_lbl = QLabel("c*", self)
+        orient_layout.addWidget(QLabel("", self), 0, 0)
+        orient_layout.addWidget(a_star_lbl, 0, 1, Qt.AlignCenter)
+        orient_layout.addWidget(b_star_lbl, 0, 2, Qt.AlignCenter)
+        orient_layout.addWidget(c_star_lbl, 0, 3, Qt.AlignCenter)
+
+        u_lbl = QLabel("Along Thickness (u):", self)
+        v_lbl = QLabel("In-plane Lateral (v):", self)
+        orient_layout.addWidget(u_lbl, 1, 0)
+        orient_layout.addWidget(v_lbl, 2, 0)
+
+        validator_idx = QIntValidator(-20, 20, self)
+        self.hu_line = QLineEdit("0")
+        self.ku_line = QLineEdit("0")
+        self.lu_line = QLineEdit("1")
+        self.hv_line = QLineEdit("1")
+        self.kv_line = QLineEdit("0")
+        self.lv_line = QLineEdit("0")
+        for w in (
+            self.hu_line,
+            self.ku_line,
+            self.lu_line,
+            self.hv_line,
+            self.kv_line,
+            self.lv_line,
+        ):
+            w.setValidator(validator_idx)
+        orient_layout.addWidget(self.hu_line, 1, 1)
+        orient_layout.addWidget(self.ku_line, 1, 2)
+        orient_layout.addWidget(self.lu_line, 1, 3)
+        orient_layout.addWidget(self.hv_line, 2, 1)
+        orient_layout.addWidget(self.kv_line, 2, 2)
+        orient_layout.addWidget(self.lv_line, 2, 3)
+
+        samp_ctrl_layout = QHBoxLayout()
+        self.refine_shape_box = QCheckBox("Refine Shape/Orientation", self)
+        self.refine_shape_box.setChecked(False)
+        self.refine_shape_box.setToolTip(
+            "Write Refine: true to YAML for shape/orientation refinement."
+        )
+        self.show_sample_button = QPushButton("Show Sample", self)
+        self.show_sample_button.setIcon(qta.icon("fa6s.eye"))
+        samp_ctrl_layout.addWidget(self.refine_shape_box)
+        samp_ctrl_layout.addStretch(1)
+        samp_ctrl_layout.addWidget(self.show_sample_button)
+
+        samp_layout.addLayout(dim_layout)
+        samp_layout.addLayout(orient_layout)
+        samp_layout.addLayout(samp_ctrl_layout)
+        samp_layout.addStretch(1)
+        samp_tab.setLayout(samp_layout)
+
+        info_widget.addTab(mat_tab, "Material")
+        info_widget.addTab(samp_tab, "Sample")
+
+        outer_layout.addWidget(info_widget)
+        tab.setLayout(outer_layout)
 
         return tab
 
@@ -811,6 +1148,132 @@ class FormView(QWidget):
 
     def set_optimize_peaks(self, state):
         self.optimize_peaks_box.setChecked(state)
+
+    # ── Sample/Material view helpers ─────────────────────────────────────────
+
+    def load_CIF_file_dialog(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Load CIF file", "", "CIF files (*.cif)", options=options
+        )
+        return filename
+
+    @staticmethod
+    def _format_with_error(value, error):
+        if error is None or error <= 0:
+            return f"{value:.4f}"
+        error_order = int(np.floor(np.log10(error)))
+        decimal_places = max(0, -error_order)
+        rounded_value = round(value, decimal_places)
+        rounded_error = round(error, decimal_places)
+        error_digits = int(round(rounded_error * (10**decimal_places)))
+        return f"{rounded_value:.{decimal_places}f}({error_digits})"
+
+    def set_lattice_display(self, params, errors=None):
+        fields = (
+            self._latt_a,
+            self._latt_b,
+            self._latt_c,
+            self._latt_alpha,
+            self._latt_beta,
+            self._latt_gamma,
+        )
+        for i, (field, val) in enumerate(zip(fields, params)):
+            err = errors[i] if errors is not None else None
+            field.setText(self._format_with_error(val, err))
+
+    def set_mat_space_group(self, sg):
+        idx = self.mat_space_group_combo.findText(sg.strip())
+        if idx >= 0:
+            self.mat_space_group_combo.setCurrentIndex(idx)
+
+    def get_mat_space_group(self):
+        return self.mat_space_group_combo.currentText()
+
+    def set_mat_sites(self, scatterers):
+        self.sites_table.setRowCount(0)
+        for row_data in scatterers:
+            row = self.sites_table.rowCount()
+            self.sites_table.insertRow(row)
+            for col, val in enumerate(row_data[:5]):
+                item = QTableWidgetItem(str(val))
+                item.setTextAlignment(Qt.AlignCenter)
+                self.sites_table.setItem(row, col, item)
+
+    def get_mat_sites(self):
+        sites = []
+        for row in range(self.sites_table.rowCount()):
+            entry = []
+            for col in range(self.sites_table.columnCount()):
+                item = self.sites_table.item(row, col)
+                val = item.text() if item else ""
+                if col == 0:
+                    entry.append(val)
+                else:
+                    try:
+                        entry.append(float(val))
+                    except ValueError:
+                        entry.append(0.0)
+            sites.append(entry)
+        return sites
+
+    def set_mat_formula(self, formula, Z, vol):
+        self.mat_formula_line.setText(formula)
+        self.mat_z_line.setText(str(Z))
+        self.mat_vol_line.setText("{:.4f}".format(vol))
+
+    def get_mat_formula(self):
+        formula = self.mat_formula_line.text().strip()
+        Z = int(self.mat_z_line.text()) if self.mat_z_line.text() else 1
+        vol = (
+            float(self.mat_vol_line.text())
+            if self.mat_vol_line.text()
+            else 0.0
+        )
+        return formula, Z, vol
+
+    def get_refine_structure(self):
+        return self.refine_structure_box.isChecked()
+
+    def set_refine_structure(self, state):
+        self.refine_structure_box.setChecked(state)
+
+    def set_sample_dimensions(self, twh):
+        if len(twh) == 3:
+            self.samp_thickness_line.setText(str(twh[0]))
+            self.samp_width_line.setText(str(twh[1]))
+            self.samp_height_line.setText(str(twh[2]))
+
+    def get_sample_dimensions(self):
+        vals = []
+        for w in (
+            self.samp_thickness_line,
+            self.samp_width_line,
+            self.samp_height_line,
+        ):
+            try:
+                vals.append(float(w.text()))
+            except ValueError:
+                vals.append(0.0)
+        return vals
+
+    def set_sample_orientation(self, u, v):
+        for w, val in zip((self.hu_line, self.ku_line, self.lu_line), u):
+            w.setText(str(int(val)))
+        for w, val in zip((self.hv_line, self.kv_line, self.lv_line), v):
+            w.setText(str(int(val)))
+
+    def get_sample_orientation(self):
+        u = [int(w.text()) for w in (self.hu_line, self.ku_line, self.lu_line)]
+        v = [int(w.text()) for w in (self.hv_line, self.kv_line, self.lv_line)]
+        return u, v
+
+    def get_refine_shape(self):
+        return self.refine_shape_box.isChecked()
+
+    def set_refine_shape(self, state):
+        self.refine_shape_box.setChecked(state)
 
     def get_max_order(self):
         if self.max_order_line.hasAcceptableInput():
@@ -1830,6 +2293,197 @@ class FormView(QWidget):
     def connect_load_flux(self, load_flux):
         self.flux_browse_button.clicked.connect(load_flux)
 
+    def connect_ub_changed(self, callback):
+        self.ub_line.editingFinished.connect(callback)
+
+    def connect_load_CIF(self, load_CIF):
+        self.load_cif_button.clicked.connect(load_CIF)
+
+    def connect_add_site(self, add_site):
+        self.add_site_button.clicked.connect(add_site)
+
+    def connect_del_site(self, del_site):
+        self.del_site_button.clicked.connect(del_site)
+
+    def connect_material_changed(self, callback):
+        self._material_changed_cb = callback
+        self.mat_space_group_combo.currentIndexChanged.connect(callback)
+
+    def add_site_row(self):
+        atom = self.site_atom_button.text().strip()
+        if not atom or atom == "?":
+            return
+        vals = [
+            self.site_x_line.text(),
+            self.site_y_line.text(),
+            self.site_z_line.text(),
+            self.site_occ_line.text(),
+        ]
+        row = self.sites_table.rowCount()
+        self.sites_table.insertRow(row)
+        item0 = QTableWidgetItem(atom)
+        item0.setTextAlignment(Qt.AlignCenter)
+        self.sites_table.setItem(row, 0, item0)
+        for col, val in enumerate(vals, start=1):
+            item = QTableWidgetItem(val)
+            item.setTextAlignment(Qt.AlignCenter)
+            self.sites_table.setItem(row, col, item)
+        if hasattr(self, "_material_changed_cb"):
+            self._material_changed_cb()
+
+    def del_site_row(self):
+        rows = self.sites_table.selectionModel().selectedRows()
+        for row in sorted(rows, reverse=True):
+            self.sites_table.removeRow(row.row())
+        if hasattr(self, "_material_changed_cb"):
+            self._material_changed_cb()
+
+    def _open_periodic_table(self):
+        dlg = PeriodicTableDialog(self)
+        if dlg.exec() == QDialog.Accepted and dlg.selected:
+            self.site_atom_button.setText(dlg.selected)
+            self._update_selected_row()
+
+    def _on_site_selected(self, row, _col=None):
+        if row < 0:
+            return
+        items = [self.sites_table.item(row, col) for col in range(5)]
+        if not all(items):
+            return
+        # Block signals while populating to avoid re-triggering _update_selected_row
+        for w in (
+            self.site_x_line,
+            self.site_y_line,
+            self.site_z_line,
+            self.site_occ_line,
+        ):
+            w.blockSignals(True)
+        self.site_atom_button.blockSignals(True)
+        self.site_atom_button.setText(items[0].text())
+        self.site_x_line.setText(items[1].text())
+        self.site_y_line.setText(items[2].text())
+        self.site_z_line.setText(items[3].text())
+        self.site_occ_line.setText(items[4].text())
+        for w in (
+            self.site_x_line,
+            self.site_y_line,
+            self.site_z_line,
+            self.site_occ_line,
+        ):
+            w.blockSignals(False)
+        self.site_atom_button.blockSignals(False)
+
+    def _update_selected_row(self):
+        """Write current edit-field values back into the selected table row."""
+        selected = self.sites_table.selectionModel().selectedRows()
+        if not selected:
+            return
+        row = selected[0].row()
+        atom = self.site_atom_button.text().strip()
+        if not atom or atom == "?":
+            return
+        vals = [
+            self.site_x_line.text(),
+            self.site_y_line.text(),
+            self.site_z_line.text(),
+            self.site_occ_line.text(),
+        ]
+        item0 = QTableWidgetItem(atom)
+        item0.setTextAlignment(Qt.AlignCenter)
+        self.sites_table.setItem(row, 0, item0)
+        for col, val in enumerate(vals, start=1):
+            item = QTableWidgetItem(val)
+            item.setTextAlignment(Qt.AlignCenter)
+            self.sites_table.setItem(row, col, item)
+        if hasattr(self, "_material_changed_cb"):
+            self._material_changed_cb()
+
+    def connect_show_crystal(self, callback):
+        self.show_crystal_button.clicked.connect(callback)
+
+    def connect_show_sample(self, callback):
+        self.show_sample_button.clicked.connect(callback)
+
+    def draw_cell(self, A):
+        T = np.eye(4)
+        T[:3, :3] = A
+        mesh = pv.Box(bounds=(0, 1, 0, 1, 0, 1), level=0, quads=True)
+        mesh.transform(T, inplace=True)
+        self.plotter.add_mesh(
+            mesh, color="k", style="wireframe", render_lines_as_tubes=True
+        )
+
+    def add_atoms(self, rendering_data):
+        sphere = pv.Icosphere(radius=1, nsub=2)
+        T = np.eye(4)
+        geoms = []
+
+        for item in rendering_data:
+            radius = float(item["radius"])
+            T[0, 0] = T[1, 1] = T[2, 2] = radius
+            T[:3, 3] = item["coord"]
+            geoms.append(sphere.copy().transform(T, inplace=True))
+
+        if not geoms:
+            return
+
+        multiblock = pv.MultiBlock(geoms)
+        _, mapper = self.plotter.add_composite(
+            multiblock, smooth_shading=True, show_scalar_bar=False
+        )
+
+        for i, item in enumerate(rendering_data, start=1):
+            try:
+                mapper.block_attr[i].color = tuple(item["rgb"])
+                mapper.block_attr[i].opacity = float(item["alpha"])
+            except Exception:
+                continue
+
+    def draw_crystal(self, rendering_data, A):
+        self.plotter.clear()
+        if A is not None:
+            self.draw_cell(A)
+        if rendering_data:
+            self.add_atoms(rendering_data)
+        self.plotter.reset_camera()
+        self.plotter.render()
+
+    def draw_sample(self, geometry):
+        self.plotter.clear()
+        T_ell = np.eye(4)
+        T_ell[:3, :3] = geometry["ellipsoid_transform"]
+        sphere = pv.Sphere(theta_resolution=30, phi_resolution=30)
+        ellipsoid = sphere.copy().transform(T_ell)
+        self.plotter.add_mesh(
+            ellipsoid, color="lightsteelblue", smooth_shading=True
+        )
+
+        arrow_dirs = geometry["arrow_directions"]
+        arrow_len = geometry["arrow_length"]
+        axis_colors = ["red", "green", "blue"]
+        axis_labels = ["a*", "b*", "c*"]
+        origin = np.array([[0.0, 0.0, 0.0]])
+        for i in range(3):
+            direction = arrow_dirs[:, i].reshape(1, 3)
+            self.plotter.add_arrows(
+                origin, direction, mag=arrow_len, color=axis_colors[i]
+            )
+            tip = arrow_dirs[:, i] * arrow_len * 1.15
+            self.plotter.add_point_labels(
+                [tip.tolist()],
+                [axis_labels[i]],
+                font_size=14,
+                text_color=axis_colors[i],
+                always_visible=True,
+                shape=None,
+            )
+
+        self.plotter.reset_camera()
+        self.plotter.render()
+
+    def show_error(self, message):
+        QMessageBox.critical(self, "Error", message)
+
     def get_config(self):
         return self.output_line.text()
 
@@ -2214,6 +2868,125 @@ class FormView(QWidget):
 
     def _on_reset_camera(self):
         self.plotter.reset_camera()
+
+    # --- Camera rotation helpers (Rodrigues formula) ---
+
+    @staticmethod
+    def _rotate_vector(v, k, angle_deg):
+        theta = np.radians(angle_deg)
+        k = np.asarray(k, dtype=float)
+        n = np.linalg.norm(k)
+        if n < 1e-10:
+            return np.asarray(v, dtype=float)
+        k = k / n
+        v = np.asarray(v, dtype=float)
+        return (
+            v * np.cos(theta)
+            + np.cross(k, v) * np.sin(theta)
+            + k * np.dot(k, v) * (1.0 - np.cos(theta))
+        )
+
+    def _get_camera_state(self):
+        cam = self.plotter.camera
+        return (
+            np.array(cam.position),
+            np.array(cam.focal_point),
+            np.array(cam.up),
+        )
+
+    def _set_camera_state(self, position, focal_point, up):
+        cam = self.plotter.camera
+        cam.position = position.tolist()
+        cam.focal_point = focal_point.tolist()
+        up_n = np.linalg.norm(up)
+        cam.up = (up / up_n).tolist() if up_n > 1e-10 else [0.0, 1.0, 0.0]
+        self.plotter.render()
+        self._update_camera_display()
+
+    def _camera_basis(self, position, focal_point, up):
+        fp = np.array(focal_point, dtype=float)
+        pos = np.array(position, dtype=float)
+        up_v = np.array(up, dtype=float)
+        d = fp - pos
+        dist = np.linalg.norm(d)
+        if dist < 1e-10:
+            d = np.array([0.0, 0.0, 1.0])
+            dist = 1.0
+        d = d / dist
+        up_v = up_v - np.dot(up_v, d) * d
+        if np.linalg.norm(up_v) < 1e-10:
+            up_v = np.array([0.0, 1.0, 0.0])
+            up_v = up_v - np.dot(up_v, d) * d
+        up_v = up_v / np.linalg.norm(up_v)
+        return fp, d, up_v, dist
+
+    def _apply_rotation(self, rotate_func):
+        try:
+            step = float(self._rotate_step_line.text())
+        except ValueError:
+            step = 5.0
+        pos, fp, up = self._get_camera_state()
+        new_pos, new_fp, new_up = rotate_func(pos, fp, up, step)
+        self._set_camera_state(new_pos, new_fp, new_up)
+
+    def _rotate_roll(self, pos, fp, up, angle):
+        fp_v, d, up_v, dist = self._camera_basis(pos, fp, up)
+        new_up = self._rotate_vector(up_v, d, angle)
+        new_pos = fp_v - d * dist
+        return new_pos, fp_v, new_up
+
+    def _rotate_elevation(self, pos, fp, up, angle):
+        fp_v, d, up_v, dist = self._camera_basis(pos, fp, up)
+        right = np.cross(d, up_v)
+        if np.linalg.norm(right) < 1e-10:
+            right = np.array([1.0, 0.0, 0.0])
+        new_d = self._rotate_vector(d, right, angle)
+        new_up = self._rotate_vector(up_v, right, angle)
+        new_pos = fp_v - new_d * dist
+        return new_pos, fp_v, new_up
+
+    def _rotate_azimuth(self, pos, fp, up, angle):
+        fp_v, d, up_v, dist = self._camera_basis(pos, fp, up)
+        world_up = np.array([0.0, 0.0, 1.0])
+        new_d = self._rotate_vector(d, world_up, angle)
+        new_up = self._rotate_vector(up_v, world_up, angle)
+        new_pos = fp_v - new_d * dist
+        return new_pos, fp_v, new_up
+
+    def _update_camera_display(self):
+        try:
+            cam = self.plotter.camera
+            roll = cam.roll
+            d = np.array(cam.direction)
+            elevation = np.degrees(np.arcsin(np.clip(d[2], -1.0, 1.0)))
+            azimuth = np.degrees(np.arctan2(d[1], d[0]))
+            self._camera_pos_line.setText(
+                f"{roll:.1f},{elevation:.1f},{azimuth:.1f}"
+            )
+        except Exception:
+            pass
+
+    def _on_roll_ccw(self):
+        self._apply_rotation(self._rotate_roll)
+
+    def _on_roll_cw(self):
+        self._apply_rotation(lambda p, f, u, s: self._rotate_roll(p, f, u, -s))
+
+    def _on_elev_up(self):
+        self._apply_rotation(self._rotate_elevation)
+
+    def _on_elev_down(self):
+        self._apply_rotation(
+            lambda p, f, u, s: self._rotate_elevation(p, f, u, -s)
+        )
+
+    def _on_az_left(self):
+        self._apply_rotation(
+            lambda p, f, u, s: self._rotate_azimuth(p, f, u, -s)
+        )
+
+    def _on_az_right(self):
+        self._apply_rotation(self._rotate_azimuth)
 
     def _q_axis_view(self, col, sign, viewup_col):
         """View along ±Qx/Qy/Qz in the display world frame.
@@ -2653,6 +3426,13 @@ class FormPresenter:
         self.view.connect_load_background(self.load_background)
         self.view.connect_load_vanadium(self.load_vanadium)
         self.view.connect_load_flux(self.load_flux)
+        self.view.connect_ub_changed(self.update_lattice_display)
+        self.view.connect_load_CIF(self.load_CIF)
+        self.view.connect_add_site(self.view.add_site_row)
+        self.view.connect_del_site(self.view.del_site_row)
+        self.view.connect_show_crystal(self.show_crystal)
+        self.view.connect_show_sample(self.show_sample)
+        self.view.connect_material_changed(self.update_formula_z)
         self.view.connect_load_config(self.load_config)
         self.view.connect_save_config(self.save_config)
         self.view.connect_save_as_config(self.save_config_as)
@@ -3050,6 +3830,15 @@ class FormPresenter:
             self.load_int()
             self.load_param()
             self.load_norm()
+            self.load_mat()
+            self.update_lattice_display()
+
+    def update_lattice_display(self):
+        ub_file = self.view.get_UB()
+        if ub_file and os.path.isfile(ub_file):
+            params, errors = self.model.get_lattice_from_UB(ub_file)
+            if params is not None:
+                self.view.set_lattice_display(params, errors)
 
     def save_config(self):
         filename = self.view.get_config()
@@ -3264,6 +4053,129 @@ class FormPresenter:
         extents = [extents_1, extents_2, extents_3]
         self.model.set_norm(symmetry, proj, extents, bins)
 
+    def load_CIF(self):
+        filename = self.view.load_CIF_file_dialog()
+        if not filename:
+            return
+        try:
+            cs = CrystalStructure(filename)
+            a, b, c, alpha, beta, gamma = cs.get_lattice_constants()
+            sg = cs.get_space_group()
+            scatterers = cs.get_scatterers()
+            formula, Z = cs.get_chemical_formula_z_parameter()
+            vol = cs.get_unit_cell_volume()
+            self.view.set_lattice_display((a, b, c, alpha, beta, gamma))
+            self.view.set_mat_space_group(sg)
+            self.view.set_mat_sites(scatterers)
+            self.view.set_mat_formula(formula, int(Z), vol)
+        except Exception as e:
+            self.view.show_error(str(e))
+
+    def load_mat(self):
+        params = self.model.get_mat()
+        if params is None:
+            return
+        material, sample = params
+        if material:
+            self.view.set_mat_space_group(material.get("SpaceGroup", ""))
+            sites = material.get("Sites", [])
+            self.view.set_mat_sites(sites)
+            formula = material.get("ChemicalFormula", "")
+            Z = material.get("ZParameter", 1)
+            vol = material.get("UnitCellVolume", 0)
+            self.view.set_mat_formula(formula, int(Z), vol)
+            refine = "Sites" in material
+            self.view.set_refine_structure(refine)
+            if sites:
+                self.update_formula_z()
+        if sample:
+            twh = sample.get("ThicknessWidthHeight", [0.1, 0.5, 0.5])
+            if not isinstance(twh, list):
+                twh = [twh, twh, twh]
+            self.view.set_sample_dimensions(twh)
+            u = sample.get(
+                "UVector", sample.get("IndexAlongThickness", [0, 0, 1])
+            )
+            v = sample.get(
+                "VVector", sample.get("IndexTangentHeight", [1, 0, 0])
+            )
+            if u and v:
+                self.view.set_sample_orientation(u, v)
+            self.view.set_refine_shape(sample.get("Refine", False))
+
+    def save_mat(self):
+        formula, Z, vol = self.view.get_mat_formula()
+        sg = self.view.get_mat_space_group()
+        sites = self.view.get_mat_sites()
+        refine_struct = self.view.get_refine_structure()
+        twh = self.view.get_sample_dimensions()
+        u, v = self.view.get_sample_orientation()
+        refine_shape = self.view.get_refine_shape()
+        self.model.set_mat(
+            formula, Z, vol, sg, sites, refine_struct, twh, u, v, refine_shape
+        )
+
+    def update_formula_z(self, *_):
+        sg = self.view.get_mat_space_group()
+        sites = self.view.get_mat_sites()
+        if not sites:
+            return
+        ub_file = self.view.get_UB()
+        lattice_params = None
+        if ub_file and os.path.isfile(ub_file):
+            try:
+                lattice_params, _ = self.model.get_lattice_from_UB(ub_file)
+            except Exception:
+                pass
+        formula, Z, vol = self.model.compute_formula_and_z(
+            sg, sites, lattice_params
+        )
+        if formula:
+            self.view.set_mat_formula(formula, Z, vol)
+
+    def show_crystal(self):
+        ub_file = self.view.get_UB()
+        if ub_file and os.path.isfile(ub_file):
+            params, _ = self.model.get_lattice_from_UB(ub_file)
+        else:
+            params = None
+
+        sg = self.view.get_mat_space_group()
+        sites = self.view.get_mat_sites()
+
+        if not sites:
+            self.view.show_error("No atom sites defined.")
+            return
+
+        atom_dict, A = self.model.generate_atom_positions(params, sg, sites)
+        if not atom_dict:
+            self.view.show_error("Could not generate atom positions.")
+            return
+
+        rendering_data = self.model.compute_atom_rendering(atom_dict)
+        self.view.draw_crystal(rendering_data, A)
+
+    def show_sample(self):
+        ub_file = self.view.get_UB()
+        if not ub_file or not os.path.isfile(ub_file):
+            self.view.show_error("No UB file loaded.")
+            return
+
+        try:
+            UB = self.model.load_UB_matrix(ub_file)
+        except Exception as e:
+            self.view.show_error(str(e))
+            return
+
+        u, v = self.view.get_sample_orientation()
+        dimensions = self.view.get_sample_dimensions()
+        try:
+            geometry = self.model.compute_sample_geometry(UB, u, v, dimensions)
+        except ValueError as e:
+            self.view.show_error(str(e))
+            return
+        self.view.draw_sample(geometry)
+
 
 class FormModel:
     def __init__(self):
@@ -3384,6 +4296,45 @@ class FormModel:
             params["Bins"] = bins
             self.reduction.plan["Normalization"] = params
 
+    def get_mat(self):
+        if self.reduction.plan is not None:
+            material = self.reduction.plan.get("Material")
+            sample = self.reduction.plan.get("Sample")
+            if material is not None or sample is not None:
+                return material, sample
+
+    def set_mat(
+        self,
+        formula,
+        Z,
+        vol,
+        sg,
+        sites,
+        refine_structure,
+        twh,
+        u,
+        v,
+        refine_shape,
+    ):
+        if self.reduction.plan is None:
+            return
+        material = {}
+        material["ChemicalFormula"] = formula
+        material["ZParameter"] = float(Z)
+        material["UnitCellVolume"] = float(vol)
+        if refine_structure:
+            material["SpaceGroup"] = sg
+            material["Sites"] = sites
+        self.reduction.plan["Material"] = material
+
+        sample = {}
+        sample["ThicknessWidthHeight"] = twh
+        sample["UVector"] = u
+        sample["VVector"] = v
+        if refine_shape:
+            sample["Refine"] = True
+        self.reduction.plan["Sample"] = sample
+
     def get_vanadium(self):
         if self.reduction.plan is not None:
             van = self.reduction.plan.get("VanadiumFile")
@@ -3477,6 +4428,314 @@ class FormModel:
         UB = None if UB == "" else UB
         if self.reduction.plan is not None:
             self.reduction.plan["UBFile"] = UB
+
+    def get_lattice_from_UB(self, ub_file):
+        try:
+            with open(ub_file) as f:
+                lines = [l.split() for l in f if l.strip()]
+            params = [float(v) for v in lines[3][:6]]
+            errors = [float(v) for v in lines[4][:6]]
+            return params, errors
+        except Exception:
+            return None, None
+
+    def generate_atom_positions(self, lattice_params, sg_symbol, sites):
+        """Return (atom_dict, A) for crystal visualization.
+
+        atom_dict: {element: (cart_coords_list, occ_list, index_list)}
+        A: 3×3 unit-cell transform (Cholesky of metric tensor), or None.
+        """
+        if lattice_params is None:
+            return {}, None
+
+        a, b, c, alpha, beta, gamma = lattice_params
+        cell_str = f"{a} {b} {c} {alpha} {beta} {gamma}"
+
+        # Build scatterers string required by CrystalStructure
+        scatterer_parts = []
+        parsed = []
+        for ind, row in enumerate(sites):
+            if len(row) < 4:
+                continue
+            atom = str(row[0])
+            m = re.match(r"[A-Za-z]+", atom)
+            elem = m.group(0) if m else atom
+            try:
+                x, y, z = float(row[1]), float(row[2]), float(row[3])
+                occ = float(row[4]) if len(row) > 4 else 1.0
+            except (ValueError, IndexError):
+                continue
+            scatterer_parts.append(f"{elem} {x} {y} {z} {occ} 0.0")
+            parsed.append((ind, atom, elem, x, y, z, occ))
+
+        if not parsed:
+            return {}, None
+
+        scatterers_str = "; ".join(scatterer_parts)
+
+        sg = None
+        A = np.eye(3)
+        try:
+            from mantid.geometry import CrystalStructure as MantidCS
+
+            hm = space_hm.get(sg_symbol, sg_symbol)
+            cs = MantidCS(cell_str, hm, scatterers_str)
+            sg = cs.getSpaceGroup()
+            uc = cs.getUnitCell()
+            ar = np.radians(uc.alpha())
+            br = np.radians(uc.beta())
+            cr = np.radians(uc.gamma())
+            G = np.array(
+                [
+                    [
+                        uc.a() ** 2,
+                        uc.a() * uc.b() * np.cos(cr),
+                        uc.a() * uc.c() * np.cos(br),
+                    ],
+                    [
+                        uc.a() * uc.b() * np.cos(cr),
+                        uc.b() ** 2,
+                        uc.b() * uc.c() * np.cos(ar),
+                    ],
+                    [
+                        uc.a() * uc.c() * np.cos(br),
+                        uc.b() * uc.c() * np.cos(ar),
+                        uc.c() ** 2,
+                    ],
+                ]
+            )
+            A = scipy.linalg.cholesky(G, lower=False)
+        except Exception:
+            ar, br, cr = np.radians([alpha, beta, gamma])
+            G = np.array(
+                [
+                    [a * a, a * b * np.cos(cr), a * c * np.cos(br)],
+                    [a * b * np.cos(cr), b * b, b * c * np.cos(ar)],
+                    [a * c * np.cos(br), b * c * np.cos(ar), c * c],
+                ]
+            )
+            try:
+                A = scipy.linalg.cholesky(G, lower=False)
+            except Exception:
+                A = np.eye(3)
+
+        def _boundary_copies(pos, tol=1e-4):
+            """Wrap pos to [0,1) then duplicate near-0 coords to 1 (corners/edges/faces)."""
+            p = np.mod(np.array(pos, dtype=float), 1.0)
+            choices = [[c, 1.0] if c < tol else [c] for c in p]
+            result = []
+            for xi in choices[0]:
+                for yi in choices[1]:
+                    for zi in choices[2]:
+                        result.append(np.array([xi, yi, zi]))
+            return result
+
+        atom_dict = {}
+        for ind, atom, elem, x, y, z, occ in parsed:
+            raw = (
+                sg.getEquivalentPositions([x, y, z])
+                if sg is not None
+                else [[x, y, z]]
+            )
+
+            # Expand each equivalent position to boundary copies, deduplicate
+            seen = set()
+            positions = []
+            for pos in raw:
+                for p in _boundary_copies(pos):
+                    key = tuple(np.round(p, 6))
+                    if key not in seen:
+                        seen.add(key)
+                        positions.append(p)
+
+            r_xyz = [(A @ pos).tolist() for pos in positions]
+            r_occ = [occ] * len(r_xyz)
+            r_ind = [ind] * len(r_xyz)
+
+            if elem not in atom_dict:
+                atom_dict[elem] = r_xyz, r_occ, r_ind
+            else:
+                R_xyz, R_occ, R_ind = atom_dict[elem]
+                R_xyz += r_xyz
+                R_occ += r_occ
+                R_ind += r_ind
+                atom_dict[elem] = R_xyz, R_occ, R_ind
+
+        return atom_dict, A
+
+    def compute_atom_rendering(self, atom_dict):
+        """Merge overlapping sites and compute per-site color, radius, and opacity.
+
+        Returns a list of dicts: {coord, radius, rgb, alpha}.
+        Sites at the same position are blended by occupancy-weighted average.
+        """
+        site_info = {}
+        for atom, (coordinates, opacities, indices) in atom_dict.items():
+            base_color = atom_colors.get(atom, "#808080")
+            base_radius = atom_radii.get(atom, [1.0])[0]
+            base_rgb = np.array(mpl_colors.to_rgb(base_color))
+            for coord, occ, _ind in zip(coordinates, opacities, indices):
+                occ = float(occ)
+                key = tuple(round(c, 4) for c in coord)
+                if key not in site_info:
+                    site_info[key] = {
+                        "coord": np.array(coord, dtype=float),
+                        "rgb_sum": occ * base_rgb,
+                        "radius_sum": occ * base_radius,
+                        "occ_total": occ,
+                    }
+                else:
+                    info = site_info[key]
+                    info["rgb_sum"] += occ * base_rgb
+                    info["radius_sum"] += occ * base_radius
+                    info["occ_total"] += occ
+
+        rendering = []
+        for info in site_info.values():
+            occ_total = info["occ_total"]
+            if occ_total <= 0.0:
+                continue
+            rendering.append(
+                {
+                    "coord": info["coord"],
+                    "radius": info["radius_sum"] / occ_total,
+                    "rgb": info["rgb_sum"] / occ_total,
+                    "alpha": min(1.0, occ_total),
+                }
+            )
+        return rendering
+
+    def compute_sample_geometry(self, UB, u_hkl, v_hkl, dimensions):
+        """Compute ellipsoid transform and axis directions for sample visualization.
+
+        Returns dict:
+          ellipsoid_transform  – 3×3 matrix, columns [v·w/2, w·h/2, u·t/2]
+          arrow_directions     – 3×3 matrix, columns = unit a*, b*, c* (display frame)
+          arrow_length         – float
+        Raises ValueError if u_hkl / v_hkl are zero or collinear under B.
+        """
+        thickness, width, height = [max(float(d), 1e-6) for d in dimensions]
+
+        # B_mat: upper-triangular with positive diagonal (display frame, same as UB compass)
+        _, R = np.linalg.qr(UB)
+        signs = np.where(np.diag(R) >= 0, 1.0, -1.0)
+        B_mat = R * signs[:, None]
+
+        # Sample frame — mirrors sample.py set_shape():
+        #   u_hat  = face normal / thickness direction
+        #   w_hat  = cross(u_hat, B@v) → height direction
+        #   v_hat  = cross(w_hat, u_hat) → width direction
+        u_B = B_mat @ np.array(u_hkl, dtype=float)
+        v_B = B_mat @ np.array(v_hkl, dtype=float)
+
+        un = np.linalg.norm(u_B)
+        if un < 1e-10:
+            raise ValueError(
+                "u_hkl maps to zero vector — check UB and u vector."
+            )
+        u_hat = u_B / un
+
+        w_vec = np.cross(u_hat, v_B)
+        wn = np.linalg.norm(w_vec)
+        if wn < 1e-10:
+            raise ValueError("u_hkl and v_hkl are collinear under B.")
+        w_hat = w_vec / wn
+
+        v_hat = np.cross(w_hat, u_hat)
+
+        T_ell = np.column_stack(
+            [
+                v_hat * (width / 2),
+                w_hat * (height / 2),
+                u_hat * (thickness / 2),
+            ]
+        )
+
+        col_norms = np.linalg.norm(B_mat, axis=0)
+        col_norms[col_norms < 1e-10] = 1.0
+        arrow_directions = B_mat / col_norms
+
+        return {
+            "ellipsoid_transform": T_ell,
+            "arrow_directions": arrow_directions,
+            "arrow_length": max(thickness, width, height) / 2 * 1.5,
+        }
+
+    def compute_formula_and_z(self, sg_symbol, sites, lattice_params=None):
+        """Compute chemical formula, Z, and unit-cell volume from space group and sites.
+
+        Mirrors crystal.py get_chemical_formula_z_parameter():
+          - counts symmetry-equivalent positions per Wyckoff site
+          - Z = GCD of all site multiplicities
+          - formula = atom counts per formula unit, occupancy-weighted
+
+        Returns (formula, Z, vol).  Returns ("", 1, 0.0) on any error.
+        """
+        parsed = []
+        scatterer_parts = []
+        for row in sites:
+            if len(row) < 4:
+                continue
+            atom = str(row[0])
+            m = re.match(r"[A-Za-z]+", atom)
+            elem = m.group(0) if m else atom
+            try:
+                x, y, z = float(row[1]), float(row[2]), float(row[3])
+                occ = float(row[4]) if len(row) > 4 else 1.0
+            except (ValueError, IndexError):
+                continue
+            scatterer_parts.append(f"{elem} {x} {y} {z} {occ} 0.0")
+            parsed.append((elem, x, y, z, occ))
+
+        if not parsed:
+            return "", 1, 0.0
+
+        if lattice_params is not None:
+            a, b, c, alpha, beta, gamma = lattice_params
+        else:
+            a, b, c, alpha, beta, gamma = 1.0, 1.0, 1.0, 90.0, 90.0, 90.0
+        cell_str = f"{a} {b} {c} {alpha} {beta} {gamma}"
+        hm = space_hm.get(sg_symbol, sg_symbol)
+
+        try:
+            from mantid.geometry import CrystalStructure as MantidCS
+
+            cs = MantidCS(cell_str, hm, "; ".join(scatterer_parts))
+            sg = cs.getSpaceGroup()
+            vol = (
+                cs.getUnitCell().volume()
+                if lattice_params is not None
+                else 0.0
+            )
+        except Exception:
+            return "", 1, 0.0
+
+        atom_dict = {}
+        for elem, x, y, z, occ in parsed:
+            n = len(sg.getEquivalentPositions([x, y, z]))
+            if elem not in atom_dict:
+                atom_dict[elem] = [n], [occ]
+            else:
+                ns, occs = atom_dict[elem]
+                ns.append(n)
+                occs.append(occ)
+
+        formula_parts = []
+        n_atm = []
+        n_wgt = []
+        for elem, (ns, occs) in atom_dict.items():
+            n_atm.append(int(np.sum(ns)))
+            n_wgt.append(float(np.sum(np.multiply(ns, occs))))
+            if elem.isalpha():
+                formula_parts.append(elem + "{:.3g}")
+            else:
+                formula_parts.append("(" + elem + ")" + "{:.3g}")
+
+        Z = int(np.gcd.reduce(n_atm))
+        n_per_Z = [nw / Z for nw in n_wgt]
+        formula = "-".join(formula_parts).format(*n_per_Z)
+
+        return formula, Z, vol
 
     def get_runs(self):
         if self.reduction.plan is not None:

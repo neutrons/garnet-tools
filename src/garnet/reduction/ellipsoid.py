@@ -1866,8 +1866,7 @@ class PeakEllipsoid:
             if not orient_vary:
                 self.params[name].set(value=float(value))
 
-    @staticmethod
-    def prior_widths_from_snr(snr):
+    def prior_widths_from_snr(self, snr):
         """
         Prior widths for center, radius scale, radius distortion, and orientation.
 
@@ -1883,31 +1882,74 @@ class PeakEllipsoid:
         sigma_rot
             Prior width for relative orientation rotation vector, in radians.
         """
-        if snr > 20:
-            sigma_c = 10.0
-            sigma_log_s = 2.0
-            sigma_log_d = 1.0
-            sigma_rot = 0.5
 
-        elif snr > 5:
-            sigma_c = 1.0
-            sigma_log_s = 1.0
-            sigma_log_d = 0.5
-            sigma_rot = 0.25
+        x = snr if x > 1 else 1
 
-        elif snr > 2:
-            sigma_c = 0.10
-            sigma_log_s = 0.25
-            sigma_log_d = 0.01
-            sigma_rot = 0.01
-
-        else:
-            sigma_c = 0.01
-            sigma_log_s = 0.01
-            sigma_log_d = 0.01
-            sigma_rot = 0.01
+        sigma_c = self.smooth_saturating(x, 1.0, 100, 20)
+        sigma_log_s = self.smooth_saturating(x, 0.10, 10, 15)
+        sigma_log_d = self.smooth_saturating(x, 0.05, 2.0, 10)
+        sigma_rot = self.smooth_saturating(x, 0.01, 1.0, 5)
 
         return sigma_c, sigma_log_s, sigma_log_d, sigma_rot
+
+    def smooth_saturating(
+        self,
+        x,
+        f_min=0.0,
+        f_max=1.0,
+        x0=2.0,
+        p=0.5,
+        n=1.0,
+        clip_below=True,
+    ):
+        """
+        Smooth function with a minimum at x=1 that monotonically approaches f_max.
+
+        Parameters
+        ----------
+        x : float or array_like
+            Input coordinate. The model is intended for x >= 1.
+        f_min : float
+            Minimum value at x = 1.
+        f_max : float
+            Asymptotic maximum value as x -> infinity.
+        x0 : float
+            Location where the function reaches fraction p of the way
+            from f_min to f_max.
+        p : float
+            Fraction of the maximum reached at x0. Must satisfy 0 < p < 1.
+            For example, p=0.9 means f(x0) is 90% of the way to f_max.
+        n : float
+            Shape parameter. n=1 gives an exponential rise; n=2 gives
+            a smoother minimum at x=1.
+        clip_below : bool
+            If True, values with x < 1 are clipped to x = 1.
+
+        Returns
+        -------
+        y : float or ndarray
+            Smooth saturating function value.
+        """
+        if x0 <= 1:
+            raise ValueError("x0 must be greater than 1.")
+        if not (0 < p < 1):
+            raise ValueError("p must satisfy 0 < p < 1.")
+        if n <= 0:
+            raise ValueError("n must be positive.")
+
+        x = np.asarray(x, dtype=float)
+
+        if clip_below:
+            x_eff = np.maximum(x, 1.0)
+        else:
+            x_eff = x
+
+        t = (x_eff - 1.0) / (x0 - 1.0)
+        k = -np.log(1.0 - p)
+
+        y = f_min + (f_max - f_min) * (1.0 - np.exp(-k * t**n))
+
+        return y
 
     def _isig_3d(self, params, args_3d, scales=(0.5, 1.0, 2.0)):
         """

@@ -636,13 +636,10 @@ class Peaks:
 
     def remove_volume_outliers(self, lo=0.1, hi=10.0):
         """
-        Flag peaks whose fitted-model intensity disagrees with the
-        matched-filter intensity actually assigned to the peak.
-
-        Compares I_3d (the 3D Gaussian profile-fit's predicted intensity)
-        to peak.getIntensity() (the matched-filter intensity set during
-        integration); peaks outside the [lo, hi] ratio are considered
-        outliers and flagged for removal.
+        Flag peaks whose 3D Gaussian profile-fit intensity (I_3d) disagrees
+        with the peak's assigned intensity (peak.getIntensity()). Peaks
+        whose I_3d / getIntensity() ratio falls outside [lo, hi] are
+        considered outliers and flagged for removal.
         """
 
         run_info = mtd[self.peaks].run()

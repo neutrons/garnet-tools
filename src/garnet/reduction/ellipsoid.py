@@ -1804,9 +1804,21 @@ class PeakEllipsoid:
         self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
         for _ in range(n_loop):
-            # SNR sets which of center/radii/orientation vary this round
-            # (see update_adaptive_prior), so a single joint sweep suffices.
             self.update_adaptive_prior(args_1d, args_2d, args_3d)
+
+            protocol = [True] * 3 + [False] * 6
+
+            self.sweep(args_1d, args_2d, args_3d, None, n_iter, report_fit)
+
+            self.update_adaptive_prior(args_1d, args_2d, args_3d)
+
+            protocol = [False] * 3 + [True] * 3 + [False] * 3
+
+            self.sweep(args_1d, args_2d, args_3d, None, n_iter, report_fit)
+
+            self.update_adaptive_prior(args_1d, args_2d, args_3d)
+
+            protocol = [False] * 6 + [True] * 3
 
             self.sweep(args_1d, args_2d, args_3d, None, n_iter, report_fit)
 
@@ -1830,17 +1842,11 @@ class PeakEllipsoid:
             sigma_rot,
         ) = self.prior_widths_from_snr(snr)
 
-        # np.float64 (not plain float) so that a zero width divides down
-        # to numpy's silent inf/nan instead of raising ZeroDivisionError;
-        # residual()/jacobian() already clip inf/nan to a finite value.
-        self.prior_center_sigma = np.float64(sigma_c)
-        self.prior_cov_sigma = np.float64(sigma_log_s)
-        self.prior_distortion_sigma = np.float64(sigma_log_d)
-        self.prior_rot_sigma = np.float64(sigma_rot)
+        self.prior_center_sigma = sigma_c
+        self.prior_cov_sigma = sigma_log_s
+        self.prior_distortion_sigma = sigma_log_d
+        self.prior_rot_sigma = sigma_rot
 
-        # Strength-dependent freedom: a zero-width prior means the data
-        # can't support that group of parameters, so hold it at the
-        # predicted (prior) value instead of leaving it free to wander.
         center_vary = sigma_c > 0.0
         radius_vary = sigma_log_s > 0.0 or sigma_log_d > 0.0
         orient_vary = sigma_rot > 0.0
@@ -1892,18 +1898,27 @@ class PeakEllipsoid:
         elif snr > 2:
             sigma_c = 0.50
             sigma_log_s = 0.15
-            sigma_log_d = 0.00
-            sigma_rot = 0.00
+            sigma_log_d = 0.01
+            sigma_rot = 0.01
 
         else:
-            sigma_c = 0.00
-            sigma_log_s = 0.00
-            sigma_log_d = 0.00
-            sigma_rot = 0.00
+            sigma_c = 0.01
+            sigma_log_s = 0.01
+            sigma_log_d = 0.01
+            sigma_rot = 0.01
 
         return sigma_c, sigma_log_s, sigma_log_d, sigma_rot
 
-    def _isig_3d(self, params, args_3d):
+    def _isig_3d(self, params, args_3d, scales=(0.5, 1.0, 2.0)):
+        """
+        Quick 3D I/sigma estimate, tried at a few radii scales.
+
+        The peak/background split depends on how well the current radii
+        match the true peak, so a single scale can underestimate the SNR
+        (e.g. if the fit radii are currently too tight or too loose). Trying
+        a few scales and taking the best I/sigma gives the SNR-adaptive
+        protocol a fairer chance of recognizing a strong peak.
+        """
         x0, x1, x2, d3d, n3d, *rest = args_3d
         bkg_3d = rest[1] if len(rest) > 1 else None
 
@@ -1917,34 +1932,39 @@ class PeakEllipsoid:
         u1 = params["u1"].value
         u2 = params["u2"].value
 
-        c, inv_S = self.centroid_inverse_covariance(
-            c0, c1, c2, r0, r1, r2, u0, u1, u2
-        )
+        dx_vec = [x0 - c0, x1 - c1, x2 - c2]
 
-        dx = np.prod(self.voxels(x0, x1, x2))
-
-        c0v, c1v, c2v = c
-        dx_vec = [x0 - c0v, x1 - c1v, x2 - c2v]
-        d2 = np.einsum("i...,ij,j...->...", dx_vec, inv_S, dx_vec)
-
-        pk = (d2 <= 1) & (n3d > 0)
-        bkg = (d2 >= 1) & (d2 < np.cbrt(2)) & (n3d > 0)
-
-        c = d3d.copy()
+        d = d3d.copy()
         if bkg_3d is not None:
-            c -= bkg_3d
+            d = d - bkg_3d
 
-        b = np.nansum(c[bkg])
+        best_isig = -np.inf
 
-        p = np.nansum(pk)
-        q = np.nansum(bkg)
+        for scale in scales:
+            inv_S = self.inv_S_matrix(
+                scale * r0, scale * r1, scale * r2, u0, u1, u2
+            )
 
-        vol_ratio = p / q if q > 0 else 0
+            d2 = np.einsum("i...,ij,j...->...", dx_vec, inv_S, dx_vec)
 
-        I = np.nansum(c[pk]) - vol_ratio * b
-        sig = np.sqrt(np.nansum(c[pk]) + vol_ratio**2 * b)
+            pk = (d2 <= 1) & (n3d > 0)
+            bkg = (d2 >= 1) & (d2 < np.cbrt(2)) & (n3d > 0)
 
-        return I / sig if sig > 0 else -np.inf
+            b = np.nansum(d[bkg])
+
+            p = np.nansum(pk)
+            q = np.nansum(bkg)
+
+            vol_ratio = p / q if q > 0 else 0
+
+            I = np.nansum(d[pk]) - vol_ratio * b
+            sig = np.sqrt(np.nansum(d[pk]) + vol_ratio**2 * b)
+
+            isig = I / sig if sig > 0 else -np.inf
+
+            best_isig = max(best_isig, isig)
+
+        return best_isig
 
     def sweep(
         self,
@@ -1955,8 +1975,6 @@ class PeakEllipsoid:
         n_iter=50,
         report_fit=False,
     ):
-        # protocol=None leaves the current vary flags untouched, e.g. when
-        # update_adaptive_prior has already set them from the SNR tier.
         if protocol is not None:
             self.params["c0"].set(vary=protocol[0])
             self.params["c1"].set(vary=protocol[1])
@@ -1977,7 +1995,7 @@ class PeakEllipsoid:
             nan_policy="omit",
         )
 
-        isig_before = self._isig_3d(self.params, args_3d)
+        isig_before = self._isig_3d(self.params, args_3d, scales=[1])
 
         result = out.minimize(
             method="least_squares",
@@ -1988,7 +2006,7 @@ class PeakEllipsoid:
         if report_fit:
             print(fit_report(result))
 
-        isig_after = self._isig_3d(result.params, args_3d)
+        isig_after = self._isig_3d(result.params, args_3d, scales=[1])
 
         if isig_after >= isig_before:
             self.params = result.params

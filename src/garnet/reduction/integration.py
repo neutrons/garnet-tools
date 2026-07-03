@@ -296,8 +296,8 @@ class Integration(IntegrationModel):
             data.delete_workspace("md")
 
             res.fit()
+
             res_file = self.get_plot_file("run#{}_res".format(run))
-            self.res_sigma = res.estimate_prior_sigmas()
             res.plot_diagnostics(res_file)
 
             pk_file = self.get_diagnostic_file("run#{}_peaks".format(run))
@@ -569,7 +569,6 @@ class Integration(IntegrationModel):
             ellipsoid = PeakEllipsoid()
             ellipsoid.update_constraints(Q0, Q1, Q2, dQ)
             ellipsoid.update_estimate(shape)
-            ellipsoid.set_resolution_sigma(*self.res_sigma, Q)
 
             args = (Q0, Q1, Q2, d, n, dQ, Q, weights)
             fit_params = ellipsoid.fit(*args, b=b, m=m)

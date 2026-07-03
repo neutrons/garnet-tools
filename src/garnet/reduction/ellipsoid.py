@@ -16,29 +16,22 @@ class PeakEllipsoid:
     def __init__(self):
         self.params = Parameters()
 
-        self.lamda_center = 1.0
-        self.lamda_cov = 1.0
-
         self.mode_weights_1d = 1.0
         self.mode_weights_2d = 1.0
         self.mode_weights_3d = 1.0
 
-        # prior_center_sigma: allowed center motion in whitened units (scalar)
-        # prior_cov_sigma: σ_η, allowed log-scale (trace of L) change
-        # prior_distortion_sigma: σ_D, allowed anisotropic shape change (‖D‖_F)
         self.prior_center_sigma = 1.0
         self.prior_cov = np.eye(3)
         self.prior_cov_sigma = 0.3
         self.prior_distortion_sigma = 0.1
+        self.prior_rot_sigma = 0.1
 
-        # Eigendecomposition of prior_cov (cached by update_estimate)
         self._prior_radii = np.ones(3)
         self._prior_inv_sqrt = np.eye(3)
 
-        # Bounds for SNR-adaptive prior (set by set_resolution_sigma)
-        self._sigma_center_max = 1.0
-        self._sigma_log_s_max = 0.3
-        self._sigma_distortion_max = 0.1
+        self._prior_r = np.ones(3)
+        self._prior_u = np.zeros(3)
+        self._prior_U = np.eye(3)
 
     def vech6(self, M):
         return np.array(
@@ -130,44 +123,41 @@ class PeakEllipsoid:
         self._prior_radii = np.sqrt(np.maximum(r_sq, 1e-12))
         self._prior_inv_sqrt = U0 @ np.diag(1.0 / self._prior_radii) @ U0.T
 
-        # Scalar defaults (overridden by set_resolution_sigma / update_adaptive_prior)
+        # Predicted radii/orientation, kept axis-matched to r0,r1,r2/u0,u1,u2
+        # for the per-axis log-radius and relative-rotation prior terms.
+        self._prior_r = np.array([r0, r1, r2], dtype=float)
+        self._prior_u = np.array([u0, u1, u2], dtype=float)
+        self._prior_U = self.U_matrix(u0, u1, u2)
+
         self.prior_center_sigma = 1.0
         self.prior_cov_sigma = 0.3
         self.prior_distortion_sigma = 0.1
+        self.prior_rot_sigma = 0.1
 
-    def _log_matrix_decomp(self, S):
+    def omega_deriv_u(self, u0, u1, u2, delta=1e-6):
+        """Finite-difference derivative of the prior-relative rotation vector.
+
+        Returns (domega0, domega1, domega2), each a 3-vector giving
+        d(omega)/d(u_k) for k=0,1,2, where omega is the rotation vector of
+        U0^T @ U(u0,u1,u2) (relative to the predicted orientation).
         """
-        Compute L = log(S₀^{-1/2} S S₀^{-1/2}) and return scale/distortion split.
 
-        Returns eta (tr(L)/3), D (traceless part), Q, lam, log_lam from the
-        eigendecomposition of M = S₀^{-1/2} S S₀^{-1/2}.
-        """
-        P = self._prior_inv_sqrt
-        M = P @ S @ P
-        M = 0.5 * (M + M.T)
-        lam, Q = np.linalg.eigh(M)
-        lam = np.maximum(lam, 1e-12)
-        log_lam = np.log(lam)
-        L = Q @ np.diag(log_lam) @ Q.T
-        eta = float(np.sum(log_lam) / 3.0)
-        D = L - eta * np.eye(3)
-        return eta, D, Q, lam, log_lam
+        def omega_at(uu0, uu1, uu2):
+            U = self.U_matrix(uu0, uu1, uu2)
+            R_rel = self._prior_U.T @ U
+            return scipy.spatial.transform.Rotation.from_matrix(
+                R_rel
+            ).as_rotvec()
 
-    def _loewner_jac(self, Q, lam, log_lam, dM):
-        """Apply Loewner-matrix derivative of matrix log: dL = Q*(Φ⊙Q^T dM Q)*Q^T."""
-        dM_eb = Q.T @ dM @ Q
-        Phi = np.empty((3, 3))
-        for i in range(3):
-            for j in range(3):
-                if i == j:
-                    Phi[i, j] = 1.0 / lam[i]
-                else:
-                    dlam = lam[i] - lam[j]
-                    if abs(dlam) < 1e-10 * max(lam[i], lam[j]):
-                        Phi[i, j] = 1.0 / lam[i]
-                    else:
-                        Phi[i, j] = (log_lam[i] - log_lam[j]) / dlam
-        return Q @ (Phi * dM_eb) @ Q.T
+        domega0 = omega_at(u0 + delta, u1, u2) - omega_at(u0 - delta, u1, u2)
+        domega1 = omega_at(u0, u1 + delta, u2) - omega_at(u0, u1 - delta, u2)
+        domega2 = omega_at(u0, u1, u2 + delta) - omega_at(u0, u1, u2 - delta)
+
+        return (
+            0.5 * domega0 / delta,
+            0.5 * domega1 / delta,
+            0.5 * domega2 / delta,
+        )
 
     def prior_residual(self, params):
         terms = []
@@ -177,11 +167,9 @@ class PeakEllipsoid:
         c2 = params["c2"].value
         c = np.array([c0, c1, c2])
 
-        # Whitened center: r_μ = sqrt(λ_c) * R * S₀^{-1/2} @ c / σ_μ
+        # Center: P_center = || Sigma0^{-1/2} (c - c0) / sigma_c ||^2
         u_mu = _R_SCALE_3D * self._prior_inv_sqrt @ c
-        terms += (
-            np.sqrt(self.lamda_center) * u_mu / self.prior_center_sigma
-        ).tolist()
+        terms += (u_mu / self.prior_center_sigma).tolist()
 
         r0 = params["r0"].value
         r1 = params["r1"].value
@@ -189,74 +177,65 @@ class PeakEllipsoid:
         u0 = params["u0"].value
         u1 = params["u1"].value
         u2 = params["u2"].value
-        S = self.S_matrix(r0, r1, r2, u0, u1, u2)
 
-        # L = log(S₀^{-1/2} S S₀^{-1/2}), split into scale η and distortion D
-        eta, D, _, _, _ = self._log_matrix_decomp(S)
+        # Radius decomposition: per-axis log-radius vs. predicted radii
+        delta = np.log(np.array([r0, r1, r2])) - np.log(self._prior_r)
+        alpha = np.mean(delta)
+        d = delta - alpha
 
-        # Scale residual: r_η = sqrt(λ_cov) * η / σ_η
-        terms.append(
-            float(np.sqrt(self.lamda_cov) * eta / self.prior_cov_sigma)
-        )
+        # Scale residual: P_scale = (alpha / sigma_log_s)^2
+        terms.append(alpha / self.prior_cov_sigma)
 
-        # Distortion residuals: √2 on off-diagonal so ‖r_D‖² = ‖D‖_F² / σ_D²
-        cov_d = np.sqrt(self.lamda_cov) / self.prior_distortion_sigma
-        terms += [
-            float(cov_d * D[0, 0]),
-            float(cov_d * D[1, 1]),
-            float(cov_d * D[2, 2]),
-            float(cov_d * np.sqrt(2.0) * D[1, 2]),
-            float(cov_d * np.sqrt(2.0) * D[0, 2]),
-            float(cov_d * np.sqrt(2.0) * D[0, 1]),
-        ]
+        # Distortion residuals: P_distortion = sum (d_i / sigma_log_d)^2
+        terms += (d / self.prior_distortion_sigma).tolist()
+
+        # Orientation: relative rotation vector from U0 to U
+        U = self.U_matrix(u0, u1, u2)
+        R_rel = self._prior_U.T @ U
+        omega = scipy.spatial.transform.Rotation.from_matrix(R_rel).as_rotvec()
+
+        # Orientation residual: P_rotation = || omega / sigma_rot ||^2
+        terms += (omega / self.prior_rot_sigma).tolist()
 
         return np.asarray(terms, dtype=float)
 
-    def prior_jacobian(self, params, S, dr, du):
-        # Residuals: [r_μ0, r_μ1, r_μ2, r_η, r_D00, r_D11, r_D22, r_D12, r_D02, r_D01]
-        # 3 center + 1 scale + 6 distortion = 10 columns
+    def prior_jacobian(self, params):
+        # Residuals: [r_c0, r_c1, r_c2, r_alpha, r_d0, r_d1, r_d2, r_om0, r_om1, r_om2]
+        # 3 center + 1 scale + 3 distortion + 3 orientation = 10 columns
         params_list = [name for name, _ in params.items()]
         jac = np.zeros((len(params_list), 10), dtype=float)
 
-        # Center: ∂r_μ_i/∂c_j = sqrt(λ_c) * R * (S₀^{-1/2})_{i,j} / σ_μ
-        center_scale = (
-            np.sqrt(self.lamda_center) * _R_SCALE_3D / self.prior_center_sigma
-        )
+        # Center: ∂r_c_i/∂c_j = R * (S₀^{-1/2})_{i,j} / σ_c
+        center_scale = _R_SCALE_3D / self.prior_center_sigma
         for j, cname in enumerate(["c0", "c1", "c2"]):
             idx = params_list.index(cname)
             jac[idx, :3] = center_scale * self._prior_inv_sqrt[:, j]
 
-        # Covariance: Loewner-matrix Jacobian of L = log(S₀^{-1/2} S S₀^{-1/2})
-        P = self._prior_inv_sqrt
-        eta, _, Q, lam, log_lam = self._log_matrix_decomp(S)
+        # Radius decomposition: d(alpha)/d(r_j) = (1/3)/r_j,
+        # d(d_i)/d(r_j) = (delta_ij - 1/3)/r_j
+        r = np.array(
+            [params["r0"].value, params["r1"].value, params["r2"].value]
+        )
+        eta_scale = 1.0 / self.prior_cov_sigma
+        cov_d = 1.0 / self.prior_distortion_sigma
+        centering = np.eye(3) - np.full((3, 3), 1.0 / 3.0)
 
-        d_inv_S = {
-            "r0": dr[0],
-            "r1": dr[1],
-            "r2": dr[2],
-            "u0": du[0],
-            "u1": du[1],
-            "u2": du[2],
-        }
-        eta_scale = np.sqrt(self.lamda_cov) / self.prior_cov_sigma
-        cov_d = np.sqrt(self.lamda_cov) / self.prior_distortion_sigma
-        sq2 = np.sqrt(2.0)
+        for j, rname in enumerate(["r0", "r1", "r2"]):
+            idx = params_list.index(rname)
+            dlogr = 1.0 / r[j]
+            jac[idx, 3] = eta_scale * dlogr / 3.0
+            jac[idx, 4:7] = cov_d * centering[:, j] * dlogr
 
-        for name in ["r0", "r1", "r2", "u0", "u1", "u2"]:
-            dS = -S @ d_inv_S[name] @ S  # d(S)/d(param)
-            dM = P @ dS @ P  # d(S₀^{-1/2} S S₀^{-1/2})/d(param)
-            dL = self._loewner_jac(Q, lam, log_lam, dM)
-            d_eta = float(np.trace(dL) / 3.0)
-            dD = dL - d_eta * np.eye(3)
+        # Orientation: finite-difference d(omega)/d(u_k)
+        u0 = params["u0"].value
+        u1 = params["u1"].value
+        u2 = params["u2"].value
+        domega = self.omega_deriv_u(u0, u1, u2)
+        rot_scale = 1.0 / self.prior_rot_sigma
 
-            idx = params_list.index(name)
-            jac[idx, 3] = eta_scale * d_eta
-            jac[idx, 4] = cov_d * dD[0, 0]
-            jac[idx, 5] = cov_d * dD[1, 1]
-            jac[idx, 6] = cov_d * dD[2, 2]
-            jac[idx, 7] = cov_d * sq2 * dD[1, 2]
-            jac[idx, 8] = cov_d * sq2 * dD[0, 2]
-            jac[idx, 9] = cov_d * sq2 * dD[0, 1]
+        for k, uname in enumerate(["u0", "u1", "u2"]):
+            idx = params_list.index(uname)
+            jac[idx, 7:10] = rot_scale * domega[k]
 
         ind = [i for i, (_, par) in enumerate(params.items()) if par.vary]
         return jac[ind]
@@ -296,45 +275,6 @@ class PeakEllipsoid:
         inv_S = self.inv_S_matrix(r0, r1, r2, u0, u1, u2)
 
         return c, inv_S
-
-    def set_resolution_sigma(
-        self, prior_center_sigma, prior_cov_sigma, Q_mag=1.0
-    ):
-        # prior_center_sigma: (3,) RMS offsets in Q-normalized SW frame → physical
-        # prior_cov_sigma: (6,) RMS S residuals in Q-normalized SW frame → physical
-        center_phys = np.asarray(prior_center_sigma) * Q_mag
-        S_phys = np.asarray(prior_cov_sigma) * Q_mag**2
-
-        r_char = float(np.prod(self._prior_radii) ** (1.0 / 3.0))
-        r_char = max(r_char, 1e-12)
-
-        # Convert to whitened units: σ_μ = R * mean(center_phys) / r_char
-        self._sigma_center_max = float(
-            _R_SCALE_3D * np.mean(center_phys) / r_char
-        )
-        # σ_η ≈ mean(diag S_phys) / (2 r_char²)   [log-scale: tr(L)/3]
-        self._sigma_log_s_max = float(
-            np.mean(S_phys[:3]) / (2.0 * r_char**2)
-        )
-        # σ_D ≈ RMS(off-diag S_phys) / r_char²   [distortion: ‖D‖_F]
-        self._sigma_distortion_max = float(
-            np.sqrt(np.mean(S_phys[3:] ** 2)) / r_char**2
-        )
-
-        # Clamp to sensible bounds
-        self._sigma_center_max = float(
-            np.clip(self._sigma_center_max, 0.05, 5.0)
-        )
-        self._sigma_log_s_max = float(
-            np.clip(self._sigma_log_s_max, 0.02, 2.0)
-        )
-        self._sigma_distortion_max = float(
-            np.clip(self._sigma_distortion_max, 0.01, 1.0)
-        )
-
-        self.prior_center_sigma = self._sigma_center_max
-        self.prior_cov_sigma = self._sigma_log_s_max
-        self.prior_distortion_sigma = self._sigma_distortion_max
 
     def data_norm(self, d, n, v, rel_err=30):
         mask = (n > 0) & np.isfinite(n)
@@ -1286,12 +1226,11 @@ class PeakEllipsoid:
 
         dr = self.inv_S_deriv_r(r0, r1, r2, u0, u1, u2)
         du = self.inv_S_deriv_u(r0, r1, r2, u0, u1, u2)
-        S = np.linalg.inv(inv_S)
 
         jac_1d = self.jacobian_1d(params, *args_1d, c, inv_S, dr, du)
         jac_2d = self.jacobian_2d(params, *args_2d, c, inv_S, dr, du)
         jac_3d = self.jacobian_3d(params, *args_3d, c, inv_S, dr, du)
-        jac_prior = self.prior_jacobian(params, S, dr, du)
+        jac_prior = self.prior_jacobian(params)
 
         jac = np.column_stack([jac_1d, jac_2d, jac_3d, jac_prior])
         jac = np.nan_to_num(jac, nan=0.0, posinf=1e16, neginf=-1e16)
@@ -1865,17 +1804,11 @@ class PeakEllipsoid:
         self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
         for _ in range(n_loop):
+            # SNR sets which of center/radii/orientation vary this round
+            # (see update_adaptive_prior), so a single joint sweep suffices.
             self.update_adaptive_prior(args_1d, args_2d, args_3d)
 
-            protocol = [True] * 3 + [False] * 3 + [False] * 3
-
-            self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
-
-            self.update_adaptive_prior(args_1d, args_2d, args_3d)
-
-            protocol = [False] * 3 + [True] * 3 + [True] * 3
-
-            self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
+            self.sweep(args_1d, args_2d, args_3d, None, n_iter, report_fit)
 
         return args_1d, args_2d, args_3d
 
@@ -1888,60 +1821,91 @@ class PeakEllipsoid:
         return amplitude, background
 
     def update_adaptive_prior(self, args_1d, args_2d, args_3d):
-        sn = self._isig_3d(self.params, args_3d)
-        self.prior_center_sigma = self._sigma_center_from_sn(sn)
-        self.prior_cov_sigma = self._sigma_log_s_from_sn(sn)
-        self.prior_distortion_sigma = self._sigma_distortion_from_sn(sn)
-        self.lamda_center = 1.0
-        self.lamda_cov = 1.0
+        snr = self._isig_3d(self.params, args_3d)
 
-    def _sigma_center_from_sn(self, sn_eff, sn_cut=20.0, power=2.0):
-        """σ_μ(S₀): whitened center prior width as a function of peak SNR."""
-        sn_eff = self.safe_sn(sn_eff)
-        sigma_max = self._sigma_center_max
-        sigma_min = max(0.05, sigma_max / 10.0)
-        eps = 1e-6
-        g = 1.0 / (1.0 + (sn_cut / (sn_eff + eps)) ** power)
-        return float(sigma_min + g * (sigma_max - sigma_min))
+        (
+            sigma_c,
+            sigma_log_s,
+            sigma_log_d,
+            sigma_rot,
+        ) = self.prior_widths_from_snr(snr)
 
-    def _sigma_log_s_from_sn(self, sn_eff, sn_cut=20.0, power=2.0):
-        """σ_η(S₀): log-scale (trace of L) prior width as a function of peak SNR."""
-        sn_eff = self.safe_sn(sn_eff)
-        sigma_max = self._sigma_log_s_max
-        sigma_min = max(0.02, sigma_max / 10.0)
-        eps = 1e-6
-        g = 1.0 / (1.0 + (sn_cut / (sn_eff + eps)) ** power)
-        return float(sigma_min + g * (sigma_max - sigma_min))
+        # np.float64 (not plain float) so that a zero width divides down
+        # to numpy's silent inf/nan instead of raising ZeroDivisionError;
+        # residual()/jacobian() already clip inf/nan to a finite value.
+        self.prior_center_sigma = np.float64(sigma_c)
+        self.prior_cov_sigma = np.float64(sigma_log_s)
+        self.prior_distortion_sigma = np.float64(sigma_log_d)
+        self.prior_rot_sigma = np.float64(sigma_rot)
 
-    def _sigma_distortion_from_sn(self, sn_eff, sn_cut=20.0, power=2.0):
-        """σ_D(S₀): distortion (‖D‖_F) prior width as a function of peak SNR."""
-        sn_eff = self.safe_sn(sn_eff)
-        sigma_max = self._sigma_distortion_max
-        sigma_min = max(0.01, sigma_max / 10.0)
-        eps = 1e-6
-        g = 1.0 / (1.0 + (sn_cut / (sn_eff + eps)) ** power)
-        return float(sigma_min + g * (sigma_max - sigma_min))
+        # Strength-dependent freedom: a zero-width prior means the data
+        # can't support that group of parameters, so hold it at the
+        # predicted (prior) value instead of leaving it free to wander.
+        center_vary = sigma_c > 0.0
+        radius_vary = sigma_log_s > 0.0 or sigma_log_d > 0.0
+        orient_vary = sigma_rot > 0.0
 
-    def safe_sn(self, sn, floor=1.0, ceiling=1e4):
-        sn = np.nan_to_num(sn, nan=floor, posinf=ceiling, neginf=floor)
-        return np.clip(sn, floor, ceiling)
+        for name in ("c0", "c1", "c2"):
+            self.params[name].set(vary=center_vary)
+            if not center_vary:
+                self.params[name].set(value=0.0)
 
-    def prior_strength_from_sn(
-        self,
-        sn_eff,
-        sn0=10.0,
-        power=2.0,
-        lam_min=1.0,
-        lam_max=10.0,
-    ):
-        sn_eff = self.safe_sn(sn_eff)
+        for name, value in zip(("r0", "r1", "r2"), self._prior_r):
+            self.params[name].set(vary=radius_vary)
+            if not radius_vary:
+                self.params[name].set(value=float(value))
 
-        return lam_min + (lam_max - lam_min) / (1.0 + (sn_eff / sn0) ** power)
+        for name, value in zip(("u0", "u1", "u2"), self._prior_u):
+            self.params[name].set(vary=orient_vary)
+            if not orient_vary:
+                self.params[name].set(value=float(value))
+
+    @staticmethod
+    def prior_widths_from_snr(snr):
+        """
+        Prior widths for center, radius scale, radius distortion, and orientation.
+
+        sigma_c
+            Center prior in Mahalanobis units of the prior covariance.
+
+        sigma_log_s
+            Prior width for mean log-radius scale.
+
+        sigma_log_d
+            Prior width for anisotropic log-radius distortion.
+
+        sigma_rot
+            Prior width for relative orientation rotation vector, in radians.
+        """
+        if snr > 20:
+            sigma_c = 1.5
+            sigma_log_s = 0.40
+            sigma_log_d = 0.20
+            sigma_rot = 0.25
+
+        elif snr > 5:
+            sigma_c = 0.75
+            sigma_log_s = 0.25
+            sigma_log_d = 0.08
+            sigma_rot = 0.10
+
+        elif snr > 2:
+            sigma_c = 0.50
+            sigma_log_s = 0.15
+            sigma_log_d = 0.00
+            sigma_rot = 0.00
+
+        else:
+            sigma_c = 0.00
+            sigma_log_s = 0.00
+            sigma_log_d = 0.00
+            sigma_rot = 0.00
+
+        return sigma_c, sigma_log_s, sigma_log_d, sigma_rot
 
     def _isig_3d(self, params, args_3d):
         x0, x1, x2, d3d, n3d, *rest = args_3d
         bkg_3d = rest[1] if len(rest) > 1 else None
-        y3d, e3d = self.counts_to_intensity_uncertainty(d3d, n3d)
 
         c0 = params["c0"].value
         c1 = params["c1"].value
@@ -1962,35 +1926,49 @@ class PeakEllipsoid:
         c0v, c1v, c2v = c
         dx_vec = [x0 - c0v, x1 - c1v, x2 - c2v]
         d2 = np.einsum("i...,ij,j...->...", dx_vec, inv_S, dx_vec)
-        pk = (d2 <= 1) & np.isfinite(y3d) & (e3d > 0)
 
-        b = params["B3d"].value
-        b_err = params["B3d"].stderr or params["B3d"].value
+        pk = (d2 <= 1) & (n3d > 0)
+        bkg = (d2 >= 1) & (d2 < np.cbrt(2)) & (n3d > 0)
 
+        c = d3d.copy()
         if bkg_3d is not None:
-            n3d_pk = n3d[pk]
-            bkg_norm_pk = np.where(n3d_pk > 0, bkg_3d[pk] / n3d_pk, 0.0)
-            I = np.nansum(y3d[pk] - b - bkg_norm_pk) * dx
-        else:
-            I = np.nansum(y3d[pk] - b) * dx
-        sig = np.sqrt(np.nansum(e3d[pk] ** 2 + b_err**2)) * dx
+            c -= bkg_3d
+
+        b = np.nansum(c[bkg])
+
+        p = np.nansum(pk)
+        q = np.nansum(bkg)
+
+        vol_ratio = p / q if q > 0 else 0
+
+        I = np.nansum(c[pk]) - vol_ratio * b
+        sig = np.sqrt(np.nansum(c[pk]) + vol_ratio**2 * b)
 
         return I / sig if sig > 0 else -np.inf
 
     def sweep(
-        self, args_1d, args_2d, args_3d, protocol, n_iter=50, report_fit=False
+        self,
+        args_1d,
+        args_2d,
+        args_3d,
+        protocol=None,
+        n_iter=50,
+        report_fit=False,
     ):
-        self.params["c0"].set(vary=protocol[0])
-        self.params["c1"].set(vary=protocol[1])
-        self.params["c2"].set(vary=protocol[2])
+        # protocol=None leaves the current vary flags untouched, e.g. when
+        # update_adaptive_prior has already set them from the SNR tier.
+        if protocol is not None:
+            self.params["c0"].set(vary=protocol[0])
+            self.params["c1"].set(vary=protocol[1])
+            self.params["c2"].set(vary=protocol[2])
 
-        self.params["r0"].set(vary=protocol[3])
-        self.params["r1"].set(vary=protocol[4])
-        self.params["r2"].set(vary=protocol[5])
+            self.params["r0"].set(vary=protocol[3])
+            self.params["r1"].set(vary=protocol[4])
+            self.params["r2"].set(vary=protocol[5])
 
-        self.params["u0"].set(vary=protocol[6])
-        self.params["u1"].set(vary=protocol[7])
-        self.params["u2"].set(vary=protocol[8])
+            self.params["u0"].set(vary=protocol[6])
+            self.params["u1"].set(vary=protocol[7])
+            self.params["u2"].set(vary=protocol[8])
 
         out = Minimizer(
             self.residual,
@@ -2238,10 +2216,8 @@ class PeakEllipsoid:
         n,
         pk,
         bkg,
-        kernel,
         vol_frac=1.0,
         bkg_meas=None,
-        bkg_var_meas=None,
     ):
         core = pk & (n > 0)
         shell = bkg & (n > 0)
@@ -2249,14 +2225,11 @@ class PeakEllipsoid:
         d_pk = d[core].copy()
         d_bkg = d[shell].copy()
 
-        n_pk = n[pk].copy()
-        n_bkg = n[bkg].copy()
-
-        k_pk = kernel[pk]
-        k_bkg = kernel[bkg]
+        n_pk = n[core].copy()
+        n_bkg = n[shell].copy()
 
         pk_cnts = np.nansum(d_pk)
-        pk_norm = np.nansum(n_pk * k_pk)
+        pk_norm = np.nansum(n_pk)
 
         if pk_cnts == 0.0:
             pk_cnts = float("nan")
@@ -2266,19 +2239,14 @@ class PeakEllipsoid:
         vol_pk = float(core.sum())
         vol_bkg = float(shell.sum())
 
-        vol = k_pk.sum()
+        vol = vol_pk
 
         if bkg_meas is not None:
-            bkg_cnts = np.nansum(bkg_meas[pk])
+            bkg_cnts = np.nansum(bkg_meas[core])
             bkg_norm = pk_norm
 
-            # Var(bkg_cnts) = sum(n^2 * b / m^2); falls back to |bkg_cnts| if
-            # exact per-voxel variance not available (assumes n/m = 1)
-            bkg_variance = (
-                np.nansum(bkg_var_meas[pk])
-                if bkg_var_meas is not None
-                else np.abs(bkg_cnts)
-            )
+            # bkg_meas is a fitted/smoothed background model, assumed exact
+            bkg_variance = 0.0
 
             b = (
                 bkg_cnts / bkg_norm
@@ -2297,7 +2265,7 @@ class PeakEllipsoid:
             ratio = 1.0
         else:
             bkg_cnts = np.nansum(d_bkg)
-            bkg_norm = np.nansum(n_bkg * k_bkg)
+            bkg_norm = np.nansum(n_bkg)
 
             if bkg_cnts == 0.0:
                 bkg_cnts = float("nan")
@@ -2499,14 +2467,9 @@ class PeakEllipsoid:
         n[np.isinf(n)] = np.nan
 
         bkg_meas = None
-        bkg_var_meas = None
         if b is not None and m is not None:
             valid_bkg = np.isfinite(b) & np.isfinite(m) & (m > 0)
             bkg_meas = np.where(valid_bkg, n * b / m, 0.0)
-            # Per-voxel Poisson variance of the ratio estimator: Var(n*b/m) = n^2*b/m^2
-            bkg_var_meas = np.where(
-                valid_bkg, n**2 * np.maximum(b, 0.0) / m**2, 0.0
-            )
 
         pk, bkg, mask, kernel = self.peak_roi(x0, x1, x2, c, S, 1)
 
@@ -2520,9 +2483,14 @@ class PeakEllipsoid:
 
         vol_frac = min(kernel_prior[core_prior].sum() * d3x / 0.997, 1.0)
 
-        result = self.extract_intensity(
-            d, n, pk, bkg, kernel, vol_frac, bkg_meas, bkg_var_meas
-        )
+        # I_3d (from the Gaussian profile fit) only sums voxels actually
+        # present on the detector, same edge-clipping issue extract_intensity
+        # corrects for below; apply the same correction here for consistency.
+        if vol_frac > 0:
+            self.intensity[2] /= vol_frac
+            self.sigma[2] /= vol_frac
+
+        result = self.extract_intensity(d, n, pk, bkg, vol_frac, bkg_meas)
 
         intens, sig, b, b_err, N, vol_frac, n_vox, *data_norm = result
 

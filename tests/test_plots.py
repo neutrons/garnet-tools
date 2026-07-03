@@ -3,8 +3,10 @@ import numpy as np
 
 import scipy.linalg
 import scipy.spatial
+import scipy.spatial.transform
 
 from garnet.reduction.integration import PeakEllipsoid
+from garnet.reduction.ellipsoid import _R_SCALE_3D
 from garnet.plots.peaks import PeakPlot
 from garnet.plots.volume import SlicePlot
 
@@ -99,18 +101,15 @@ def test_peak_plot():
 
     nx, ny, nz = 21, 24, 31
 
-    Qx_min, Qx_max = 1, 3
-    Qy_min, Qy_max = -2.9, 3.1
-    Qz_min, Qz_max = -2.2, 1.8
+    Qx_min, Qx_max = -1, 1
+    Qy_min, Qy_max = -1, 1
+    Qz_min, Qz_max = -1, 1
 
-    Q0_x, Q0_y, Q0_z = 2.1, 0.2, -0.2
+    # true peak center offset slightly from the predicted (0, 0, 0) position
+    Q0_x, Q0_y, Q0_z = 0.05, -0.03, 0.02
 
-    sigma_x, sigma_y, sigma_z = 0.15, 0.25, 0.2
-    rho_yz, rho_xz, rho_xy = 0.5, -0.1, -0.12
-
-    a = 100
-    b = 100.0
-    c = 0.002
+    sigma_x, sigma_y, sigma_z = 0.15, 0.2, 0.12
+    rho_yz, rho_xz, rho_xy = 0.3, -0.1, 0.15
 
     sigma_yz = sigma_y * sigma_z
     sigma_xz = sigma_x * sigma_z
@@ -126,7 +125,7 @@ def test_peak_plot():
 
     Q0 = np.array([Q0_x, Q0_y, Q0_z])
 
-    signal = np.random.multivariate_normal(Q0, cov, size=1000)
+    signal = np.random.multivariate_normal(Q0, cov, size=200000)
 
     counts, bins = np.histogramdd(
         signal,
@@ -141,47 +140,52 @@ def test_peak_plot():
     Qy = 0.5 * (y_bin_edges[1:] + y_bin_edges[:-1])
     Qz = 0.5 * (z_bin_edges[1:] + z_bin_edges[:-1])
 
-    print(
-        counts.sum()
-        * np.diff(Qx).mean()
-        * np.diff(Qy).mean()
-        * np.diff(Qz).mean()
-    )
+    a = 5.0
+    b = 20.0
 
-    m = 1
-
-    i, j, k = np.array(
-        np.meshgrid(np.arange(nx), np.arange(ny), np.arange(nz), indexing="ij")
-    ).reshape(3, -1)
-
-    i_min = np.clip(i - m, 0, nx)
-    i_max = np.clip(i + m + 1, 0, nx)
-    j_min = np.clip(j - m, 0, ny)
-    j_max = np.clip(j + m + 1, 0, ny)
-    k_min = np.clip(k - m, 0, nz)
-    k_max = np.clip(k + m + 1, 0, nz)
-
-    n = nx * ny * nz
-
-    ic = np.random.randint(i_min, i_max, size=n).ravel()
-    jc = np.random.randint(j_min, j_max, size=n).ravel()
-    kc = np.random.randint(k_min, k_max, size=n).ravel()
-
-    temp = np.copy(counts)
-    counts[i, j, k] = counts[ic, jc, kc]
-    counts[ic, jc, kc] = temp[i, j, k]
-
-    counts += b + a * (2 * np.random.random(counts.shape) - 1)
-
-    norm = np.full_like(counts, 5)
+    counts = counts * 5000.0 + b + a * (2 * np.random.random(counts.shape) - 1)
+    norm = np.full_like(counts, 1.0)
 
     Qx, Qy, Qz = np.meshgrid(Qx, Qy, Qz, indexing="ij")
 
+    dQ = Qx[1, 0, 0] - Qx[0, 0, 0]
+    xmod = 0.0
+
+    weights = np.ones_like(counts)
+
+    # predicted ("resolution model") ellipsoid, deliberately a bit off from
+    # the truth so the fit has something to refine
+    eigval, eigvec = np.linalg.eigh(cov)
+    r_true = np.sqrt(eigval) * _R_SCALE_3D
+    r_pred = r_true * 1.3
+
+    rot_perturb = scipy.spatial.transform.Rotation.from_rotvec(
+        [0.1, -0.05, 0.05]
+    ).as_matrix()
+    U_pred = rot_perturb @ eigvec
+
+    shape = (
+        0.0,
+        0.0,
+        0.0,
+        r_pred[0],
+        r_pred[1],
+        r_pred[2],
+        U_pred[:, 0],
+        U_pred[:, 1],
+        U_pred[:, 2],
+    )
+
     ellipsoid = PeakEllipsoid()
+    ellipsoid.update_constraints(Qx, Qy, Qz, dQ)
+    ellipsoid.update_estimate(shape)
 
-    mask = counts > 0
+    args = (Qx, Qy, Qz, counts, norm, dQ, xmod, weights)
+    fit_params = ellipsoid.fit(*args)
 
-    ellipsoid.fit(Qx, Qy, Qz, counts, norm, counts, norm, mask, mask, 0.1, 2)
+    assert fit_params is not None
+
+    ellipsoid.extract_result(*fit_params, xmod)
 
     c, S, *best_fit = ellipsoid.best_fit
 
@@ -195,9 +199,9 @@ def test_peak_plot():
 
     plot = PeakPlot()
 
-    norm_params = Qx, Qy, Qz, counts, norm, mask, mask, c, S
+    norm_params = Qx, Qy, Qz, counts, norm, c, S
 
-    I, sigma = ellipsoid.integrate(*norm_params)
+    ellipsoid.integrate(*norm_params)
 
     plot.add_ellipsoid_fit(best_fit)
 
@@ -209,9 +213,7 @@ def test_peak_plot():
 
     plot.add_peak_info(hkl, d, wavelength, angles, goniometer)
 
-    plot.add_peak_stats(
-        ellipsoid.redchi2, ellipsoid.intensity, ellipsoid.sigma
-    )
+    plot.add_peak_stats(ellipsoid.reddev, ellipsoid.intensity, ellipsoid.sigma)
 
     plot.add_data_norm_fit(*ellipsoid.data_norm_fit)
 
@@ -220,9 +222,6 @@ def test_peak_plot():
     plot.add_integral_fit(ellipsoid.integral)
 
     file = os.path.join(filepath, "ellipsoid.png")
-
-    # if os.path.exists(file):
-    #     os.remove(file)
 
     plot.save_plot(file)
 
@@ -245,6 +244,3 @@ def test_peak_plot_reuses_figure_between_saves():
     assert id(plot.fig) == fig_id
 
     plot.close()
-
-
-test_peak_plot()

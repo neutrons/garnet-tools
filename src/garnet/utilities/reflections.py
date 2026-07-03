@@ -583,54 +583,15 @@ class Peaks:
     def remove_off_centered(self):
         ol = mtd[self.peaks].sample().getOrientedLattice()
 
-        Q_vol = []
-        powder_err = []
         peak_err = []
-        Q0_mod = []
-        Q_rad = []
-
-        wl, tt = [], []
 
         for peak in mtd[self.peaks]:
             h, k, l = peak.getHKL()
-            d0 = ol.d(h, k, l)
-            powder_err.append(peak.getDSpacing() / d0 - 1)
-            Q0_mod.append(2 * np.pi / d0)
-
-            shape = peak.getPeakShape()
-            if shape.shapeName() == "ellipsoid":
-                ellipsoid = eval(shape.toJSON())
-
-                v0 = [float(val) for val in ellipsoid["direction0"].split(" ")]
-                v1 = [float(val) for val in ellipsoid["direction1"].split(" ")]
-                v2 = [float(val) for val in ellipsoid["direction2"].split(" ")]
-
-                r0 = ellipsoid["radius0"]
-                r1 = ellipsoid["radius1"]
-                r2 = ellipsoid["radius2"]
-
-            else:
-                r0 = r1 = r2 = 1e-6
-                v0, v1, v2 = np.eye(3).tolist()
-
-            r = np.array([r0, r1, r2])
-
-            U = np.column_stack([v0, v1, v2])
-            V = np.diag(r**2)
-            S = np.dot(np.dot(U, V), U.T)
-
-            vol = 4 / 3 * np.pi * r0 * r1 * r2
-
-            Q_vol.append(vol)
 
             R = peak.getGoniometerMatrix()
 
-            lamda = peak.getWavelength()
             two_theta = peak.getScattering()
             az_phi = peak.getAzimuthal()
-
-            wl.append(lamda)
-            tt.append(two_theta)
 
             kf_hat = np.array(
                 [
@@ -658,19 +619,7 @@ class Peaks:
 
             peak_err.append(W @ (Q - Q0))
 
-            r0 = np.sqrt(n.T @ (S @ n))
-            r1 = np.sqrt(u.T @ (S @ u))
-            r2 = np.sqrt(v.T @ (S @ v))
-
-            Q_rad.append([r0, r1, r2])
-
-        Q0_mod = np.array(Q0_mod)
-        powder_err = np.array(powder_err)
-        peak_err = np.array(peak_err)  # / Q0_mod[:, np.newaxis] * 100
-        Q_vol = np.array(Q_vol)
-        Q_rad = np.array(Q_rad)
-
-        mod_peak_err = np.linalg.norm(peak_err, axis=1)
+        peak_err = np.array(peak_err)
 
         med_peak_err = np.median(peak_err, axis=0)
         mad_peak_err = np.median(np.abs(peak_err - med_peak_err), axis=0)
@@ -680,236 +629,59 @@ class Peaks:
             for i in range(3)
         ]
 
-        wl = np.array(wl)
-        tt = np.array(tt)
+        for i in range(3):
+            for j, peak in enumerate(mtd[self.peaks]):
+                if not mask[i][j]:
+                    peak.setSigmaIntensity(float("-inf"))
 
-        filename = os.path.splitext(self.filename)[0]
+    def remove_volume_outliers(self, lo=0.1, hi=10.0):
+        """
+        Flag peaks whose fitted-model intensity disagrees with the
+        matched-filter intensity actually assigned to the peak.
 
-        with PdfPages(filename + "_cont.pdf") as pdf:
-            fig, ax = plt.subplots(4, 1, sharex=True, sharey=True)
-
-            for i in range(3):
-                ax[i].scatter(
-                    Q0_mod, peak_err[:, i], c=wl, s=0.05, rasterized=True
-                )
-
-                ax[i].axhline(
-                    med_peak_err[i] + 4.5 * mad_peak_err[i],
-                    color="k",
-                    lw=1,
-                    zorder=-1,
-                )
-
-                ax[i].axhline(
-                    med_peak_err[i] - 4.5 * mad_peak_err[i],
-                    color="k",
-                    lw=1,
-                    zorder=-1,
-                )
-
-            ax[3].scatter(
-                Q0_mod,
-                mod_peak_err,
-                c=wl,
-                s=0.05,
-                rasterized=True,
-            )
-
-            ax[0].minorticks_on()
-            ax[3].set_xlabel(r"$Q$ [\AA$^{-1}$]")
-            ax[0].set_ylabel(r"$\Delta{Q}_1$ [\AA$^{-1}$]")
-            ax[1].set_ylabel(r"$\Delta{Q}_2$ [\AA$^{-1}$]")
-            ax[2].set_ylabel(r"$\Delta{Q}_3$ [\AA$^{-1}$]")
-            ax[3].set_ylabel(r"$|\Delta{Q}|$ [\AA$^{-1}$]")
-
-            pdf.savefig(fig, dpi=300, bbox_inches=None)
-            plt.close(fig)
-            plt.close("all")
-
-            fig, ax = plt.subplots(4, 1, sharex=True, sharey=True)
-
-            for i in range(3):
-                ax[i].scatter(
-                    Q0_mod[mask[i]],
-                    Q_rad[:, i][mask[i]],
-                    c="C{}".format(i),
-                    s=0.05,
-                    rasterized=True,
-                )
-
-            ax[3].scatter(
-                Q0_mod,
-                np.cbrt(np.prod(Q_rad, axis=1)),
-                c="C3",
-                s=0.05,
-                rasterized=True,
-            )
-
-            ax[0].minorticks_on()
-            ax[3].set_xlabel(r"$Q$ [\AA$^{-1}$]")
-            ax[0].set_ylabel(r"$r_1$ [\AA$^{-1}$]")
-            ax[1].set_ylabel(r"$r_2$ [\AA$^{-1}$]")
-            ax[2].set_ylabel(r"$r_3$ [\AA$^{-1}$]")
-            ax[3].set_ylabel(r"$r$ [\AA$^{-1}$]")
-
-            pdf.savefig(fig, dpi=300, bbox_inches=None)
-            plt.close(fig)
-            plt.close("all")
-
-            fig, ax = plt.subplots(1, 3, sharex=True, sharey=True)
-
-            sort = np.argsort(Q0_mod)
-
-            for i in range(3):
-                ax[i].scatter(
-                    Q_rad[sort, i][mask[i][sort]],
-                    peak_err[sort, i][mask[i][sort]],
-                    c=Q0_mod[sort][mask[i][sort]],
-                    s=0.05,
-                    rasterized=True,
-                )
-                ax[i].set_aspect(1)
-                ax[i].minorticks_on()
-                ax[i].set_xlabel(r"$r_{}$".format(i + 1) + " [\AA$^{-1}$]")
-
-            ax[0].set_ylabel(r"$\Delta{Q}_i$ [\AA$^{-1}$]")
-
-            for i in range(3):
-                for j, peak in enumerate(mtd[self.peaks]):
-                    if not mask[i][j]:
-                        peak.setSigmaIntensity(float("-inf"))
-
-            pdf.savefig(fig, dpi=300, bbox_inches=None)
-            plt.close(fig)
-            plt.close("all")
-
-    def remove_volume_outliers(self, n_sigma=5.0):
-        res = ResolutionEllipsoid(self.peaks, r_cut=np.inf)
-        res.fit()
-
-        ol = mtd[self.peaks].sample().getOrientedLattice()
+        Compares I_3d (the 3D Gaussian profile-fit's predicted intensity)
+        to peak.getIntensity() (the matched-filter intensity set during
+        integration); peaks outside the [lo, hi] ratio are considered
+        outliers and flagged for removal.
+        """
 
         run_info = mtd[self.peaks].run()
         run_keys = run_info.keys()
-        voxel_lookup = {}
-        if "peaks_n_vox" in run_keys and "peaks_d3x" in run_keys:
-            dh = run_info.getLogData("peaks_h").value
-            dk = run_info.getLogData("peaks_k").value
-            dl = run_info.getLogData("peaks_l").value
-            dm = run_info.getLogData("peaks_m").value
-            dn = run_info.getLogData("peaks_n").value
-            dp = run_info.getLogData("peaks_p").value
-            dr = run_info.getLogData("peaks_run").value
-            d_n_vox = run_info.getLogData("peaks_n_vox").value
-            d_d3x = run_info.getLogData("peaks_d3x").value
-            for j in range(len(dr)):
-                key = (dr[j], dh[j], dk[j], dl[j], dm[j], dn[j], dp[j])
-                voxel_lookup[key] = d_n_vox[j] * d_d3x[j]
 
-        Q0_mod, log_fracs, wl, indices = [], [], [], []
-        vol_ell, vol_vox = [], []
-
-        for i, peak in enumerate(mtd[self.peaks]):
-            shape = peak.getPeakShape()
-            if shape.shapeName() != "ellipsoid":
-                continue
-
-            ellipsoid = eval(shape.toJSON())
-            r0 = ellipsoid["radius0"]
-            r1 = ellipsoid["radius1"]
-            r2 = ellipsoid["radius2"]
-
-            if r0 <= 0 or r1 <= 0 or r2 <= 0:
-                continue
-
-            vol_obs = 4 / 3 * np.pi * r0 * r1 * r2
-
-            S = res.predict_sample_S(i)
-            radii, _ = res._ellipsoid_from_S(S)
-            vol_model = 4 / 3 * np.pi * np.prod(radii)
-
-            if vol_model <= 0:
-                continue
-
-            h, k, l = [int(v) for v in peak.getIntHKL()]
-            m_int, n_int, p_int = [int(v) for v in peak.getIntMNP()]
-            d0 = ol.d(h, k, l)
-            Q0_mod.append(2 * np.pi / d0)
-            log_fracs.append(np.log(vol_obs / vol_model))
-            wl.append(peak.getWavelength())
-            indices.append(i)
-
-            vol_ell.append(vol_obs)
-            vox_key = (peak.getRunNumber(), h, k, l, m_int, n_int, p_int)
-            vol_vox.append(voxel_lookup.get(vox_key, np.nan))
-
-        if len(log_fracs) == 0:
+        if "peaks_I_3d" not in run_keys:
             return
 
-        Q0_mod = np.array(Q0_mod)
-        log_fracs = np.array(log_fracs)
-        wl = np.array(wl)
+        dh = run_info.getLogData("peaks_h").value
+        dk = run_info.getLogData("peaks_k").value
+        dl = run_info.getLogData("peaks_l").value
+        dm = run_info.getLogData("peaks_m").value
+        dn = run_info.getLogData("peaks_n").value
+        dp = run_info.getLogData("peaks_p").value
+        dr = run_info.getLogData("peaks_run").value
+        d_I_3d = run_info.getLogData("peaks_I_3d").value
 
-        med = np.median(log_fracs)
-        mad = np.median(np.abs(log_fracs - med))
+        I_3d_lookup = {}
+        for j in range(len(dr)):
+            key = (dr[j], dh[j], dk[j], dl[j], dm[j], dn[j], dp[j])
+            I_3d_lookup[key] = d_I_3d[j]
 
-        if mad > 0:
-            keep = np.abs(log_fracs - med) <= n_sigma * mad
-        else:
-            keep = np.ones(len(log_fracs), dtype=bool)
+        for peak in mtd[self.peaks]:
+            h, k, l = [int(v) for v in peak.getIntHKL()]
+            m, n, p = [int(v) for v in peak.getIntMNP()]
+            key = (peak.getRunNumber(), h, k, l, m, n, p)
 
-        filename = os.path.splitext(self.filename)[0]
+            I_3d = I_3d_lookup.get(key)
+            if I_3d is None:
+                continue
 
-        vol_ell = np.array(vol_ell)
-        vol_vox = np.array(vol_vox)
+            intens = peak.getIntensity()
+            if not intens:
+                continue
 
-        with PdfPages(filename + "_volfrac.pdf") as pdf:
-            fig, ax = plt.subplots(layout="constrained")
-            sc = ax.scatter(
-                Q0_mod,
-                log_fracs,
-                c=wl,
-                s=0.5,
-                rasterized=True,
-            )
-            fig.colorbar(sc, ax=ax, label=r"$\lambda$ [\AA]")
-            ax.axhline(med, color="k", lw=1)
-            ax.axhline(med + n_sigma * mad, color="k", lw=1, linestyle="--")
-            ax.axhline(med - n_sigma * mad, color="k", lw=1, linestyle="--")
-            ax.minorticks_on()
-            ax.set_xlabel(r"$|Q|$ [\AA$^{-1}$]")
-            ax.set_ylabel(r"$\ln(V_\mathrm{obs}/V_\mathrm{model})$")
-            pdf.savefig(fig, dpi=300, bbox_inches=None)
-            plt.close(fig)
+            ratio = I_3d / intens
 
-            if voxel_lookup:
-                valid = np.isfinite(vol_vox) & (vol_ell > 0)
-                if valid.any():
-                    lim = [0, np.nanmax(vol_ell[valid]) * 1.1]
-                    fig, ax = plt.subplots(layout="constrained")
-                    ax.plot(lim, lim, "-k", lw=0.8)
-                    sc = ax.scatter(
-                        vol_ell[valid],
-                        vol_vox[valid],
-                        c=np.array(wl)[valid],
-                        s=2,
-                        rasterized=True,
-                    )
-                    fig.colorbar(sc, ax=ax, label=r"$\lambda$ [\AA]")
-                    ax.set_xlim(*lim)
-                    ax.set_ylim(*lim)
-                    ax.set_aspect("equal")
-                    ax.minorticks_on()
-                    ax.set_xlabel(r"$V_\mathrm{ell}$ [\AA$^{-3}$]")
-                    ax.set_ylabel(r"$V_\mathrm{vox}$ [\AA$^{-3}$]")
-                    pdf.savefig(fig, dpi=300, bbox_inches=None)
-                    plt.close(fig)
-
-            plt.close("all")
-
-        for idx, flag in zip(indices, ~keep):
-            if flag:
-                mtd[self.peaks].getPeak(idx).setSigmaIntensity(float("-inf"))
+            if not (lo < ratio < hi):
+                peak.setSigmaIntensity(float("-inf"))
 
     def remove_non_integrated(self):
         for peak in mtd[self.peaks]:
@@ -1047,49 +819,6 @@ class Peaks:
 
         self.info_dict = info_dict
         self.norm_dict = norm_dict
-
-        x, y, z = [], [], []
-
-        for peak in mtd[self.peaks]:
-            h, k, l = [int(val) for val in peak.getIntHKL()]
-            m, n, p = [int(val) for val in peak.getIntMNP()]
-
-            run = int(peak.getRunNumber())
-            key = (run, h, k, l, m, n, p)
-            items = self.info_dict.get(key)
-
-            if items is not None:
-                lamda = peak.getWavelength()
-                two_theta = peak.getScattering()
-
-                Q = 4 * np.pi / lamda * np.sin(0.5 * two_theta)
-
-                norm = items["vol_frac"]
-                ratio = items["ratio"]
-
-                x.append(Q)
-                y.append(norm)
-                z.append(ratio)
-
-                # if norm > 1.1 or norm < 0.9 or ratio > 2 or ratio < 0.125:
-                #    peak.setSigmaIntensity(peak.getIntensity())
-
-        x = np.array(x)
-        y = np.array(y)
-        z = np.array(z)
-        fig, ax = plt.subplots(2, 1, sharex=True, layout="constrained")
-        ax[0].plot(x, y, ",", color="C0", rasterized=True)
-        ax[0].minorticks_on()
-        ax[0].set_ylabel("Norm")
-        ax[0].axhline(y=1.1, color="k", linestyle="--")
-        ax[0].axhline(y=0.9, color="k", linestyle="--")
-        ax[1].plot(x, z, ",", color="C1", rasterized=True)
-        ax[1].minorticks_on()
-        ax[1].axhline(y=2, color="k", linestyle="--")
-        ax[1].axhline(y=0.125, color="k", linestyle="--")
-        ax[1].set_ylabel("Ratio")
-        ax[1].set_xlabel("$|Q|$ [\AA$^{-1}$]")
-        fig.savefig(filename + "_norm.pdf")
 
         x, y = [], []
 

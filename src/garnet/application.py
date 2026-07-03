@@ -246,6 +246,7 @@ class FormView(QWidget):
         self._theme_combo.addItem("paraview")
         self._theme_combo.setCurrentText("document")
         self._theme_combo.setToolTip("Select 3D view theme.")
+        self.auto_scale_dropdown(self._theme_combo)
 
         self._ui_combo = QComboBox(self)
         self._ui_combo.addItem("Light")
@@ -256,6 +257,7 @@ class FormView(QWidget):
         self._ui_combo.setToolTip(
             "Switch the application between light and dark mode."
         )
+        self.auto_scale_dropdown(self._ui_combo)
 
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)

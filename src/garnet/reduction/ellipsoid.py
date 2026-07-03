@@ -1884,20 +1884,20 @@ class PeakEllipsoid:
             Prior width for relative orientation rotation vector, in radians.
         """
         if snr > 20:
-            sigma_c = 1.5
-            sigma_log_s = 0.40
-            sigma_log_d = 0.20
-            sigma_rot = 0.25
+            sigma_c = 10.0
+            sigma_log_s = 2.0
+            sigma_log_d = 1.0
+            sigma_rot = 0.5
 
         elif snr > 5:
-            sigma_c = 0.75
-            sigma_log_s = 0.25
-            sigma_log_d = 0.08
-            sigma_rot = 0.10
+            sigma_c = 1.0
+            sigma_log_s = 1.0
+            sigma_log_d = 0.5
+            sigma_rot = 0.25
 
         elif snr > 2:
-            sigma_c = 0.50
-            sigma_log_s = 0.15
+            sigma_c = 0.10
+            sigma_log_s = 0.25
             sigma_log_d = 0.01
             sigma_rot = 0.01
 

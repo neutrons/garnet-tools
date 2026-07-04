@@ -1886,9 +1886,9 @@ class PeakEllipsoid:
         x = snr if x > 1 else 1
 
         sigma_c = self.smooth_saturating(x, 1.0, 100, 20)
-        sigma_log_s = self.smooth_saturating(x, 0.10, 10, 15)
-        sigma_log_d = self.smooth_saturating(x, 0.05, 2.0, 10)
-        sigma_rot = self.smooth_saturating(x, 0.01, 1.0, 5)
+        sigma_log_s = self.smooth_saturating(x, 0.1, 10, 15)
+        sigma_log_d = self.smooth_saturating(x, 0.1, 10, 10)
+        sigma_rot = self.smooth_saturating(x, 0.1, 10, 10)
 
         return sigma_c, sigma_log_s, sigma_log_d, sigma_rot
 

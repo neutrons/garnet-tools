@@ -9,11 +9,43 @@ import scipy.ndimage
 
 from lmfit import Minimizer, Parameters, fit_report
 
+_R_SCALE_1D = np.sqrt(scipy.stats.chi2.ppf(0.997, df=1))
+_R_SCALE_2D = np.sqrt(scipy.stats.chi2.ppf(0.997, df=2))
 _R_SCALE_3D = np.sqrt(scipy.stats.chi2.ppf(0.997, df=3))
+
+# r0,r1,r2 (and S) are calibrated to the full-3D 99.7% confidence contour
+# (_R_SCALE_3D, df=3). A mode's own sub-block of S needs its determinant
+# rescaled to that mode's own df=d 99.7%-contour convention.
+_MODE_NDIM = {
+    "1d_0": 1,
+    "1d_1": 1,
+    "1d_2": 1,
+    "2d_0": 2,
+    "2d_1": 2,
+    "2d_2": 2,
+    "3d": 3,
+}
+_MODE_R_SCALE = {
+    "1d_0": _R_SCALE_1D,
+    "1d_1": _R_SCALE_1D,
+    "1d_2": _R_SCALE_1D,
+    "2d_0": _R_SCALE_2D,
+    "2d_1": _R_SCALE_2D,
+    "2d_2": _R_SCALE_2D,
+    "3d": _R_SCALE_3D,
+}
 
 
 class PeakEllipsoid:
     def __init__(self):
+        """
+        Initialize a PeakEllipsoid fitter with default fit parameters.
+
+        Sets up an empty `lmfit.Parameters` container, uniform per-mode
+        fit weights, and default (unit) resolution-model prior state
+        (prior covariance, prior radii/orientation, and prior widths)
+        that is later overwritten by `update_estimate`.
+        """
         self.params = Parameters()
 
         self.mode_weights_1d = 1.0
@@ -34,12 +66,47 @@ class PeakEllipsoid:
         self._prior_U = np.eye(3)
 
     def vech6(self, M):
+        """
+        Half-vectorize a symmetric 3x3 matrix into its 6 unique entries.
+
+        Parameters
+        ----------
+        M : ndarray of shape (3, 3)
+            Symmetric matrix to vectorize.
+
+        Returns
+        -------
+        v : ndarray of shape (6,)
+            The entries ``[M00, M11, M22, M12, M02, M01]``.
+        """
         return np.array(
             [M[0, 0], M[1, 1], M[2, 2], M[1, 2], M[0, 2], M[0, 1]],
             dtype=float,
         )
 
     def update_constraints(self, x0, x1, x2, dx):
+        """
+        (Re)initialize `self.params` bounds and starting values from the data extent.
+
+        Centers are initialized to zero and bounded to within half the
+        coordinate-array extent along each axis; radii are initialized to
+        half the largest axis extent and bounded between twice the
+        smallest voxel spacing and twice the per-axis half-extent;
+        rotation-vector components are initialized to zero and bounded to
+        ``[-pi, pi]``. Also resets `self.combine_params` to ``None``.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        dx : float
+            Unused placeholder for a voxel-spacing argument (the voxel
+            spacing actually used is recomputed from ``x0, x1, x2``).
+        """
         dx0 = x0[:, 0, 0][1] - x0[:, 0, 0][0]
         dx1 = x1[0, :, 0][1] - x1[0, :, 0][0]
         dx2 = x2[0, 0, :][1] - x2[0, 0, :][0]
@@ -80,9 +147,40 @@ class PeakEllipsoid:
         self.combine_params = None
 
     def copy_combine(self):
+        """
+        Snapshot the current fit parameters into `self.combine_params`.
+
+        Populates `self.combine_params` with a copy of `self.params`, so
+        that a subsequent `estimate_envelope` call can resume from this
+        state instead of the constraint defaults.
+        """
         self.combine_params = self.params.copy()
 
     def update_estimate(self, shape):
+        """
+        Seed `self.params` and the resolution-model prior from an initial ellipsoid estimate.
+
+        Centers are reset to the origin (since coordinates are peak-centered),
+        radii are set to the given values (clipped to twice the lower bound
+        if outside the parameter bounds), and the orientation is derived
+        from the given axis vectors (flipping the third axis if needed to
+        keep `U` a proper rotation). Also (re)initializes the SNR-adaptive
+        prior state (`self.prior_cov`, `self._prior_radii`,
+        `self._prior_inv_sqrt`, `self._prior_r`, `self._prior_u`,
+        `self._prior_U`) and resets the prior widths
+        (`self.prior_center_sigma`, `self.prior_cov_sigma`,
+        `self.prior_distortion_sigma`, `self.prior_rot_sigma`) to their
+        default starting values. Also sets `self.estimated_fit`.
+
+        Parameters
+        ----------
+        shape : tuple
+            ``(c0, c1, c2, r0, r1, r2, v0, v1, v2)`` where ``c0, c1, c2``
+            are the (unused) center coordinates, ``r0, r1, r2`` are the
+            ellipsoid principal radii, and ``v0, v1, v2`` are the
+            corresponding orthonormal principal axis vectors (each
+            ndarray of shape (3,)).
+        """
         c0, c1, c2, r0, r1, r2, v0, v1, v2 = shape
 
         U = np.column_stack([v0, v1, v2])
@@ -135,11 +233,33 @@ class PeakEllipsoid:
         self.prior_rot_sigma = 0.1
 
     def omega_deriv_u(self, u0, u1, u2, delta=1e-6):
-        """Finite-difference derivative of the prior-relative rotation vector.
+        """
+        Finite-difference derivative of the prior-relative rotation vector.
 
-        Returns (domega0, domega1, domega2), each a 3-vector giving
-        d(omega)/d(u_k) for k=0,1,2, where omega is the rotation vector of
-        U0^T @ U(u0,u1,u2) (relative to the predicted orientation).
+        Computes d(omega)/d(u_k) for k=0,1,2 by central differences, where
+        omega is the rotation vector of ``U0^T @ U(u0,u1,u2)`` (the
+        orientation relative to the predicted resolution-model
+        orientation `self._prior_U`).
+
+        Parameters
+        ----------
+        u0 : float
+            First component of the current rotation vector.
+        u1 : float
+            Second component of the current rotation vector.
+        u2 : float
+            Third component of the current rotation vector.
+        delta : float, optional
+            Finite-difference step size. Default is 1e-6.
+
+        Returns
+        -------
+        domega0 : ndarray of shape (3,)
+            d(omega)/d(u0).
+        domega1 : ndarray of shape (3,)
+            d(omega)/d(u1).
+        domega2 : ndarray of shape (3,)
+            d(omega)/d(u2).
         """
 
         def omega_at(uu0, uu1, uu2):
@@ -160,6 +280,31 @@ class PeakEllipsoid:
         )
 
     def prior_residual(self, params):
+        """
+        Regularization residual terms pulling the fit toward the resolution-model prior.
+
+        Builds the stacked whitened residual vector for four prior
+        components: center (Mahalanobis distance of the center from the
+        origin under the prior covariance), radius scale (mean log-radius
+        deviation from the predicted radii), radius distortion (per-axis
+        log-radius deviation after removing the mean), and orientation
+        (rotation-vector distance from the predicted orientation). Each
+        component is divided by its current SNR-adaptive prior sigma
+        (`self.prior_center_sigma`, `self.prior_cov_sigma`,
+        `self.prior_distortion_sigma`, `self.prior_rot_sigma`).
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters; must contain ``c0, c1, c2, r0, r1,
+            r2, u0, u1, u2``.
+
+        Returns
+        -------
+        terms : ndarray of shape (10,)
+            Concatenated residuals: 3 center + 1 scale + 3 distortion +
+            3 orientation components.
+        """
         terms = []
 
         c0 = params["c0"].value
@@ -200,6 +345,28 @@ class PeakEllipsoid:
         return np.asarray(terms, dtype=float)
 
     def prior_jacobian(self, params):
+        """
+        Analytic Jacobian of `prior_residual` with respect to the varying fit parameters.
+
+        Residual ordering matches `prior_residual`: 3 center + 1 scale +
+        3 distortion + 3 orientation = 10 columns. Center derivatives are
+        exact (linear in `c`); radius-decomposition derivatives are exact
+        (analytic d(log r)/dr); orientation derivatives use the
+        finite-difference helper `omega_deriv_u`.
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters; must contain ``c0, c1, c2, r0, r1,
+            r2, u0, u1, u2``.
+
+        Returns
+        -------
+        jac : ndarray of shape (n_vary, 10)
+            Jacobian rows restricted to parameters with ``vary=True``, one
+            row per varying parameter and one column per prior residual
+            term.
+        """
         # Residuals: [r_c0, r_c1, r_c2, r_alpha, r_d0, r_d1, r_d2, r_om0, r_om1, r_om2]
         # 3 center + 1 scale + 3 distortion + 3 orientation = 10 columns
         params_list = [name for name, _ in params.items()]
@@ -240,53 +407,240 @@ class PeakEllipsoid:
         ind = [i for i, (_, par) in enumerate(params.items()) if par.vary]
         return jac[ind]
 
-    def volume_penalty_residual(self, params, eps=1e-12):
-        """
-        Constant penalty term minimizing sqrt(B) / (A * det(S)^(1/4)).
+    #: Every mode with its own A<mode>/B<mode> amplitude/background pair,
+    #: hence its own volume penalty term.
+    _PENALTY_MODES = (
+        "1d_0",
+        "1d_1",
+        "1d_2",
+        "2d_0",
+        "2d_1",
+        "2d_2",
+        "3d",
+    )
 
-        A, B are the 3D mode's amplitude/background; det(S)^(1/4) reduces
-        to sqrt(r0*r1*r2) since S = U diag(r0^2, r1^2, r2^2) U^T. Unlike the
-        SNR-adaptive prior widths, this term is always active at a fixed
-        strength, discouraging fits with weak amplitude and/or a small
-        volume relative to the background level.
+    def _mode_S_det(self, r0, r1, r2, u0, u1, u2, mode):
+        """
+        Determinant of the covariance sub-block S for a mode, on that mode's own df=d contour scale.
+
+        The sub-block is the plain sub-block of
+        ``S = U diag(r0^2, r1^2, r2^2) U^T`` selected the same way
+        `ellipsoid_covariance` selects `inv_S` sub-blocks per mode (no
+        chi-squared scale factor applied at this stage). Since `S` is
+        generally not diagonal in the lab frame, 1D/2D sub-block
+        determinants (and hence this quantity) do depend on orientation,
+        unlike the full 3x3 determinant.
+
+        `r0, r1, r2` (and therefore `S`) are calibrated to the full-3D
+        99.7% confidence contour (`_R_SCALE_3D`, chi-squared with
+        ``df=3``). A mode of dimensionality ``d = _MODE_NDIM[mode]`` (1,
+        2, or 3) has its own ``df=d`` chi-squared contour convention, so
+        the raw sub-block determinant is rescaled by
+        ``(_MODE_R_SCALE[mode] / _R_SCALE_3D) ** (2*d)`` to convert it
+        from the df=3 scale to the mode's own df=d scale. This factor is
+        exactly 1 for ``mode="3d"`` (already on the df=3 scale) and
+        greater than 1 for 1D/2D modes (a df=d contour at the same
+        confidence level is narrower than the corresponding df=3 slice).
+
+        Parameters
+        ----------
+        r0 : float
+            Ellipsoid principal radius along the first rotated axis.
+        r1 : float
+            Ellipsoid principal radius along the second rotated axis.
+        r2 : float
+            Ellipsoid principal radius along the third rotated axis.
+        u0 : float
+            First component of the orientation rotation vector.
+        u1 : float
+            Second component of the orientation rotation vector.
+        u2 : float
+            Third component of the orientation rotation vector.
+        mode : str
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``.
+
+        Returns
+        -------
+        det_S : float
+            df=d-rescaled determinant of the mode's covariance sub-block
+            (a plain scalar value for 1D modes, where the "sub-block" is
+            a single diagonal entry of `S`).
         """
 
-        A = max(params["A3d"].value, eps)
-        B = max(params["B3d"].value, 0.0)
+        S = self.S_matrix(r0, r1, r2, u0, u1, u2)
+
+        if mode == "3d":
+            S_mode = S
+        elif mode == "2d_0":
+            S_mode = S[1:, 1:]
+        elif mode == "2d_1":
+            S_mode = S[0::2, 0::2]
+        elif mode == "2d_2":
+            S_mode = S[:2, :2]
+        elif mode == "1d_0":
+            S_mode = S[0, 0]
+        elif mode == "1d_1":
+            S_mode = S[1, 1]
+        elif mode == "1d_2":
+            S_mode = S[2, 2]
+        else:
+            raise ValueError("Unknown mode {}".format(mode))
+
+        det_S = np.linalg.det(S_mode) if np.ndim(S_mode) == 2 else S_mode
+
+        d = _MODE_NDIM[mode]
+        rescale = (_MODE_R_SCALE[mode] / _R_SCALE_3D) ** (2 * d)
+
+        return det_S * rescale
+
+    def volume_penalty_residual(self, params, mode, eps=1e-12):
+        """
+        Constant penalty term minimizing sqrt(B) / (pi^(d/4) * A * det(S)^(1/4)) for one mode.
+
+        A, B are the given mode's amplitude/background, and S is that
+        mode's own covariance sub-block (see `_mode_S_det`) — for the
+        ``"3d"`` mode, ``det(S)^(1/4)`` reduces to ``sqrt(r0*r1*r2)``. The
+        ``pi^(d/4)`` prefactor (``d`` = mode dimensionality) matches the
+        ``(2*pi)^(d/2)`` volume element of the Gaussian integral
+        normalization used by `gaussian_integral`, up to the factor of 2.
+        Unlike the SNR-adaptive prior widths, this term is always active
+        at a fixed strength, discouraging fits with weak amplitude and/or
+        a small volume relative to the background level.
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters; must contain ``A<mode>, B<mode>, r0,
+            r1, r2, u0, u1, u2``.
+        mode : str
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``.
+        eps : float, optional
+            Small positive floor used to avoid division by zero in `A`
+            and the volume term. Default is 1e-12.
+
+        Returns
+        -------
+        penalty : ndarray of shape (1,)
+            The single-element penalty residual
+            ``sqrt(B) / (pi**(d/4) * A * det(S)^(1/4))`` for this mode.
+        """
+
+        A = max(params["A" + mode].value, eps)
+        B = max(params["B" + mode].value, 0.0)
         r0 = params["r0"].value
         r1 = params["r1"].value
         r2 = params["r2"].value
+        u0 = params["u0"].value
+        u1 = params["u1"].value
+        u2 = params["u2"].value
 
-        vol = max(np.sqrt(r0 * r1 * r2), eps)
+        d = _MODE_NDIM[mode]
+        det_S = self._mode_S_det(r0, r1, r2, u0, u1, u2, mode)
+        vol = max(det_S, eps) ** 0.25
 
-        penalty = np.sqrt(B) / (A * vol)
+        penalty = np.sqrt(B) / (np.pi ** (d / 4.0) * A * vol)
 
         return np.array([penalty])
 
-    def volume_penalty_jacobian(self, params, eps=1e-12):
+    def volume_penalty_jacobian(self, params, mode, eps=1e-12, delta=1e-6):
+        """
+        Jacobian of `volume_penalty_residual` for one mode w.r.t. varying fit parameters.
+
+        The A/B derivatives are analytic; the r0,r1,r2,u0,u1,u2
+        derivatives are central finite differences of ``det(S)^(1/4)``,
+        since 1D/2D sub-block determinants (unlike the full 3x3
+        determinant) don't have a simple closed form in terms of the
+        radii alone.
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters; must contain ``A<mode>, B<mode>, r0,
+            r1, r2, u0, u1, u2``.
+        mode : str
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``.
+        eps : float, optional
+            Small positive floor matching `volume_penalty_residual`.
+            Default is 1e-12.
+        delta : float, optional
+            Central finite-difference step size for the shape
+            derivatives. Default is 1e-6.
+
+        Returns
+        -------
+        jac : ndarray of shape (n_vary, 1)
+            Jacobian column restricted to parameters with ``vary=True``,
+            one row per varying parameter.
+        """
         params_list = [name for name, _ in params.items()]
         jac = np.zeros((len(params_list), 1), dtype=float)
 
-        A = max(params["A3d"].value, eps)
-        B = max(params["B3d"].value, 0.0)
-        r0 = params["r0"].value
-        r1 = params["r1"].value
-        r2 = params["r2"].value
+        A = max(params["A" + mode].value, eps)
+        B = max(params["B" + mode].value, 0.0)
+        r = [params["r0"].value, params["r1"].value, params["r2"].value]
+        u = [params["u0"].value, params["u1"].value, params["u2"].value]
 
-        vol = max(np.sqrt(r0 * r1 * r2), eps)
+        d = _MODE_NDIM[mode]
+        pi_factor = np.pi ** (d / 4.0)
 
-        penalty = np.sqrt(B) / (A * vol)
+        def vol(rr, uu):
+            det_S = self._mode_S_det(*rr, *uu, mode)
+            return max(det_S, eps) ** 0.25
 
-        jac[params_list.index("A3d"), 0] = -penalty / A
-        if B > 0:
-            jac[params_list.index("B3d"), 0] = penalty / (2.0 * B)
-        for rname, r_val in zip(["r0", "r1", "r2"], [r0, r1, r2]):
-            jac[params_list.index(rname), 0] = -penalty / (2.0 * r_val)
+        vol0 = vol(r, u)
+        penalty = np.sqrt(B) / (pi_factor * A * vol0)
+
+        aname, bname = "A" + mode, "B" + mode
+        if aname in params_list:
+            jac[params_list.index(aname), 0] = -penalty / A
+        if bname in params_list and B > 0:
+            jac[params_list.index(bname), 0] = penalty / (2.0 * B)
+
+        shape_names = ["r0", "r1", "r2", "u0", "u1", "u2"]
+        for i, name in enumerate(shape_names):
+            if name not in params_list:
+                continue
+            r_p, u_p = list(r), list(u)
+            r_m, u_m = list(r), list(u)
+            if i < 3:
+                r_p[i] += delta
+                r_m[i] -= delta
+            else:
+                u_p[i - 3] += delta
+                u_m[i - 3] -= delta
+            dvol = (vol(r_p, u_p) - vol(r_m, u_m)) / (2.0 * delta)
+            jac[params_list.index(name), 0] = -penalty / vol0 * dvol
 
         ind = [i for i, (_, par) in enumerate(params.items()) if par.vary]
         return jac[ind]
 
     def S_matrix(self, r0, r1, r2, u0, u1, u2):
+        """
+        Build the ellipsoid covariance-like matrix S = U diag(r0^2, r1^2, r2^2) U^T.
+
+        Parameters
+        ----------
+        r0 : float
+            Ellipsoid principal radius along the first rotated axis.
+        r1 : float
+            Ellipsoid principal radius along the second rotated axis.
+        r2 : float
+            Ellipsoid principal radius along the third rotated axis.
+        u0 : float
+            First component of the orientation rotation vector.
+        u1 : float
+            Second component of the orientation rotation vector.
+        u2 : float
+            Third component of the orientation rotation vector.
+
+        Returns
+        -------
+        S : ndarray of shape (3, 3)
+            The ellipsoid covariance-like matrix.
+        """
         U = self.U_matrix(u0, u1, u2)
 
         V = np.diag([r0**2, r1**2, r2**2])
@@ -296,6 +650,29 @@ class PeakEllipsoid:
         return S
 
     def inv_S_matrix(self, r0, r1, r2, u0, u1, u2):
+        """
+        Build the inverse ellipsoid covariance-like matrix inv_S = U diag(1/r0^2, 1/r1^2, 1/r2^2) U^T.
+
+        Parameters
+        ----------
+        r0 : float
+            Ellipsoid principal radius along the first rotated axis.
+        r1 : float
+            Ellipsoid principal radius along the second rotated axis.
+        r2 : float
+            Ellipsoid principal radius along the third rotated axis.
+        u0 : float
+            First component of the orientation rotation vector.
+        u1 : float
+            Second component of the orientation rotation vector.
+        u2 : float
+            Third component of the orientation rotation vector.
+
+        Returns
+        -------
+        inv_S : ndarray of shape (3, 3)
+            The inverse ellipsoid covariance-like matrix.
+        """
         U = self.U_matrix(u0, u1, u2)
 
         V = np.diag([1 / r0**2, 1 / r1**2, 1 / r2**2])
@@ -305,6 +682,24 @@ class PeakEllipsoid:
         return inv_S
 
     def U_matrix(self, u0, u1, u2):
+        """
+        Build the ellipsoid orientation rotation matrix from a rotation vector.
+
+        Parameters
+        ----------
+        u0 : float
+            First component of the axis-angle rotation vector.
+        u1 : float
+            Second component of the axis-angle rotation vector.
+        u2 : float
+            Third component of the axis-angle rotation vector.
+
+        Returns
+        -------
+        U : ndarray of shape (3, 3)
+            Proper orthogonal rotation matrix, per
+            ``scipy.spatial.transform.Rotation.from_rotvec``.
+        """
         u = np.array([u0, u1, u2])
 
         U = scipy.spatial.transform.Rotation.from_rotvec(u).as_matrix()
@@ -312,10 +707,64 @@ class PeakEllipsoid:
         return U
 
     def det_S(self, r0, r1, r2, u0, u1, u2):
+        """
+        Determinant of the ellipsoid covariance-like matrix S.
+
+        Parameters
+        ----------
+        r0 : float
+            Ellipsoid principal radius along the first rotated axis.
+        r1 : float
+            Ellipsoid principal radius along the second rotated axis.
+        r2 : float
+            Ellipsoid principal radius along the third rotated axis.
+        u0 : float
+            First component of the orientation rotation vector.
+        u1 : float
+            Second component of the orientation rotation vector.
+        u2 : float
+            Third component of the orientation rotation vector.
+
+        Returns
+        -------
+        det : float
+            ``det(S)``, equal to ``(r0*r1*r2)**2``.
+        """
         S = self.S_matrix(r0, r1, r2, u0, u1, u2)
         return np.linalg.det(S)
 
     def centroid_inverse_covariance(self, c0, c1, c2, r0, r1, r2, u0, u1, u2):
+        """
+        Package the peak center and inverse ellipsoid covariance from scalar parameters.
+
+        Parameters
+        ----------
+        c0 : float
+            Peak center coordinate along axis 0.
+        c1 : float
+            Peak center coordinate along axis 1.
+        c2 : float
+            Peak center coordinate along axis 2.
+        r0 : float
+            Ellipsoid principal radius along the first rotated axis.
+        r1 : float
+            Ellipsoid principal radius along the second rotated axis.
+        r2 : float
+            Ellipsoid principal radius along the third rotated axis.
+        u0 : float
+            First component of the orientation rotation vector.
+        u1 : float
+            Second component of the orientation rotation vector.
+        u2 : float
+            Third component of the orientation rotation vector.
+
+        Returns
+        -------
+        c : ndarray of shape (3,)
+            The peak center ``[c0, c1, c2]``.
+        inv_S : ndarray of shape (3, 3)
+            The inverse ellipsoid covariance-like matrix.
+        """
         c = np.array([c0, c1, c2])
 
         inv_S = self.inv_S_matrix(r0, r1, r2, u0, u1, u2)
@@ -323,6 +772,36 @@ class PeakEllipsoid:
         return c, inv_S
 
     def data_norm(self, d, n, v, rel_err=30):
+        """
+        Normalize raw counts by monitor counts and estimate their uncertainty.
+
+        Voxels with non-positive or non-finite normalization are masked
+        to NaN in-place in `d`, `n`, and `v` before normalizing.
+
+        Parameters
+        ----------
+        d : ndarray
+            Raw observed event counts. Modified in place (masked to NaN
+            where invalid).
+        n : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as
+            `d`. Modified in place (masked to NaN where invalid).
+        v : ndarray
+            Variance proxy (e.g. clipped counts), same shape as `d`.
+            Modified in place (masked to NaN where invalid).
+        rel_err : float, optional
+            Percentile of `v` added inside the square root when
+            estimating the uncertainty, used as a variance floor.
+            Default is 30.
+
+        Returns
+        -------
+        y_int : ndarray
+            Normalized intensity ``d / n``.
+        e_int : ndarray
+            Estimated uncertainty
+            ``sqrt(v + percentile(v, rel_err)) / n``.
+        """
         mask = (n > 0) & np.isfinite(n)
 
         d[~mask] = np.nan
@@ -335,6 +814,53 @@ class PeakEllipsoid:
         return y_int, e_int
 
     def profile_project(self, x0, x1, x2, d, n, w, mode="3d"):
+        """
+        Project raw counts, normalization, variance proxy, and weight onto a given mode.
+
+        For `"1d_i"` modes, sums/averages over the two axes other than
+        `i`; for `"2d_i"` modes, sums/averages over axis `i` only; for
+        `"3d"`, returns copies of the full arrays. Normalization counts
+        are averaged (not summed) and rescaled by the voxel size of the
+        integrated-out axes so that `n_int` remains a rate (as needed for
+        `d_int / n_int` to be a mean intensity). Voxels with invalid
+        input (non-finite or non-positive `n`) are excluded before
+        projecting, and projected voxels with invalid resulting
+        normalization are masked to NaN in all four outputs.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        d : ndarray
+            Raw observed event counts, 3D array matching `x0`'s shape.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as `d`.
+        w : ndarray
+            Per-voxel fit weight, same shape as `d`.
+        mode : str, optional
+            Projection mode: one of ``"1d_0", "1d_1", "1d_2", "2d_0",
+            "2d_1", "2d_2", "3d"``. Default is ``"3d"``.
+
+        Returns
+        -------
+        d_int : ndarray
+            Projected (summed) raw counts.
+        n_int : ndarray
+            Projected (rate-averaged) normalization counts.
+        v_int : ndarray
+            Projected (summed) variance proxy from ``clip(d, 0, None)``.
+        w_int : ndarray
+            Projected (averaged) fit weight.
+
+        Raises
+        ------
+        ValueError
+            If `mode` is not one of the recognized mode strings.
+        """
         dx0, dx1, dx2 = self.voxels(x0, x1, x2)
 
         d0 = np.asarray(d, dtype=float).copy()
@@ -393,6 +919,37 @@ class PeakEllipsoid:
         return d_int, n_int, v_int, w_int
 
     def normalize(self, x0, x1, x2, d, n, w, mode="3d"):
+        """
+        Project raw data onto a mode and normalize it into a weighted intensity/uncertainty.
+
+        Combines `profile_project` and `data_norm`, dividing the
+        resulting uncertainty by the projected fit weight.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        d : ndarray
+            Raw observed event counts.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as `d`.
+        w : ndarray
+            Per-voxel fit weight, same shape as `d`.
+        mode : str, optional
+            Projection mode passed to `profile_project`. Default is
+            ``"3d"``.
+
+        Returns
+        -------
+        y_int : ndarray
+            Normalized intensity for the given mode.
+        e_int : ndarray
+            Weight-scaled uncertainty for the given mode.
+        """
         d_int, n_int, v_int, w_int = self.profile_project(
             x0, x1, x2, d, n, w, mode=mode
         )
@@ -402,6 +959,35 @@ class PeakEllipsoid:
         return y_int, e_int / w_int
 
     def ellipsoid_covariance(self, inv_S, mode="3d", perc=99.7):
+        """
+        Rescale (a projection of) the inverse covariance to a given confidence-contour level.
+
+        `r0, r1, r2` are on the 99.7%-contour convention (see
+        `_R_SCALE_3D`), so `inv_S` itself corresponds to the
+        `perc=99.7` contour in 3D; this method converts `inv_S` (or a
+        lower-dimensional marginal/slice of it, depending on `mode`) to
+        the inverse-variance matrix for an arbitrary percentile `perc`
+        of the corresponding chi-squared distribution.
+
+        Parameters
+        ----------
+        inv_S : ndarray of shape (3, 3)
+            Inverse ellipsoid covariance-like matrix.
+        mode : str, optional
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``, selecting which
+            marginal/slice of `inv_S` to use. Default is ``"3d"``.
+        perc : float, optional
+            Target confidence-contour percentile (0-100). Default is
+            99.7.
+
+        Returns
+        -------
+        inv_var : ndarray or float
+            For `"3d"` and `"2d_*"` modes, the rescaled inverse-variance
+            matrix (ndarray of shape (3, 3) or (2, 2) respectively); for
+            `"1d_*"` modes, the rescaled scalar inverse variance (float).
+        """
         if mode == "3d":
             scale = scipy.stats.chi2.ppf(perc / 100, df=3)
             inv_var = inv_S * scale
@@ -427,6 +1013,23 @@ class PeakEllipsoid:
         return inv_var
 
     def coerce_weight(self, target, weight=None):
+        """
+        Normalize a weight argument into an array matching the target's shape.
+
+        Parameters
+        ----------
+        target : array_like
+            Array whose shape the returned weight array should match.
+        weight : None, scalar, or array_like, optional
+            If ``None``, a weight of 1.0 everywhere is returned. If a
+            scalar, it is broadcast to `target`'s shape. If array-like,
+            it is coerced to a float ndarray as-is. Default is ``None``.
+
+        Returns
+        -------
+        weight : ndarray
+            Float array of weights matching `target`'s shape.
+        """
         target = np.asarray(target)
 
         if weight is None:
@@ -437,6 +1040,26 @@ class PeakEllipsoid:
         return np.asarray(weight, dtype=float)
 
     def coerce_weights(self, targets, weights=None):
+        """
+        Apply `coerce_weight` element-wise across parallel lists of targets and weights.
+
+        Parameters
+        ----------
+        targets : sequence of array_like
+            Sequence of arrays whose shapes the returned weights should
+            match.
+        weights : None or sequence, optional
+            If ``None``, each target gets a weight of ``None`` (resolved
+            to all-ones by `coerce_weight`). Otherwise a sequence of the
+            same length as `targets`, each element passed to
+            `coerce_weight`. Default is ``None``.
+
+        Returns
+        -------
+        weights : list of ndarray
+            One coerced weight array per target, in the same order as
+            `targets`.
+        """
         if weights is None:
             weights = [None] * len(targets)
 
@@ -446,6 +1069,33 @@ class PeakEllipsoid:
         ]
 
     def uniform_mode_weights(self, ys, es, val=1.0):
+        """
+        Build uniform per-mode weight arrays scaled by the total valid point count.
+
+        Each returned weight array is filled with the constant
+        ``sqrt(val) / sqrt(n_valid)``, where `n_valid` is the total
+        number of finite, positive-uncertainty points summed across all
+        `ys`/`es` pairs. This gives each mode a total weight contribution
+        proportional to `val`, independent of how many valid points it
+        has.
+
+        Parameters
+        ----------
+        ys : sequence of ndarray
+            Per-mode intensity arrays (only used, via `es`, to count
+            valid points).
+        es : sequence of ndarray
+            Per-mode uncertainty arrays, one per element of `ys`.
+        val : float, optional
+            Overall target weight scale for this group of modes. Default
+            is 1.0.
+
+        Returns
+        -------
+        weights : list of ndarray
+            One uniform weight array per element of `es`, matching its
+            shape.
+        """
         n_valid = sum(
             np.count_nonzero(np.isfinite(y) & np.isfinite(e) & (e > 0))
             for y, e in zip(ys, es)
@@ -458,6 +1108,46 @@ class PeakEllipsoid:
     def poisson_deviance_fit(
         self, x0, x1, x2, c, inv_S, y_fit, y, e, mode="3d"
     ):
+        """
+        Reduced Poisson deviance goodness-of-fit statistic within 1-sigma of the peak center.
+
+        Restricts to voxels within a Mahalanobis distance
+        ``d2 <= 2**(2/k)`` of the center (`k` = dimensionality of `mode`),
+        approximates the underlying raw counts and normalization from the
+        normalized intensity/uncertainty (`y`, `e`) via the Poisson error
+        model, then computes the reduced Poisson deviance
+        ``2*(mu - d + d*log(d/mu))`` between the approximated observed
+        counts and the model counts, divided by the degrees of freedom.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        c : sequence of float
+            Peak center ``(c0, c1, c2)``.
+        inv_S : ndarray of shape (3, 3)
+            Inverse ellipsoid covariance-like matrix.
+        y_fit : ndarray
+            Fitted (model) normalized intensity, same shape as `y`.
+        y : ndarray
+            Observed normalized intensity for this mode.
+        e : ndarray
+            Uncertainty on `y`, same shape as `y`.
+        mode : str, optional
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``. Default is ``"3d"``.
+
+        Returns
+        -------
+        reduced_deviance : float
+            The Poisson deviance summed over included voxels, divided by
+            the degrees of freedom, or ``inf`` if the degrees of freedom
+            are not positive.
+        """
         c0, c1, c2 = c
 
         dx0, dx1, dx2 = x0 - c0, x1 - c1, x2 - c2
@@ -537,6 +1227,51 @@ class PeakEllipsoid:
     def estimate_intensity(
         self, x0, x1, x2, c, inv_S, y_fit, y, e, mode="3d", bkg_offset=None
     ):
+        """
+        Background-subtracted box-sum intensity and uncertainty within the 1-sigma peak region.
+
+        Sums the background-subtracted normalized intensity over voxels
+        within Mahalanobis distance 1 of the center (``d2 <= 1``),
+        scaled by the voxel volume of the mode's non-integrated axes.
+        The background level and its uncertainty are taken from the
+        fitted ``B<mode>`` parameter. This is the `I_1d`, `I_2d`, or
+        `I_3d` box-sum estimator (depending on `mode`), distinct from
+        `I_ell` and `I_prof`.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        c : sequence of float
+            Peak center ``(c0, c1, c2)``.
+        inv_S : ndarray of shape (3, 3)
+            Inverse ellipsoid covariance-like matrix.
+        y_fit : ndarray
+            Fitted (model) normalized intensity (unused except to match
+            the calling signature shared with `poisson_deviance_fit`).
+        y : ndarray
+            Observed normalized intensity for this mode.
+        e : ndarray
+            Uncertainty on `y`, same shape as `y`.
+        mode : str, optional
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``. Default is ``"3d"``.
+        bkg_offset : ndarray, optional
+            Additional per-voxel background-rate offset (e.g. from a
+            measured background monitor) to subtract along with the
+            fitted background level `B<mode>`. Default is ``None``.
+
+        Returns
+        -------
+        I : float
+            Background-subtracted, volume-scaled summed intensity.
+        sig : float
+            Propagated uncertainty on `I`.
+        """
         c0, c1, c2 = c
 
         dx0, dx1, dx2 = x0 - c0, x1 - c1, x2 - c2
@@ -605,6 +1340,39 @@ class PeakEllipsoid:
         return I, sig
 
     def gaussian(self, x0, x1, x2, c, inv_S, mode="3d"):
+        """
+        Evaluate the unnormalized (peak-value-1) Gaussian profile for a given mode.
+
+        The inverse covariance used is `inv_S` rescaled from the
+        99.7%-contour convention to a unit-variance (1-sigma) convention
+        via `ellipsoid_covariance`, so that the returned Gaussian has
+        value 1 at the center and falls to ``exp(-0.5)`` at Mahalanobis
+        distance 1.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        c : sequence of float
+            Peak center ``(c0, c1, c2)``.
+        inv_S : ndarray of shape (3, 3)
+            Inverse ellipsoid covariance-like matrix (99.7%-contour
+            convention).
+        mode : str, optional
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``. Default is ``"3d"``.
+
+        Returns
+        -------
+        g : ndarray
+            Unnormalized Gaussian profile evaluated on the mode's
+            coordinate grid, with the same shape as the corresponding
+            projected axis/axes of `x0`, `x1`, `x2`.
+        """
         c0, c1, c2 = c
 
         dx0, dx1, dx2 = x0 - c0, x1 - c1, x2 - c2
@@ -636,6 +1404,33 @@ class PeakEllipsoid:
         return np.exp(-0.5 * d2)
 
     def inv_S_deriv_r(self, r0, r1, r2, u0, u1, u2):
+        """
+        Analytic derivatives of `inv_S` with respect to each radius r0, r1, r2.
+
+        Parameters
+        ----------
+        r0 : float
+            Ellipsoid principal radius along the first rotated axis.
+        r1 : float
+            Ellipsoid principal radius along the second rotated axis.
+        r2 : float
+            Ellipsoid principal radius along the third rotated axis.
+        u0 : float
+            First component of the orientation rotation vector.
+        u1 : float
+            Second component of the orientation rotation vector.
+        u2 : float
+            Third component of the orientation rotation vector.
+
+        Returns
+        -------
+        dinv_S0 : ndarray of shape (3, 3)
+            d(inv_S)/d(r0).
+        dinv_S1 : ndarray of shape (3, 3)
+            d(inv_S)/d(r1).
+        dinv_S2 : ndarray of shape (3, 3)
+            d(inv_S)/d(r2).
+        """
         U = self.U_matrix(u0, u1, u2)
 
         dinv_S0 = U @ np.diag([-2 / r0**3, 0, 0]) @ U.T
@@ -645,6 +1440,37 @@ class PeakEllipsoid:
         return dinv_S0, dinv_S1, dinv_S2
 
     def inv_S_deriv_u(self, r0, r1, r2, u0, u1, u2):
+        """
+        Analytic derivatives of `inv_S` with respect to each rotation-vector component u0, u1, u2.
+
+        Uses the finite-difference orientation derivatives from
+        `U_deriv_u` combined with the product rule for
+        ``inv_S = U @ V @ U.T``.
+
+        Parameters
+        ----------
+        r0 : float
+            Ellipsoid principal radius along the first rotated axis.
+        r1 : float
+            Ellipsoid principal radius along the second rotated axis.
+        r2 : float
+            Ellipsoid principal radius along the third rotated axis.
+        u0 : float
+            First component of the orientation rotation vector.
+        u1 : float
+            Second component of the orientation rotation vector.
+        u2 : float
+            Third component of the orientation rotation vector.
+
+        Returns
+        -------
+        dinv_S0 : ndarray of shape (3, 3)
+            d(inv_S)/d(u0).
+        dinv_S1 : ndarray of shape (3, 3)
+            d(inv_S)/d(u1).
+        dinv_S2 : ndarray of shape (3, 3)
+            d(inv_S)/d(u2).
+        """
         V = np.diag([1 / r0**2, 1 / r1**2, 1 / r2**2])
 
         U = self.U_matrix(u0, u1, u2)
@@ -657,6 +1483,29 @@ class PeakEllipsoid:
         return dinv_S0, dinv_S1, dinv_S2
 
     def U_deriv_u(self, u0, u1, u2, delta=1e-6):
+        """
+        Finite-difference derivatives of the rotation matrix U with respect to u0, u1, u2.
+
+        Parameters
+        ----------
+        u0 : float
+            First component of the orientation rotation vector.
+        u1 : float
+            Second component of the orientation rotation vector.
+        u2 : float
+            Third component of the orientation rotation vector.
+        delta : float, optional
+            Finite-difference step size. Default is 1e-6.
+
+        Returns
+        -------
+        dU0 : ndarray of shape (3, 3)
+            d(U)/d(u0), by central difference.
+        dU1 : ndarray of shape (3, 3)
+            d(U)/d(u1), by central difference.
+        dU2 : ndarray of shape (3, 3)
+            d(U)/d(u2), by central difference.
+        """
         dU0 = self.U_matrix(u0 + delta, u1, u2) - self.U_matrix(
             u0 - delta, u1, u2
         )
@@ -670,6 +1519,30 @@ class PeakEllipsoid:
         return 0.5 * dU0 / delta, 0.5 * dU1 / delta, 0.5 * dU2 / delta
 
     def gaussian_integral(self, inv_S, mode="3d"):
+        """
+        Normalization integral of the unit-peak Gaussian for a given mode.
+
+        Computes ``sqrt((2*pi)**k * det)``, where `k` is the
+        dimensionality of `mode` and `det` is the determinant (or scalar
+        value, for 1D modes) of the 1-sigma covariance matrix
+        corresponding to `inv_S`. Multiplying this by the peak amplitude
+        `A` gives the volume under the normalized Gaussian, i.e. the
+        total fitted intensity for that mode.
+
+        Parameters
+        ----------
+        inv_S : ndarray of shape (3, 3)
+            Inverse ellipsoid covariance-like matrix (99.7%-contour
+            convention).
+        mode : str, optional
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``. Default is ``"3d"``.
+
+        Returns
+        -------
+        integral : float
+            Normalization integral of the unit-peak Gaussian.
+        """
         inv_var = self.ellipsoid_covariance(inv_S, mode)
 
         if mode == "3d":
@@ -685,6 +1558,33 @@ class PeakEllipsoid:
         return np.sqrt((2 * np.pi) ** k * det)
 
     def gaussian_integral_jac_S(self, inv_S, d_inv_S, mode="3d"):
+        """
+        Derivative of `gaussian_integral` with respect to the shape (r0, r1, r2 or u0, u1, u2) parameters.
+
+        Uses the Jacobi's-formula identity
+        ``d(det(M))/dx = det(M) * trace(M^-1 dM/dx)`` applied to the
+        1-sigma covariance implied by `inv_S`, restricted per `mode` to
+        the relevant marginal/slice.
+
+        Parameters
+        ----------
+        inv_S : ndarray of shape (3, 3)
+            Inverse ellipsoid covariance-like matrix (99.7%-contour
+            convention).
+        d_inv_S : sequence of ndarray
+            Three derivatives of `inv_S`, e.g. from `inv_S_deriv_r` or
+            `inv_S_deriv_u`, each of shape (3, 3).
+        mode : str, optional
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``. Default is ``"3d"``.
+
+        Returns
+        -------
+        dg : ndarray of shape (3,)
+            Derivative of `gaussian_integral` with respect to each of the
+            three shape parameters corresponding to `d_inv_S`; entries
+            for axes not used by `mode` are zero.
+        """
         inv_var = self.ellipsoid_covariance(inv_S, mode)
 
         if mode == "3d":
@@ -731,6 +1631,34 @@ class PeakEllipsoid:
         return 0.5 * g * np.array([g0, g1, g2])
 
     def gaussian_jac_c(self, x0, x1, x2, c, inv_S, mode="3d"):
+        """
+        Derivative of the unnormalized `gaussian` profile with respect to the center c0, c1, c2.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        c : sequence of float
+            Peak center ``(c0, c1, c2)``.
+        inv_S : ndarray of shape (3, 3)
+            Inverse ellipsoid covariance-like matrix (99.7%-contour
+            convention).
+        mode : str, optional
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``. Default is ``"3d"``.
+
+        Returns
+        -------
+        dg : ndarray
+            Stacked derivatives ``[dg/dc0, dg/dc1, dg/dc2]`` evaluated on
+            the mode's coordinate grid; entries for axes not used by
+            `mode` are zero, with shape matching the corresponding
+            projected axis/axes of `x0`, `x1`, `x2`.
+        """
         c0, c1, c2 = c
 
         dx0, dx1, dx2 = x0 - c0, x1 - c1, x2 - c2
@@ -777,6 +1705,43 @@ class PeakEllipsoid:
         return g * np.array([g0, g1, g2])
 
     def gaussian_jac_S(self, x0, x1, x2, c, inv_S, d_inv_S, mode="3d"):
+        """
+        Derivative of the unnormalized `gaussian` profile with respect to a shape parameter group.
+
+        Given the derivatives of `inv_S` with respect to a group of
+        three shape parameters (radii via `inv_S_deriv_r`, or
+        orientation via `inv_S_deriv_u`), returns the corresponding
+        derivatives of the Gaussian profile itself.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        c : sequence of float
+            Peak center ``(c0, c1, c2)``.
+        inv_S : ndarray of shape (3, 3)
+            Inverse ellipsoid covariance-like matrix (99.7%-contour
+            convention).
+        d_inv_S : sequence of ndarray
+            Three derivatives of `inv_S` with respect to the shape
+            parameter group (e.g. from `inv_S_deriv_r` or
+            `inv_S_deriv_u`), each of shape (3, 3).
+        mode : str, optional
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``. Default is ``"3d"``.
+
+        Returns
+        -------
+        dg : ndarray
+            Stacked derivatives of the Gaussian profile with respect to
+            each of the three shape parameters corresponding to
+            `d_inv_S`, evaluated on the mode's coordinate grid; entries
+            for axes not used by `mode` are zero.
+        """
         c0, c1, c2 = c
 
         dx0, dx1, dx2 = x0 - c0, x1 - c1, x2 - c2
@@ -829,6 +1794,27 @@ class PeakEllipsoid:
         return -0.5 * g * np.array([g0, g1, g2])
 
     def counts_to_intensity_uncertainty(self, d, n):
+        """
+        Convert raw counts and normalization into normalized intensity and its uncertainty.
+
+        Uncertainty uses the ``sqrt(d + 1)`` Poisson approximation
+        (avoiding zero uncertainty when ``d == 0``).
+
+        Parameters
+        ----------
+        d : ndarray
+            Raw observed event counts.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as `d`.
+
+        Returns
+        -------
+        y : ndarray
+            Normalized intensity ``d / n``, NaN where ``n <= 0``.
+        e : ndarray
+            Uncertainty ``sqrt(clip(d, 0, None) + 1) / n``, NaN where
+            ``n <= 0``.
+        """
         d = np.asarray(d, dtype=float)
         n = np.asarray(n, dtype=float)
         y = np.divide(
@@ -843,6 +1829,47 @@ class PeakEllipsoid:
         return y, e
 
     def poisson_deviance_residual_factor(self, d, mu, w=None, eps=1e-12):
+        """
+        Signed Poisson deviance residual and its derivative factor with respect to mu.
+
+        Computes the signed square-root deviance residual
+        ``r = sign(mu - d) * sqrt(2*(mu - d + d*log(d/mu)))`` (0 when
+        ``d == 0``) for each valid voxel, together with the factor
+        ``dr/dmu`` needed to chain-rule the Jacobian of a residual-based
+        least-squares fit against a Poisson likelihood
+        (`jacobian_mode_poisson`). Near `mu == d`, the residual and its
+        derivative are evaluated via the limiting expression to avoid a
+        0/0 division. For `mu < 0` (unphysical during optimization), the
+        deviance is evaluated at a small positive floor and linearly
+        extrapolated to the true (negative) `mu`, giving a large, correctly
+        signed residual with a bounded Jacobian instead of diverging.
+        Weights are applied multiplicatively to both `r` and `dr/dmu`.
+
+        Parameters
+        ----------
+        d : ndarray
+            Observed (approximate) raw counts.
+        mu : ndarray
+            Model (expected) counts, same shape as `d`.
+        w : ndarray, optional
+            Per-voxel weight applied to the residual and its derivative.
+            If ``None``, weights of 1 are used. Default is ``None``.
+        eps : float, optional
+            Small positive floor used when clipping `mu` for the
+            non-negative branch. Default is 1e-12.
+
+        Returns
+        -------
+        r : ndarray
+            Signed weighted deviance residual, same shape as `mu`, NaN
+            where invalid.
+        dr_dmu : ndarray
+            Weighted derivative of `r` with respect to `mu`, same shape
+            as `mu`, NaN where invalid.
+        valid : ndarray of bool
+            Mask of voxels where `d`, `mu`, and `w` are finite and
+            ``d >= 0``.
+        """
         d = np.asarray(d, dtype=float)
         mu = np.asarray(mu, dtype=float)
         if w is None:
@@ -915,6 +1942,50 @@ class PeakEllipsoid:
     def mode_model_counts(
         self, params, x0, x1, x2, d, n, w, c, inv_S, mode, bkg=None
     ):
+        """
+        Compute the Poisson model counts mu = n*(A*gaussian + B) [+ bkg] for one mode.
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters; must contain ``A<mode>`` and
+            ``B<mode>``.
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        d : ndarray
+            Raw observed event counts for this mode (unused in the
+            computation but kept for a uniform call signature).
+        n : ndarray
+            Normalization (monitor/solid-angle) counts for this mode.
+        w : ndarray
+            Per-voxel fit weight for this mode (unused in the
+            computation but kept for a uniform call signature).
+        c : sequence of float
+            Peak center ``(c0, c1, c2)``.
+        inv_S : ndarray of shape (3, 3)
+            Inverse ellipsoid covariance-like matrix.
+        mode : str
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``.
+        bkg : ndarray, optional
+            Additional fixed background counts to add to the model.
+            Default is ``None``.
+
+        Returns
+        -------
+        mu : ndarray
+            Model (expected) counts.
+        g : ndarray
+            Unnormalized Gaussian profile used in the model.
+        A : float
+            Current value of the ``A<mode>`` amplitude parameter.
+        B : float
+            Current value of the ``B<mode>`` background parameter.
+        """
         A = params["A" + mode].value
         B = params["B" + mode].value
         g = self.gaussian(x0, x1, x2, c, inv_S, mode)
@@ -926,6 +1997,43 @@ class PeakEllipsoid:
     def residual_mode_poisson(
         self, params, x0, x1, x2, d, n, w, c, inv_S, mode, bkg=None
     ):
+        """
+        Flattened Poisson-deviance residual vector for one mode, for use in least-squares fitting.
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters; must contain ``A<mode>`` and
+            ``B<mode>``.
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        d : ndarray
+            Raw observed event counts for this mode.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts for this mode.
+        w : None, scalar, or ndarray
+            Per-voxel weight for this mode; coerced via `coerce_weight`.
+        c : sequence of float
+            Peak center ``(c0, c1, c2)``.
+        inv_S : ndarray of shape (3, 3)
+            Inverse ellipsoid covariance-like matrix.
+        mode : str
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``.
+        bkg : ndarray, optional
+            Additional fixed background counts added to the model.
+            Default is ``None``.
+
+        Returns
+        -------
+        res : ndarray
+            Flattened array of signed Poisson deviance residuals for
+            voxels with valid data.
+        """
         w = self.coerce_weight(d, w)
         mu, g, A, B = self.mode_model_counts(
             params, x0, x1, x2, d, n, w, c, inv_S, mode, bkg
@@ -949,6 +2057,56 @@ class PeakEllipsoid:
         mode,
         bkg=None,
     ):
+        """
+        Analytic Jacobian of `residual_mode_poisson` with respect to the varying fit parameters.
+
+        Chain-rules the deviance-residual derivative factor from
+        `poisson_deviance_residual_factor` through the model
+        ``mu = n*(A*gaussian + B) [+ bkg]``, using the precomputed
+        Gaussian derivatives with respect to center (`gaussian_jac_c`)
+        and shape (`gaussian_jac_S`, applied once for `dr` and once for
+        `du`).
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters; must contain ``A<mode>``, ``B<mode>``,
+            ``c0, c1, c2, r0, r1, r2, u0, u1, u2``.
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        d : ndarray
+            Raw observed event counts for this mode.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts for this mode.
+        w : None, scalar, or ndarray
+            Per-voxel weight for this mode; coerced via `coerce_weight`.
+        c : sequence of float
+            Peak center ``(c0, c1, c2)``.
+        inv_S : ndarray of shape (3, 3)
+            Inverse ellipsoid covariance-like matrix.
+        dr : tuple of ndarray
+            Derivatives of `inv_S` with respect to ``r0, r1, r2`` (from
+            `inv_S_deriv_r`).
+        du : tuple of ndarray
+            Derivatives of `inv_S` with respect to ``u0, u1, u2`` (from
+            `inv_S_deriv_u`).
+        mode : str
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``.
+        bkg : ndarray, optional
+            Additional fixed background counts added to the model.
+            Default is ``None``.
+
+        Returns
+        -------
+        jac : ndarray of shape (n_vary, n_valid)
+            Jacobian rows restricted to varying parameters and columns
+            restricted to voxels with valid data.
+        """
         params_list = [name for name, par in params.items()]
         n_params = len(params_list)
 
@@ -1007,6 +2165,43 @@ class PeakEllipsoid:
         c=None,
         inv_S=None,
     ):
+        """
+        Concatenated Poisson-deviance residuals across all three 1D projections.
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters.
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        ds : sequence of ndarray
+            Raw observed counts for modes ``("1d_0", "1d_1", "1d_2")``,
+            in that order.
+        ns : sequence of ndarray
+            Normalization counts, one per element of `ds`.
+        ws : sequence, optional
+            Per-mode weights, one per element of `ds`; coerced via
+            `coerce_weights`. Default is ``None``.
+        bkgs : sequence of ndarray, optional
+            Per-mode additional fixed background counts, one per element
+            of `ds`. If ``None``, no extra background is added. Default
+            is ``None``.
+        c : sequence of float, optional
+            Peak center ``(c0, c1, c2)``. Default is ``None``.
+        inv_S : ndarray of shape (3, 3), optional
+            Inverse ellipsoid covariance-like matrix. Default is
+            ``None``.
+
+        Returns
+        -------
+        res : ndarray
+            Concatenation of `residual_mode_poisson` outputs for modes
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``.
+        """
         d0, d1, d2 = ds
         n0, n1, n2 = ns
         w0, w1, w2 = self.coerce_weights(ds, ws)
@@ -1041,6 +2236,48 @@ class PeakEllipsoid:
         dr=None,
         du=None,
     ):
+        """
+        Concatenated (column-stacked) Poisson-deviance Jacobians across all three 1D projections.
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters.
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        ds : sequence of ndarray
+            Raw observed counts for modes ``("1d_0", "1d_1", "1d_2")``,
+            in that order.
+        ns : sequence of ndarray
+            Normalization counts, one per element of `ds`.
+        ws : sequence, optional
+            Per-mode weights, one per element of `ds`; coerced via
+            `coerce_weights`. Default is ``None``.
+        bkgs : sequence of ndarray, optional
+            Per-mode additional fixed background counts, one per element
+            of `ds`. Default is ``None``.
+        c : sequence of float, optional
+            Peak center ``(c0, c1, c2)``. Default is ``None``.
+        inv_S : ndarray of shape (3, 3), optional
+            Inverse ellipsoid covariance-like matrix. Default is
+            ``None``.
+        dr : tuple of ndarray, optional
+            Derivatives of `inv_S` with respect to ``r0, r1, r2``.
+            Default is ``None``.
+        du : tuple of ndarray, optional
+            Derivatives of `inv_S` with respect to ``u0, u1, u2``.
+            Default is ``None``.
+
+        Returns
+        -------
+        jac : ndarray
+            Column-stack of `jacobian_mode_poisson` outputs for modes
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``.
+        """
         d0, d1, d2 = ds
         n0, n1, n2 = ns
         w0, w1, w2 = self.coerce_weights(ds, ws)
@@ -1109,6 +2346,42 @@ class PeakEllipsoid:
         c=None,
         inv_S=None,
     ):
+        """
+        Concatenated Poisson-deviance residuals across all three 2D projections.
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters.
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        ds : sequence of ndarray
+            Raw observed counts for modes ``("2d_0", "2d_1", "2d_2")``,
+            in that order.
+        ns : sequence of ndarray
+            Normalization counts, one per element of `ds`.
+        ws : sequence, optional
+            Per-mode weights, one per element of `ds`; coerced via
+            `coerce_weights`. Default is ``None``.
+        bkgs : sequence of ndarray, optional
+            Per-mode additional fixed background counts, one per element
+            of `ds`. Default is ``None``.
+        c : sequence of float, optional
+            Peak center ``(c0, c1, c2)``. Default is ``None``.
+        inv_S : ndarray of shape (3, 3), optional
+            Inverse ellipsoid covariance-like matrix. Default is
+            ``None``.
+
+        Returns
+        -------
+        res : ndarray
+            Concatenation of `residual_mode_poisson` outputs for modes
+            ``"2d_0"``, ``"2d_1"``, ``"2d_2"``.
+        """
         d0, d1, d2 = ds
         n0, n1, n2 = ns
         w0, w1, w2 = self.coerce_weights(ds, ws)
@@ -1143,6 +2416,48 @@ class PeakEllipsoid:
         dr=None,
         du=None,
     ):
+        """
+        Concatenated (column-stacked) Poisson-deviance Jacobians across all three 2D projections.
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters.
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        ds : sequence of ndarray
+            Raw observed counts for modes ``("2d_0", "2d_1", "2d_2")``,
+            in that order.
+        ns : sequence of ndarray
+            Normalization counts, one per element of `ds`.
+        ws : sequence, optional
+            Per-mode weights, one per element of `ds`; coerced via
+            `coerce_weights`. Default is ``None``.
+        bkgs : sequence of ndarray, optional
+            Per-mode additional fixed background counts, one per element
+            of `ds`. Default is ``None``.
+        c : sequence of float, optional
+            Peak center ``(c0, c1, c2)``. Default is ``None``.
+        inv_S : ndarray of shape (3, 3), optional
+            Inverse ellipsoid covariance-like matrix. Default is
+            ``None``.
+        dr : tuple of ndarray, optional
+            Derivatives of `inv_S` with respect to ``r0, r1, r2``.
+            Default is ``None``.
+        du : tuple of ndarray, optional
+            Derivatives of `inv_S` with respect to ``u0, u1, u2``.
+            Default is ``None``.
+
+        Returns
+        -------
+        jac : ndarray
+            Column-stack of `jacobian_mode_poisson` outputs for modes
+            ``"2d_0"``, ``"2d_1"``, ``"2d_2"``.
+        """
         d0, d1, d2 = ds
         n0, n1, n2 = ns
         w0, w1, w2 = self.coerce_weights(ds, ws)
@@ -1201,6 +2516,41 @@ class PeakEllipsoid:
     def residual_3d(
         self, params, x0, x1, x2, d, n, w=None, bkg=None, c=None, inv_S=None
     ):
+        """
+        Poisson-deviance residual vector for the full 3D volume.
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters.
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        d : ndarray
+            Raw observed event counts, 3D array.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as `d`.
+        w : None, scalar, or ndarray, optional
+            Per-voxel weight; coerced via `coerce_weight`. Default is
+            ``None``.
+        bkg : ndarray, optional
+            Additional fixed background counts added to the model.
+            Default is ``None``.
+        c : sequence of float, optional
+            Peak center ``(c0, c1, c2)``. Default is ``None``.
+        inv_S : ndarray of shape (3, 3), optional
+            Inverse ellipsoid covariance-like matrix. Default is
+            ``None``.
+
+        Returns
+        -------
+        res : ndarray
+            Flattened array of signed Poisson deviance residuals for
+            voxels with valid data.
+        """
         w = self.coerce_weight(d, w)
         return self.residual_mode_poisson(
             params, x0, x1, x2, d, n, w, c, inv_S, "3d", bkg
@@ -1221,12 +2571,85 @@ class PeakEllipsoid:
         dr=None,
         du=None,
     ):
+        """
+        Poisson-deviance Jacobian for the full 3D volume.
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters.
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        d : ndarray
+            Raw observed event counts, 3D array.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as `d`.
+        w : None, scalar, or ndarray, optional
+            Per-voxel weight; coerced via `coerce_weight`. Default is
+            ``None``.
+        bkg : ndarray, optional
+            Additional fixed background counts added to the model.
+            Default is ``None``.
+        c : sequence of float, optional
+            Peak center ``(c0, c1, c2)``. Default is ``None``.
+        inv_S : ndarray of shape (3, 3), optional
+            Inverse ellipsoid covariance-like matrix. Default is
+            ``None``.
+        dr : tuple of ndarray, optional
+            Derivatives of `inv_S` with respect to ``r0, r1, r2``.
+            Default is ``None``.
+        du : tuple of ndarray, optional
+            Derivatives of `inv_S` with respect to ``u0, u1, u2``.
+            Default is ``None``.
+
+        Returns
+        -------
+        jac : ndarray of shape (n_vary, n_valid)
+            Jacobian rows restricted to varying parameters and columns
+            restricted to voxels with valid data.
+        """
         w = self.coerce_weight(d, w)
         return self.jacobian_mode_poisson(
             params, x0, x1, x2, d, n, w, c, inv_S, dr, du, "3d", bkg
         )
 
     def residual(self, params, args_1d, args_2d, args_3d):
+        """
+        Full stacked residual vector combining all modes, the prior, and the volume penalty.
+
+        Computes the center and inverse covariance from `params`, then
+        concatenates the 1D, 2D, and 3D Poisson-deviance residuals with
+        the prior residual (`prior_residual`) and the volume penalty
+        residual (`volume_penalty_residual`). Non-finite entries are
+        replaced with 0 or a large finite value so that
+        `scipy.optimize.least_squares` sees a well-behaved cost vector.
+        This is the residual function passed to `lmfit.Minimizer` in
+        `sweep`.
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters.
+        args_1d : sequence
+            Positional arguments (after `params, x0, x1, x2`) for
+            `residual_1d`, i.e. ``(x0, x1, x2, ds, ns, ws, bkgs)``.
+        args_2d : sequence
+            Positional arguments for `residual_2d`, i.e.
+            ``(x0, x1, x2, ds, ns, ws, bkgs)``.
+        args_3d : sequence
+            Positional arguments for `residual_3d`, i.e.
+            ``(x0, x1, x2, d, n, w, bkg)``.
+
+        Returns
+        -------
+        cost : ndarray
+            Concatenated residual vector (1D + 2D + 3D + prior + volume
+            penalty terms), with NaN/inf sanitized.
+        """
         c0 = params["c0"].value
         c1 = params["c1"].value
         c2 = params["c2"].value
@@ -1247,7 +2670,12 @@ class PeakEllipsoid:
         cost_2d = self.residual_2d(params, *args_2d, c, inv_S)
         cost_3d = self.residual_3d(params, *args_3d, c, inv_S)
         cost_prior = self.prior_residual(params)
-        cost_vol = self.volume_penalty_residual(params)
+        cost_vol = np.concatenate(
+            [
+                self.volume_penalty_residual(params, mode)
+                for mode in self._PENALTY_MODES
+            ]
+        )
 
         cost = np.concatenate(
             [cost_1d, cost_2d, cost_3d, cost_prior, cost_vol]
@@ -1257,6 +2685,38 @@ class PeakEllipsoid:
         return cost
 
     def jacobian(self, params, args_1d, args_2d, args_3d):
+        """
+        Full stacked Jacobian matching the residual ordering of `residual`.
+
+        Computes the center, inverse covariance, and shape derivatives
+        (`inv_S_deriv_r`, `inv_S_deriv_u`) from `params`, then
+        column-stacks the 1D, 2D, and 3D Poisson-deviance Jacobians with
+        the prior Jacobian (`prior_jacobian`) and the volume penalty
+        Jacobian (`volume_penalty_jacobian`), and transposes to the
+        ``(n_residuals, n_vary)`` convention expected by
+        `scipy.optimize.least_squares`. This is the Jacobian function
+        passed to `lmfit.Minimizer.minimize` in `sweep`.
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters.
+        args_1d : sequence
+            Positional arguments for `jacobian_1d`, i.e.
+            ``(x0, x1, x2, ds, ns, ws, bkgs)``.
+        args_2d : sequence
+            Positional arguments for `jacobian_2d`, i.e.
+            ``(x0, x1, x2, ds, ns, ws, bkgs)``.
+        args_3d : sequence
+            Positional arguments for `jacobian_3d`, i.e.
+            ``(x0, x1, x2, d, n, w, bkg)``.
+
+        Returns
+        -------
+        jac : ndarray of shape (n_residuals, n_vary)
+            Full Jacobian matrix, with NaN/inf sanitized, transposed to
+            match the residual vector produced by `residual`.
+        """
         c0 = params["c0"].value
         c1 = params["c1"].value
         c2 = params["c2"].value
@@ -1280,7 +2740,12 @@ class PeakEllipsoid:
         jac_2d = self.jacobian_2d(params, *args_2d, c, inv_S, dr, du)
         jac_3d = self.jacobian_3d(params, *args_3d, c, inv_S, dr, du)
         jac_prior = self.prior_jacobian(params)
-        jac_vol = self.volume_penalty_jacobian(params)
+        jac_vol = np.column_stack(
+            [
+                self.volume_penalty_jacobian(params, mode)
+                for mode in self._PENALTY_MODES
+            ]
+        )
 
         jac = np.column_stack([jac_1d, jac_2d, jac_3d, jac_prior, jac_vol])
         jac = np.nan_to_num(jac, nan=0.0, posinf=1e16, neginf=-1e16)
@@ -1290,6 +2755,43 @@ class PeakEllipsoid:
     def collect_mode_fit_metrics(
         self, x0, x1, x2, c, inv_S, mode_data, bkg_offset=None
     ):
+        """
+        Evaluate the fitted profile, chi-squared, and box-sum intensity for each requested mode.
+
+        For each mode, evaluates the fitted model ``A*gaussian + B``
+        (plus any `bkg_offset`), masks invalid points, then computes the
+        reduced Poisson deviance (`poisson_deviance_fit`) and the
+        background-subtracted box-sum intensity/uncertainty
+        (`estimate_intensity`).
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        c : sequence of float
+            Peak center ``(c0, c1, c2)``.
+        inv_S : ndarray of shape (3, 3)
+            Inverse ellipsoid covariance-like matrix.
+        mode_data : dict
+            Mapping from mode string to a ``(y, e)`` tuple of observed
+            normalized intensity and uncertainty for that mode.
+        bkg_offset : dict, optional
+            Mapping from mode string to an additional per-voxel
+            background-rate offset array for that mode. Modes not
+            present in this dict get no offset. Default is ``None``.
+
+        Returns
+        -------
+        metrics : dict
+            Mapping from mode string to a list
+            ``[I0, s0, chi2, fit_triplet]``, where `I0`/`s0` are the
+            box-sum intensity/uncertainty, `chi2` is the reduced Poisson
+            deviance, and `fit_triplet` is ``(y_fit, y, e)``.
+        """
         args = x0, x1, x2, c, inv_S
 
         metrics = {}
@@ -1335,6 +2837,64 @@ class PeakEllipsoid:
         return metrics
 
     def extract_result(self, args_1d, args_2d, args_3d, xmod):
+        """
+        Finalize the fit: compute per-mode metrics and populate the post-fit result attributes.
+
+        Converts raw counts to normalized intensity/uncertainty for every
+        1D/2D/3D mode, computes background offsets from `bkg_1d`/`bkg_2d`/
+        `bkg_3d` if present, and calls `collect_mode_fit_metrics` for each
+        mode group to populate `self.reddev`, `self.intensity`,
+        `self.sigma`, and `self.fit_metrics`. Also derives the final
+        ellipsoid shape (center, radii, principal axes) by eigen-decomposing
+        ``S = inv(inv_S)``, shifts the center back by `xmod` (the modulo
+        offset the caller applied before fitting), and populates
+        `self.peak_pos`, `self.best_fit`, `self.best_prof`,
+        `self.best_bkg_prof`, and `self.best_proj` for downstream plotting
+        and intensity extraction.
+
+        Parameters
+        ----------
+        args_1d : sequence
+            ``(x0, x1, x2, d1d, n1d, w1d, bkg_1d, ...)`` where `d1d`,
+            `n1d` are 3-tuples of per-axis 1D-projected raw counts and
+            normalization, and `bkg_1d` is either ``None`` or a 3-tuple
+            of per-axis 1D-projected background counts.
+        args_2d : sequence
+            ``(x0, x1, x2, d2d, n2d, w2d, bkg_2d, ...)`` analogous to
+            `args_1d` but for the three 2D projections.
+        args_3d : sequence
+            ``(x0, x1, x2, d3d, n3d, w3d, bkg_3d, ...)`` analogous to
+            `args_1d` but for the full 3D volume.
+        xmod : float
+            Offset that was subtracted from the axis-0 coordinate before
+            fitting (e.g. to wrap a periodic axis); added back to the
+            reported center and coordinates.
+
+        Returns
+        -------
+        c0 : float
+            Fitted peak center along axis 0 (with `xmod` added back).
+        c1 : float
+            Fitted peak center along axis 1.
+        c2 : float
+            Fitted peak center along axis 2.
+        r0 : float
+            First principal radius (1-sigma) of the fitted ellipsoid.
+        r1 : float
+            Second principal radius (1-sigma) of the fitted ellipsoid.
+        r2 : float
+            Third principal radius (1-sigma) of the fitted ellipsoid.
+        v0 : ndarray of shape (3,)
+            First principal axis vector of the fitted ellipsoid.
+        v1 : ndarray of shape (3,)
+            Second principal axis vector of the fitted ellipsoid.
+        v2 : ndarray of shape (3,)
+            Third principal axis vector of the fitted ellipsoid.
+
+            If the optimized inverse covariance is not positive definite
+            (an improper fit), ``None`` is returned instead of this
+            tuple.
+        """
         x0, x1, x2, d1d, n1d, w1d, bkg_1d, *_ = args_1d
         x0, x1, x2, d2d, n2d, w2d, bkg_2d, *_ = args_2d
         x0, x1, x2, d3d, n3d, w3d, bkg_3d, *_ = args_3d
@@ -1544,6 +3104,18 @@ class PeakEllipsoid:
         return c0, c1, c2, r0, r1, r2, v0, v1, v2
 
     def extract_amplitude_background(self):
+        """
+        Collect the fitted 1D-mode amplitude and background parameters.
+
+        Returns
+        -------
+        amplitudes : ndarray of shape (3,)
+            The ``A1d_0, A1d_1, A1d_2`` `lmfit.Parameter` objects, one per
+            axis.
+        backgrounds : ndarray of shape (3,)
+            The ``B1d_0, B1d_1, B1d_2`` `lmfit.Parameter` objects, one per
+            axis.
+        """
         A0 = self.params["A1d_0"]
         A1 = self.params["A1d_1"]
         A2 = self.params["A1d_2"]
@@ -1557,6 +3129,38 @@ class PeakEllipsoid:
     def estimate_center_weighted(
         self, d, n, kernel, frac=0.9, min_weight=1e-12
     ):
+        """
+        Estimate a 1D peak-center index via matched-filter correlation with a kernel.
+
+        Subtracts the mean-normalized background level, cross-correlates
+        the residual counts with `kernel` (normalized by
+        ``sqrt(correlate(n^2, kernel^2))``), and returns the index of the
+        maximum correlation. Falls back to the array midpoint if the
+        located maximum lies in the outer eighths of the array (treated
+        as an unreliable/edge estimate).
+
+        Parameters
+        ----------
+        d : ndarray
+            1D raw observed event counts.
+        n : ndarray
+            1D normalization (monitor/solid-angle) counts, same shape as
+            `d`.
+        kernel : ndarray
+            1D correlation kernel (e.g. a Gaussian template).
+        frac : float, optional
+            Unused tuning parameter reserved for future use. Default is
+            0.9.
+        min_weight : float, optional
+            Minimum correlated normalization-squared value required to
+            accept a correlation value (otherwise it is set to NaN).
+            Default is 1e-12.
+
+        Returns
+        -------
+        index : int
+            Estimated integer index of the peak center along `d`.
+        """
         d = np.asarray(d, dtype=float)
         n = np.asarray(n, dtype=float)
         k = np.asarray(kernel, dtype=float)
@@ -1590,12 +3194,38 @@ class PeakEllipsoid:
 
     def _mode_mah2(self, x0, x1, x2, mode):
         """
-        Mahalanobis² in the projected subspace, with output shape matching
-        profile_project output for the same mode.
+        Squared Mahalanobis distance from the estimated-fit ellipsoid, in the projected subspace.
 
-        1d_k  → shape (nk,)        along the single projected axis
-        2d_k  → shape (ni, nj)     in the plane perpendicular to axis k
-        3d    → shape (n0, n1, n2) full 3-D
+        Uses `self.estimated_fit` (the ``(center, S)`` pair set by
+        `update_estimate`) rather than the current fit parameters, so
+        this gives a fixed reference region independent of in-progress
+        parameter changes. The output shape matches `profile_project`'s
+        output shape for the same mode: for `"1d_k"` modes, shape
+        ``(nk,)`` along the single projected axis; for `"2d_k"` modes,
+        shape ``(ni, nj)`` in the plane perpendicular to axis `k`; for
+        `"3d"`, the full 3D shape.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        mode : str
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``.
+
+        Returns
+        -------
+        mah2 : ndarray
+            Squared Mahalanobis distance to the estimated-fit center,
+            using the estimated-fit covariance `S_est`, with shape
+            matching the mode's projected coordinate grid. Returns an
+            array of ``inf`` where `S_est` (or its relevant sub-block) is
+            singular or non-positive, and for unrecognized `mode`
+            strings.
         """
         c_est, S_est = self.estimated_fit
 
@@ -1661,6 +3291,48 @@ class PeakEllipsoid:
             return np.full(xa.shape, np.inf)
 
     def quick_gaussian(self, x0, x1, x2, d, n, mode="3d", b=None, m=None):
+        """
+        Quick amplitude/background estimate for a mode, seeding `self.params`.
+
+        Projects the data onto `mode`, optionally subtracts a measured
+        background (`b`, `m`) rescaled to signal units, then estimates
+        the background level `B` from the shell region beyond
+        Mahalanobis distance 2 (`_mode_mah2` >= 4) and the amplitude `A`
+        from the 95th percentile within the 1-sigma core region
+        (`_mode_mah2` <= 1) above `B`. Adds ``A<mode>`` and ``B<mode>``
+        parameters (both bounded to be non-negative) to `self.params`.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        d : ndarray
+            Raw observed event counts, 3D array.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as `d`.
+        mode : str, optional
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``. Default is ``"3d"``.
+        b : ndarray, optional
+            Measured background counts, same shape as `d`. Default is
+            ``None``.
+        m : ndarray, optional
+            Measured background monitor/normalization counts, same shape
+            as `d`, used with `n` to rescale `b` into signal-count units.
+            Default is ``None``.
+
+        Returns
+        -------
+        stronger : bool or None
+            ``True`` if the estimated amplitude exceeds the estimated
+            background, else ``False``. Returns ``None`` if fewer than 4
+            valid projected voxels are available (no estimate made, and
+            `self.params` is left unmodified).
+        """
         w = np.ones_like(n)
 
         d_proj, n_proj, _, _ = self.profile_project(
@@ -1725,6 +3397,59 @@ class PeakEllipsoid:
         b=None,
         m=None,
     ):
+        """
+        Build all mode projections, seed initial amplitudes, and iteratively fit the ellipsoid.
+
+        Restores `self.combine_params` as the starting parameters if
+        available, projects the data onto all seven modes, quick-estimates
+        each mode's amplitude/background via `quick_gaussian`, converts a
+        measured background (`b`, `m`) into projected background-count
+        arrays for each mode, then runs an initial unconstrained-amplitude
+        `sweep` followed by `n_loop` rounds alternating
+        `update_adaptive_prior` with two `sweep` calls (one varying
+        center only, one varying radii and orientation).
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        d_int : ndarray
+            Raw observed event counts, 3D array.
+        n_int : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as
+            `d_int`.
+        wgt : ndarray
+            Per-voxel fit weight, same shape as `d_int`.
+        report_fit : bool, optional
+            If ``True``, print an `lmfit` fit report after each `sweep`
+            call. Default is ``False``.
+        b : ndarray, optional
+            Measured background counts, same shape as `d_int`. Default
+            is ``None``.
+        m : ndarray, optional
+            Measured background monitor/normalization counts, same shape
+            as `d_int`. Default is ``None``.
+
+        Returns
+        -------
+        args_1d : list
+            ``[x0, x1, x2, d1d, n1d, w1d, bkg_1d]`` used for the 1D-mode
+            residual/Jacobian calls.
+        args_2d : list
+            ``[x0, x1, x2, d2d, n2d, w2d, bkg_2d]`` used for the 2D-mode
+            residual/Jacobian calls.
+        args_3d : list
+            ``[x0, x1, x2, d3d, n3d, w3d, bkg_3d]`` used for the 3D-mode
+            residual/Jacobian calls.
+
+            If the data shape is too small (any axis length < 3) or any
+            mode's `quick_gaussian` estimate fails, ``None`` is returned
+            instead of this tuple.
+        """
         d = d_int.copy()
         n = n_int.copy()
 
@@ -1869,6 +3594,16 @@ class PeakEllipsoid:
         return args_1d, args_2d, args_3d
 
     def estimate_peak_strength(self):
+        """
+        Fitted 1D-mode amplitude and background values as float arrays.
+
+        Returns
+        -------
+        amplitude : ndarray of shape (3,)
+            Fitted ``A1d_0, A1d_1, A1d_2`` values.
+        background : ndarray of shape (3,)
+            Fitted ``B1d_0, B1d_1, B1d_2`` values.
+        """
         amplitude, background = self.extract_amplitude_background()
 
         amplitude = np.array([param for param in amplitude], dtype=float)
@@ -1877,6 +3612,30 @@ class PeakEllipsoid:
         return amplitude, background
 
     def update_adaptive_prior(self, args_1d, args_2d, args_3d):
+        """
+        Recompute the SNR-adaptive prior widths and update which parameter groups vary.
+
+        Estimates the current 3D I/sigma (`_isig_3d`), converts it to
+        prior widths via `prior_widths_from_snr`, and stores them as
+        `self.prior_center_sigma`, `self.prior_cov_sigma`,
+        `self.prior_distortion_sigma`, `self.prior_rot_sigma`. A width of
+        0 fixes ("freezes") the corresponding parameter group (center,
+        radii, or orientation) at its predicted resolution-model value
+        (`self._prior_r`, `self._prior_u`) by setting ``vary=False``;
+        otherwise the group is allowed to vary.
+
+        Parameters
+        ----------
+        args_1d : sequence
+            1D-mode residual arguments (unused directly; kept for a
+            uniform call signature alongside `args_3d`).
+        args_2d : sequence
+            2D-mode residual arguments (unused directly; kept for a
+            uniform call signature).
+        args_3d : sequence
+            3D-mode residual arguments passed to `_isig_3d` to estimate
+            the current SNR.
+        """
         snr = self._isig_3d(self.params, args_3d)
 
         (
@@ -1912,19 +3671,30 @@ class PeakEllipsoid:
 
     def prior_widths_from_snr(self, snr):
         """
-        Prior widths for center, radius scale, radius distortion, and orientation.
+        Map an SNR estimate to SNR-adaptive prior widths via `smooth_saturating`.
 
-        sigma_c
-            Center prior in Mahalanobis units of the prior covariance.
+        Lower SNR yields tighter (smaller) prior widths, pulling the fit
+        more strongly toward the resolution-model prediction; higher SNR
+        relaxes the widths, letting the fit rely more on the data.
 
-        sigma_log_s
-            Prior width for mean log-radius scale.
+        Parameters
+        ----------
+        snr : float
+            Estimated intensity/sigma (I/sigma) signal-to-noise ratio,
+            e.g. from `_isig_3d`.
 
-        sigma_log_d
-            Prior width for anisotropic log-radius distortion.
-
-        sigma_rot
-            Prior width for relative orientation rotation vector, in radians.
+        Returns
+        -------
+        sigma_c : float
+            Center prior width, in Mahalanobis units of the prior
+            covariance.
+        sigma_log_s : float
+            Prior width for the mean log-radius scale.
+        sigma_log_d : float
+            Prior width for the anisotropic log-radius distortion.
+        sigma_rot : float
+            Prior width for the relative orientation rotation vector, in
+            radians.
         """
 
         x = snr if snr > 1 else 1
@@ -1953,26 +3723,34 @@ class PeakEllipsoid:
         ----------
         x : float or array_like
             Input coordinate. The model is intended for x >= 1.
-        f_min : float
-            Minimum value at x = 1.
-        f_max : float
-            Asymptotic maximum value as x -> infinity.
-        x0 : float
+        f_min : float, optional
+            Minimum value at x = 1. Default is 0.0.
+        f_max : float, optional
+            Asymptotic maximum value as x -> infinity. Default is 1.0.
+        x0 : float, optional
             Location where the function reaches fraction p of the way
-            from f_min to f_max.
-        p : float
+            from f_min to f_max. Must be greater than 1. Default is 2.0.
+        p : float, optional
             Fraction of the maximum reached at x0. Must satisfy 0 < p < 1.
             For example, p=0.9 means f(x0) is 90% of the way to f_max.
-        n : float
+            Default is 0.5.
+        n : float, optional
             Shape parameter. n=1 gives an exponential rise; n=2 gives
-            a smoother minimum at x=1.
-        clip_below : bool
-            If True, values with x < 1 are clipped to x = 1.
+            a smoother minimum at x=1. Must be positive. Default is 1.0.
+        clip_below : bool, optional
+            If True, values with x < 1 are clipped to x = 1. Default is
+            True.
 
         Returns
         -------
         y : float or ndarray
             Smooth saturating function value.
+
+        Raises
+        ------
+        ValueError
+            If `x0` is not greater than 1, if `p` is not in ``(0, 1)``,
+            or if `n` is not positive.
         """
         if x0 <= 1:
             raise ValueError("x0 must be greater than 1.")
@@ -2003,7 +3781,31 @@ class PeakEllipsoid:
         match the true peak, so a single scale can underestimate the SNR
         (e.g. if the fit radii are currently too tight or too loose). Trying
         a few scales and taking the best I/sigma gives the SNR-adaptive
-        protocol a fairer chance of recognizing a strong peak.
+        protocol a fairer chance of recognizing a strong peak. For each
+        scale, voxels within Mahalanobis distance 1 of the center (using
+        radii scaled by `scale`) are treated as peak, and voxels between
+        distance 1 and ``2**(1/3)`` are treated as background; the
+        background is scaled by the peak/background voxel-count ratio
+        before subtraction.
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters; must contain ``c0, c1, c2, r0, r1,
+            r2, u0, u1, u2``.
+        args_3d : sequence
+            ``(x0, x1, x2, d3d, n3d, w3d, bkg_3d)`` (or a shorter
+            sequence without `bkg_3d`); `bkg_3d`, if present, is
+            subtracted from `d3d` before computing the SNR.
+        scales : tuple of float, optional
+            Radii scale factors to try. Default is ``(0.5, 1.0, 2.0)``.
+
+        Returns
+        -------
+        best_isig : float
+            The best (maximum) I/sigma estimate found across `scales`,
+            or ``-inf`` if no scale yields a positive-uncertainty
+            estimate.
         """
         x0, x1, x2, d3d, n3d, *rest = args_3d
         bkg_3d = rest[1] if len(rest) > 1 else None
@@ -2061,6 +3863,37 @@ class PeakEllipsoid:
         n_iter=50,
         report_fit=False,
     ):
+        """
+        Run one `lmfit`/`scipy.optimize.least_squares` minimization pass, accepted only if SNR improves.
+
+        Optionally sets which parameters vary via `protocol`, then
+        minimizes `self.residual`/`self.jacobian` with
+        `lmfit.Minimizer` using the ``"least_squares"`` method. The
+        resulting fit is accepted (written back to `self.params`) only if
+        the post-fit 3D I/sigma (`_isig_3d` at ``scales=[1]``) is not
+        worse than before the fit; otherwise `self.params` is left
+        unchanged.
+
+        Parameters
+        ----------
+        args_1d : sequence
+            Positional arguments for `residual_1d`/`jacobian_1d`.
+        args_2d : sequence
+            Positional arguments for `residual_2d`/`jacobian_2d`.
+        args_3d : sequence
+            Positional arguments for `residual_3d`/`jacobian_3d`.
+        protocol : sequence of bool, optional
+            9-element sequence of ``vary`` flags for
+            ``c0, c1, c2, r0, r1, r2, u0, u1, u2`` in that order. If
+            ``None``, the current `vary` settings on `self.params` are
+            left unchanged. Default is ``None``.
+        n_iter : int, optional
+            Maximum number of function evaluations (`max_nfev`) for the
+            least-squares solver. Default is 50.
+        report_fit : bool, optional
+            If ``True``, print an `lmfit` fit report after minimizing.
+            Default is ``False``.
+        """
         if protocol is not None:
             self.params["c0"].set(vary=protocol[0])
             self.params["c1"].set(vary=protocol[1])
@@ -2098,12 +3931,69 @@ class PeakEllipsoid:
             self.params = result.params
 
     def calculate_intensity(self, A, H, r0, r1, r2, u0, u1, u2, mode="3d"):
+        """
+        Total fitted intensity for a mode from its Gaussian amplitude and shape parameters.
+
+        Computes ``A * gaussian_integral(inv_S, mode)``, i.e. the
+        amplitude times the normalization volume of the unit-peak
+        Gaussian, giving the integrated intensity under the fitted
+        profile.
+
+        Parameters
+        ----------
+        A : float
+            Fitted Gaussian amplitude for this mode.
+        H : float
+            Unused parameter (reserved, e.g. for a peak height
+            convention not currently applied).
+        r0 : float
+            Ellipsoid principal radius along the first rotated axis.
+        r1 : float
+            Ellipsoid principal radius along the second rotated axis.
+        r2 : float
+            Ellipsoid principal radius along the third rotated axis.
+        u0 : float
+            First component of the orientation rotation vector.
+        u1 : float
+            Second component of the orientation rotation vector.
+        u2 : float
+            Third component of the orientation rotation vector.
+        mode : str, optional
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``. Default is ``"3d"``.
+
+        Returns
+        -------
+        intensity : float
+            Total integrated intensity ``A * gaussian_integral(...)``.
+        """
         inv_S = self.inv_S_matrix(r0, r1, r2, u0, u1, u2)
         g = self.gaussian_integral(inv_S, mode)
 
         return A * g
 
     def voxels(self, x0, x1, x2):
+        """
+        Voxel spacing along each axis, from adjacent-element differences of the meshgrid.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+
+        Returns
+        -------
+        dx0 : float
+            Voxel spacing along axis 0.
+        dx1 : float
+            Voxel spacing along axis 1.
+        dx2 : float
+            Voxel spacing along axis 2.
+        """
         return (
             x0[1, 0, 0] - x0[0, 0, 0],
             x1[0, 1, 0] - x1[0, 0, 0],
@@ -2111,9 +4001,44 @@ class PeakEllipsoid:
         )
 
     def voxel_volume(self, x0, x1, x2):
+        """
+        Volume of a single voxel, the product of the per-axis voxel spacings.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+
+        Returns
+        -------
+        volume : float
+            Product of the three per-axis voxel spacings from `voxels`.
+        """
         return np.prod(self.voxels(x0, x1, x2))
 
     def project_background(self, bkg, mode):
+        """
+        Sum a 3D background-count array onto a given mode's projection.
+
+        Parameters
+        ----------
+        bkg : ndarray
+            3D background counts array. Non-finite entries are treated
+            as zero.
+        mode : str
+            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
+            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``.
+
+        Returns
+        -------
+        bkg_proj : ndarray
+            `bkg` summed over the axes integrated out by `mode` (a copy
+            of `bkg` for `"3d"`).
+        """
         bkg = np.where(np.isfinite(bkg), bkg, 0.0)
         if mode == "1d_0":
             return np.sum(bkg, axis=(1, 2))
@@ -2131,6 +4056,31 @@ class PeakEllipsoid:
             return bkg.copy()
 
     def subtract_profile(self, d, n, perc=30):
+        """
+        Subtract a per-axis-0-slice background percentile from the raw counts.
+
+        For each index along axis 0, estimates a background level as the
+        `perc` percentile of the normalized intensity over axes 1 and 2,
+        then subtracts that level (rescaled by `n`) from the raw counts.
+
+        Parameters
+        ----------
+        d : ndarray
+            Raw observed event counts, 3D array.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as `d`.
+        perc : float, optional
+            Percentile (0-100) of the normalized intensity used as the
+            background estimate for each axis-0 slice. Default is 30.
+
+        Returns
+        -------
+        d_sub : ndarray
+            Background-subtracted raw counts, same shape as `d`.
+        n : ndarray
+            The (unmodified) normalization counts, returned for a
+            convenient ``d, n = subtract_profile(d, n)`` call pattern.
+        """
         y = np.where(np.isfinite(n) & (n > 0), d / n, np.nan)
         b = np.nanpercentile(y, perc, axis=(1, 2))
         c = b[:, np.newaxis, np.newaxis] * n
@@ -2149,6 +4099,57 @@ class PeakEllipsoid:
         b=None,
         m=None,
     ):
+        """
+        Top-level fit entry point: crop data to the valid detector region and fit the ellipsoid.
+
+        Converts raw counts/normalization to normalized intensity,
+        rejects too-small or all-invalid input, crops all arrays to the
+        bounding box of voxels with positive normalization, then calls
+        `estimate_envelope` to perform the actual iterative fit. On
+        success, snapshots the resulting parameters via `copy_combine`.
+        Prints and logs the elapsed wall-clock time and outcome for each
+        early-exit path or success.
+
+        Parameters
+        ----------
+        x0_prof : ndarray
+            3D meshgrid coordinate array along axis 0, in the original
+            (not peak-centered) coordinate frame.
+        x1_proj : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2_proj : ndarray
+            3D meshgrid coordinate array along axis 2.
+        d : ndarray
+            Raw observed event counts, 3D array.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as `d`.
+        dx : object
+            Unused parameter (voxel spacing is instead recomputed from
+            the coordinate arrays via `voxels`).
+        xmod : float
+            Offset subtracted from `x0_prof` to produce the fit's
+            internal axis-0 coordinate (e.g. to re-center a periodic
+            axis); stored as `self._fit_xmod`.
+        voxel_weights : ndarray
+            Per-voxel fit weight, same shape as `d`.
+        b : ndarray, optional
+            Measured background counts, same shape as `d`. Default is
+            ``None``.
+        m : ndarray, optional
+            Measured background monitor/normalization counts, same shape
+            as `d`. Default is ``None``.
+
+        Returns
+        -------
+        weights : tuple or None
+            The ``(args_1d, args_2d, args_3d)`` tuple returned by
+            `estimate_envelope` on success. Returns ``None`` if the data
+            shape is too small, if there is insufficient valid data
+            (fewer than 11 valid voxels or no positive normalized
+            intensity), if all data is invalid after cropping, if
+            `estimate_envelope` raises an exception, or if
+            `estimate_envelope` itself returns ``None``.
+        """
         fit_start = time.perf_counter()
 
         def log_fit_time(outcome):
@@ -2237,6 +4238,50 @@ class PeakEllipsoid:
         return weights
 
     def peak_roi(self, x0, x1, x2, c, S, scale, p=0.997):
+        """
+        Build peak/background/combined masks and a p-confidence Gaussian kernel around an ellipsoid.
+
+        The peak mask is the 1-sigma ellipsoid region (Mahalanobis
+        distance <= 1 under `S`) dilated by one voxel in each direction;
+        the combined mask is grown by further dilations until the
+        background shell (combined mask minus peak mask) has at least
+        twice as many voxels as the peak, up to 3 dilation attempts. The
+        returned kernel `y` is a Gaussian evaluated with inverse
+        covariance rescaled to the `p` confidence contour (via the
+        chi-squared quantile at 3 degrees of freedom), independent of the
+        mask-growing logic.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        c : sequence of float
+            Peak center ``(c0, c1, c2)``.
+        S : ndarray of shape (3, 3)
+            Ellipsoid covariance-like matrix.
+        scale : float
+            Unused parameter (a local variable of the same name is
+            recomputed from `p` and overwrites this argument before use).
+        p : float, optional
+            Confidence-contour probability (0-1) used to build the
+            Gaussian kernel `y`. Default is 0.997.
+
+        Returns
+        -------
+        pk : ndarray of bool
+            Peak region mask (1-sigma ellipsoid, dilated by one voxel).
+        bkg : ndarray of bool
+            Background shell mask (`mask` minus `pk`).
+        mask : ndarray of bool
+            Combined peak-plus-background mask after dilation growth.
+        y : ndarray
+            Gaussian kernel evaluated at the `p`-confidence-contour
+            inverse covariance, normalized to integrate to 1.
+        """
         c0, c1, c2 = c
 
         dx0, dx1, dx2 = self.voxels(x0, x1, x2)
@@ -2289,6 +4334,30 @@ class PeakEllipsoid:
         return pk, bkg, mask, y
 
     def extract_raw_intensity(self, counts, pk, bkg):
+        """
+        Simple background-subtracted box-sum intensity from raw counts, with Poisson error.
+
+        Subtracts the background counts, scaled by the peak/background
+        voxel-count ratio, from the peak-region raw counts.
+
+        Parameters
+        ----------
+        counts : ndarray
+            Raw observed event counts, 3D array. Infinite values are
+            treated as NaN.
+        pk : ndarray of bool
+            Peak region mask, same shape as `counts`.
+        bkg : ndarray of bool
+            Background region mask, same shape as `counts`.
+
+        Returns
+        -------
+        intens : float
+            Background-subtracted summed raw intensity.
+        sig : float
+            Propagated Poisson uncertainty on `intens`; ``inf`` if the
+            propagated variance is non-positive.
+        """
         d = counts.copy()
         d[np.isinf(d)] = np.nan
 
@@ -2323,6 +4392,69 @@ class PeakEllipsoid:
         vol_frac=1.0,
         bkg_meas=None,
     ):
+        """
+        Normalization-aware background-subtracted box-sum intensity (the I_ell estimator).
+
+        Sums raw counts and normalization separately over the peak
+        (`pk`) and background-shell (`bkg`) regions (restricted to
+        voxels with positive normalization). If a measured/fitted
+        background model `bkg_meas` is supplied, it is used directly
+        (assumed to have negligible variance) instead of the background
+        shell; otherwise the shell counts are scaled by the peak/shell
+        voxel-count ratio, as in `extract_raw_intensity` but additionally
+        normalized by monitor counts. The final intensity/uncertainty are
+        rescaled by the peak voxel count `vol` and by `vol_frac` to
+        correct for the fraction of the theoretical ellipsoid volume
+        actually present on the detector.
+
+        Parameters
+        ----------
+        d : ndarray
+            Raw observed event counts, 3D array.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as `d`.
+        pk : ndarray of bool
+            Peak region mask, same shape as `d`.
+        bkg : ndarray of bool
+            Background shell region mask, same shape as `d`.
+        vol_frac : float, optional
+            Fraction (0-1] of the theoretical ellipsoid volume actually
+            covered by valid detector voxels; `intens`/`sig` are divided
+            by this to correct for edge clipping. Default is 1.0.
+        bkg_meas : ndarray, optional
+            Measured/fitted background counts, same shape as `d`, used
+            in place of the background shell if provided (assumed exact,
+            zero variance). Default is ``None``.
+
+        Returns
+        -------
+        intens : float
+            Background-subtracted, volume- and edge-corrected intensity.
+        sig : float
+            Propagated uncertainty on `intens`; ``-inf`` if the
+            propagated variance is non-positive.
+        b : float
+            Estimated background rate (counts per monitor count).
+        b_err : float
+            Uncertainty on `b`.
+        vol : float
+            Number of voxels in the peak region (`core`).
+        vol_frac : float
+            The (unmodified) `vol_frac` argument, echoed back.
+        vol_pk : int
+            Integer number of voxels in the peak region, same as `vol`.
+        pk_cnts : float
+            Summed raw counts in the peak region (NaN if zero).
+        pk_norm : float
+            Summed normalization counts in the peak region (NaN if zero).
+        bkg_cnts : float
+            Summed background counts used (from `bkg_meas` or the shell).
+        bkg_norm : float
+            Summed normalization counts used for the background estimate.
+        ratio : float
+            Peak/shell voxel-count ratio used to scale shell counts (1.0
+            when `bkg_meas` is used).
+        """
         core = pk & (n > 0)
         shell = bkg & (n > 0)
 
@@ -2404,6 +4536,47 @@ class PeakEllipsoid:
         return intens, sig, b, b_err, vol, vol_frac, int(vol_pk), *data_norm
 
     def matched_filter(self, d, n, kernel, mask, bkg_meas=None):
+        """
+        Matched-filter Poisson maximum-likelihood fit of an intensity and background level.
+
+        Fits ``mu = n*(I*kernel + b) + bkg_meas`` to the raw counts `d`
+        by maximizing the Poisson log-likelihood (minimizing
+        ``sum(mu - d*log(mu))``) over intensity `I` and background `b`
+        using L-BFGS-B, seeded from percentile-based initial estimates.
+        The uncertainty on `I` is obtained from the observed Fisher
+        information at the optimum.
+
+        Parameters
+        ----------
+        d : ndarray
+            Raw observed event counts, restricted to `mask` internally.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as `d`.
+        kernel : ndarray
+            Matched-filter template (e.g. a normalized Gaussian profile),
+            same shape as `d`.
+        mask : ndarray of bool
+            Mask of voxels to include in the fit.
+        bkg_meas : ndarray, optional
+            Additional fixed measured background counts, same shape as
+            `d`, added to the model. Default is ``None``.
+
+        Returns
+        -------
+        I : float
+            Fitted matched-filter intensity scale.
+        I_err : float
+            Uncertainty on `I` from the inverse Fisher information;
+            ``inf`` if the Fisher information is non-positive.
+        A : float
+            Peak amplitude, `I` scaled by the kernel's maximum value
+            within `mask`.
+        b : float
+            Fitted background rate.
+
+            If `mask` selects no voxels, ``(0.0, inf, 0.0, 0.0)`` is
+            returned instead.
+        """
         valid = mask & (n > 0) & np.isfinite(d)
 
         if not valid.any():
@@ -2456,6 +4629,64 @@ class PeakEllipsoid:
     def fitted_profile(
         self, x0, x1, x2, d, n, c, S, p=0.997, eta=0.5, bkg_meas=None
     ):
+        """
+        Iteratively matched-filter fit a 1D Gaussian profile along axis 0 (the I_prof estimator).
+
+        Projects the data onto the axis-0 1D profile, then alternates
+        `matched_filter` fits of a Gaussian kernel with re-estimating the
+        kernel's sigma from the weighted second moment of the
+        (background-subtracted, clipped-positive) net profile, damped by
+        `eta` and floored at the voxel size `dx0`. The initial sigma
+        comes from ``sqrt(S[0,0])`` rescaled from the 99.7%-contour
+        convention using the 1D chi-squared quantile at `p`.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        d : ndarray
+            Raw observed event counts, 3D array.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as `d`.
+        c : sequence of float
+            Peak center ``(c0, c1, c2)``.
+        S : ndarray of shape (3, 3)
+            Ellipsoid covariance-like matrix (99.7%-contour convention).
+        p : float, optional
+            Confidence-contour probability (0-1) used to convert `S` to
+            an initial 1-sigma width and to define the peak/background
+            split for the matched filter. Default is 0.997.
+        eta : float, optional
+            Damping factor (0-1) for updating sigma between iterations;
+            0 keeps the initial sigma, 1 jumps directly to the new
+            estimate. Default is 0.5.
+        bkg_meas : ndarray, optional
+            Measured/fitted background counts, 3D array, same shape as
+            `d`, summed onto the axis-0 profile and passed to
+            `matched_filter`. Default is ``None``.
+
+        Returns
+        -------
+        I : float
+            Fitted matched-filter intensity from the final iteration.
+        I_err : float
+            Uncertainty on `I`.
+        b : float
+            Fitted background rate from the final iteration.
+        x : ndarray
+            Axis-0 coordinate relative to the center, `x0[:, 0, 0] - c0`.
+        y_fit : ndarray
+            Fitted profile ``I*kernel + b`` (plus the background-rate
+            offset if `bkg_meas` was given).
+        y : ndarray
+            Observed normalized intensity profile.
+        e : ndarray
+            Uncertainty on `y`.
+        """
         scale = np.sqrt(scipy.stats.chi2.ppf(p, df=1))
 
         c0, c1, c2 = c
@@ -2512,12 +4743,45 @@ class PeakEllipsoid:
 
     def background_profile(self, x0, x1, x2, d, n, b, m):
         """
-        Projected 1D background intensity and Poisson uncertainty for each axis,
-        cropped to the same region as the fit so x values match best_prof.
+        Projected 1D background intensity and Poisson uncertainty for each axis.
+
+        Crops all inputs to the same region as the fit (`self._fit_crop`,
+        set by `fit`) so that the returned x-coordinates match
+        `self.best_prof`. The background is rescaled from monitor units
+        to signal units by the median ratio ``m/n``, then projected onto
+        each of the three 1D axes and normalized by the projected
+        normalization counts.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0 (uncropped).
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1 (uncropped).
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2 (uncropped).
+        d : ndarray
+            Raw observed event counts, 3D array (uncropped).
+        n : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as `d`
+            (uncropped).
+        b : ndarray or None
+            Measured background counts, same shape as `d` (uncropped).
+            If ``None``, no background profile can be computed.
+        m : ndarray or None
+            Measured background monitor/normalization counts, same shape
+            as `d` (uncropped). If ``None``, no background profile can
+            be computed.
 
         Returns
         -------
-        list of 3 tuples (x, y_bkg, e_bkg), one per axis, or None if unavailable.
+        result : list of tuple or None
+            A list of 3 tuples ``(x, y_bkg, e_bkg)``, one per axis
+            (``1d_0, 1d_1, 1d_2``), each with the axis coordinate array
+            and the corresponding background intensity/uncertainty
+            arrays. Returns ``None`` if `b` or `m` is ``None``, or if the
+            median monitor-count scale factor is not finite and
+            positive.
         """
         if b is None or m is None:
             return None
@@ -2560,6 +4824,58 @@ class PeakEllipsoid:
         return result
 
     def integrate(self, x0, x1, x2, d, n, c, S, b=None, m=None):
+        """
+        Final post-fit intensity integration combining box-sum, ellipsoid, and profile estimators.
+
+        Builds peak/background masks (`peak_roi`) for both the final
+        fitted ellipsoid and the original estimated-fit ellipsoid (used
+        to compute an edge-clipping volume-fraction correction
+        `vol_frac`), applies that correction to the previously computed
+        3D box-sum intensity (`self.intensity[2]`/`self.sigma[2]`, from
+        `extract_result`), then computes and stores the normalization-aware
+        box-sum estimator (`extract_intensity`, `I_ell`), the 1D
+        profile-fit estimator (`fitted_profile`, `I_prof`), and a
+        chi-squared-inflated matched-filter estimator (`matched_filter`,
+        `self.filter`). Also computes the simple raw box-sum estimator
+        (`extract_raw_intensity`) for diagnostics. Populates
+        `self.intensity`, `self.sigma`, `self.weights`,
+        `self.data_norm_fit`, `self.peak_background_mask`,
+        `self.integral`, `self.filter`, and `self.info` (a dict
+        summarizing all intensity estimators: `I_1d_*`, `I_2d_*`, `I_3d`,
+        `I_ell`, `I_prof` and their uncertainties, plus background and
+        volume diagnostics).
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        d : ndarray
+            Raw observed event counts, 3D array.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as `d`.
+        c : sequence of float
+            Fitted peak center ``(c0, c1, c2)``.
+        S : ndarray of shape (3, 3)
+            Fitted ellipsoid covariance-like matrix.
+        b : ndarray, optional
+            Measured background counts, same shape as `d`. Default is
+            ``None``.
+        m : ndarray, optional
+            Measured background monitor/normalization counts, same shape
+            as `d`. Default is ``None``.
+
+        Returns
+        -------
+        intens : float
+            Final normalization-aware box-sum intensity (`I_ell`),
+            scaled by the voxel volume.
+        sig : float
+            Uncertainty on `intens`; ``inf`` if not finite.
+        """
         dx0, dx1, dx2 = self.voxels(x0, x1, x2)
 
         d3x = self.voxel_volume(x0, x1, x2)

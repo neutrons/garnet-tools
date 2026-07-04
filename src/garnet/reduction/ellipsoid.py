@@ -1812,13 +1812,7 @@ class PeakEllipsoid:
 
             self.update_adaptive_prior(args_1d, args_2d, args_3d)
 
-            protocol = [False] * 3 + [True] * 3 + [False] * 3
-
-            self.sweep(args_1d, args_2d, args_3d, None, n_iter, report_fit)
-
-            self.update_adaptive_prior(args_1d, args_2d, args_3d)
-
-            protocol = [False] * 6 + [True] * 3
+            protocol = [False] * 3 + [True] * 6
 
             self.sweep(args_1d, args_2d, args_3d, None, n_iter, report_fit)
 

@@ -240,6 +240,52 @@ class PeakEllipsoid:
         ind = [i for i, (_, par) in enumerate(params.items()) if par.vary]
         return jac[ind]
 
+    def volume_penalty_residual(self, params, eps=1e-12):
+        """
+        Constant penalty term minimizing sqrt(B) / (A * det(S)^(1/4)).
+
+        A, B are the 3D mode's amplitude/background; det(S)^(1/4) reduces
+        to sqrt(r0*r1*r2) since S = U diag(r0^2, r1^2, r2^2) U^T. Unlike the
+        SNR-adaptive prior widths, this term is always active at a fixed
+        strength, discouraging fits with weak amplitude and/or a small
+        volume relative to the background level.
+        """
+
+        A = max(params["A3d"].value, eps)
+        B = max(params["B3d"].value, 0.0)
+        r0 = params["r0"].value
+        r1 = params["r1"].value
+        r2 = params["r2"].value
+
+        vol = max(np.sqrt(r0 * r1 * r2), eps)
+
+        penalty = np.sqrt(B) / (A * vol)
+
+        return np.array([penalty])
+
+    def volume_penalty_jacobian(self, params, eps=1e-12):
+        params_list = [name for name, _ in params.items()]
+        jac = np.zeros((len(params_list), 1), dtype=float)
+
+        A = max(params["A3d"].value, eps)
+        B = max(params["B3d"].value, 0.0)
+        r0 = params["r0"].value
+        r1 = params["r1"].value
+        r2 = params["r2"].value
+
+        vol = max(np.sqrt(r0 * r1 * r2), eps)
+
+        penalty = np.sqrt(B) / (A * vol)
+
+        jac[params_list.index("A3d"), 0] = -penalty / A
+        if B > 0:
+            jac[params_list.index("B3d"), 0] = penalty / (2.0 * B)
+        for rname, r_val in zip(["r0", "r1", "r2"], [r0, r1, r2]):
+            jac[params_list.index(rname), 0] = -penalty / (2.0 * r_val)
+
+        ind = [i for i, (_, par) in enumerate(params.items()) if par.vary]
+        return jac[ind]
+
     def S_matrix(self, r0, r1, r2, u0, u1, u2):
         U = self.U_matrix(u0, u1, u2)
 
@@ -1201,8 +1247,11 @@ class PeakEllipsoid:
         cost_2d = self.residual_2d(params, *args_2d, c, inv_S)
         cost_3d = self.residual_3d(params, *args_3d, c, inv_S)
         cost_prior = self.prior_residual(params)
+        cost_vol = self.volume_penalty_residual(params)
 
-        cost = np.concatenate([cost_1d, cost_2d, cost_3d, cost_prior])
+        cost = np.concatenate(
+            [cost_1d, cost_2d, cost_3d, cost_prior, cost_vol]
+        )
         cost = np.nan_to_num(cost, nan=0.0, posinf=1e16, neginf=-1e16)
 
         return cost
@@ -1231,8 +1280,9 @@ class PeakEllipsoid:
         jac_2d = self.jacobian_2d(params, *args_2d, c, inv_S, dr, du)
         jac_3d = self.jacobian_3d(params, *args_3d, c, inv_S, dr, du)
         jac_prior = self.prior_jacobian(params)
+        jac_vol = self.volume_penalty_jacobian(params)
 
-        jac = np.column_stack([jac_1d, jac_2d, jac_3d, jac_prior])
+        jac = np.column_stack([jac_1d, jac_2d, jac_3d, jac_prior, jac_vol])
         jac = np.nan_to_num(jac, nan=0.0, posinf=1e16, neginf=-1e16)
 
         return jac.T
@@ -1877,7 +1927,7 @@ class PeakEllipsoid:
             Prior width for relative orientation rotation vector, in radians.
         """
 
-        x = snr if x > 1 else 1
+        x = snr if snr > 1 else 1
 
         sigma_c = self.smooth_saturating(x, 1.0, 100, 20)
         sigma_log_s = self.smooth_saturating(x, 0.1, 10, 15)

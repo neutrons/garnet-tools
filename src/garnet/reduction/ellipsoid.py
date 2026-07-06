@@ -429,7 +429,11 @@ class PeakEllipsoid:
         chi-squared scale factor applied at this stage). Since `S` is
         generally not diagonal in the lab frame, 1D/2D sub-block
         determinants (and hence this quantity) do depend on orientation,
-        unlike the full 3x3 determinant.
+        unlike the full 3x3 determinant. For ``mode="3d"``, `S` is
+        diagonal with entries ``r0^2, r1^2, r2^2`` in its own (rotated)
+        local frame, and the determinant is rotation-invariant, so
+        ``det(S) = (r0*r1*r2)**2`` is computed directly without building
+        `U` or the full matrix product.
 
         `r0, r1, r2` (and therefore `S`) are calibrated to the full-3D
         99.7% confidence contour (`_R_SCALE_3D`, chi-squared with
@@ -468,26 +472,27 @@ class PeakEllipsoid:
             a single diagonal entry of `S`).
         """
 
-        S = self.S_matrix(r0, r1, r2, u0, u1, u2)
-
         if mode == "3d":
-            S_mode = S
-        elif mode == "2d_0":
-            S_mode = S[1:, 1:]
-        elif mode == "2d_1":
-            S_mode = S[0::2, 0::2]
-        elif mode == "2d_2":
-            S_mode = S[:2, :2]
-        elif mode == "1d_0":
-            S_mode = S[0, 0]
-        elif mode == "1d_1":
-            S_mode = S[1, 1]
-        elif mode == "1d_2":
-            S_mode = S[2, 2]
+            det_S = (r0 * r1 * r2) ** 2
         else:
-            raise ValueError("Unknown mode {}".format(mode))
+            S = self.S_matrix(r0, r1, r2, u0, u1, u2)
 
-        det_S = np.linalg.det(S_mode) if np.ndim(S_mode) == 2 else S_mode
+            if mode == "2d_0":
+                S_mode = S[1:, 1:]
+            elif mode == "2d_1":
+                S_mode = S[0::2, 0::2]
+            elif mode == "2d_2":
+                S_mode = S[:2, :2]
+            elif mode == "1d_0":
+                S_mode = S[0, 0]
+            elif mode == "1d_1":
+                S_mode = S[1, 1]
+            elif mode == "1d_2":
+                S_mode = S[2, 2]
+            else:
+                raise ValueError("Unknown mode {}".format(mode))
+
+            det_S = np.linalg.det(S_mode) if np.ndim(S_mode) == 2 else S_mode
 
         d = _MODE_NDIM[mode]
         rescale = (_MODE_R_SCALE[mode] / _R_SCALE_3D) ** (2 * d)
@@ -710,6 +715,11 @@ class PeakEllipsoid:
         """
         Determinant of the ellipsoid covariance-like matrix S.
 
+        `S` is diagonal with entries ``r0^2, r1^2, r2^2`` in its own
+        (rotated) local frame, and the determinant is rotation-invariant,
+        so this is computed directly from the radii without building `U`
+        or the full matrix product.
+
         Parameters
         ----------
         r0 : float
@@ -719,19 +729,18 @@ class PeakEllipsoid:
         r2 : float
             Ellipsoid principal radius along the third rotated axis.
         u0 : float
-            First component of the orientation rotation vector.
+            Unused (`det(S)` does not depend on orientation).
         u1 : float
-            Second component of the orientation rotation vector.
+            Unused (`det(S)` does not depend on orientation).
         u2 : float
-            Third component of the orientation rotation vector.
+            Unused (`det(S)` does not depend on orientation).
 
         Returns
         -------
         det : float
             ``det(S)``, equal to ``(r0*r1*r2)**2``.
         """
-        S = self.S_matrix(r0, r1, r2, u0, u1, u2)
-        return np.linalg.det(S)
+        return (r0 * r1 * r2) ** 2
 
     def centroid_inverse_covariance(self, c0, c1, c2, r0, r1, r2, u0, u1, u2):
         """
@@ -2619,16 +2628,18 @@ class PeakEllipsoid:
 
     def residual(self, params, args_1d, args_2d, args_3d):
         """
-        Full stacked residual vector combining all modes, the prior, and the volume penalty.
+        Full stacked residual vector combining all modes and the prior.
 
         Computes the center and inverse covariance from `params`, then
         concatenates the 1D, 2D, and 3D Poisson-deviance residuals with
-        the prior residual (`prior_residual`) and the volume penalty
-        residual (`volume_penalty_residual`). Non-finite entries are
+        the prior residual (`prior_residual`). Non-finite entries are
         replaced with 0 or a large finite value so that
         `scipy.optimize.least_squares` sees a well-behaved cost vector.
         This is the residual function passed to `lmfit.Minimizer` in
         `sweep`.
+
+        Note: the volume penalty (`volume_penalty_residual`) is currently
+        disabled here — see the comment in the method body.
 
         Parameters
         ----------
@@ -2647,8 +2658,8 @@ class PeakEllipsoid:
         Returns
         -------
         cost : ndarray
-            Concatenated residual vector (1D + 2D + 3D + prior + volume
-            penalty terms), with NaN/inf sanitized.
+            Concatenated residual vector (1D + 2D + 3D + prior terms),
+            with NaN/inf sanitized.
         """
         c0 = params["c0"].value
         c1 = params["c1"].value
@@ -2670,16 +2681,12 @@ class PeakEllipsoid:
         cost_2d = self.residual_2d(params, *args_2d, c, inv_S)
         cost_3d = self.residual_3d(params, *args_3d, c, inv_S)
         cost_prior = self.prior_residual(params)
-        cost_vol = np.concatenate(
-            [
-                self.volume_penalty_residual(params, mode)
-                for mode in self._PENALTY_MODES
-            ]
-        )
+        # Volume penalty (volume_penalty_residual) is disabled: as written
+        # it rewards *larger* volumes, backwards from the intended
+        # anti-collapse regularizer. Paused pending a redesign that
+        # rewards smaller volumes with larger intensity above background.
 
-        cost = np.concatenate(
-            [cost_1d, cost_2d, cost_3d, cost_prior, cost_vol]
-        )
+        cost = np.concatenate([cost_1d, cost_2d, cost_3d, cost_prior])
         cost = np.nan_to_num(cost, nan=0.0, posinf=1e16, neginf=-1e16)
 
         return cost
@@ -2691,11 +2698,13 @@ class PeakEllipsoid:
         Computes the center, inverse covariance, and shape derivatives
         (`inv_S_deriv_r`, `inv_S_deriv_u`) from `params`, then
         column-stacks the 1D, 2D, and 3D Poisson-deviance Jacobians with
-        the prior Jacobian (`prior_jacobian`) and the volume penalty
-        Jacobian (`volume_penalty_jacobian`), and transposes to the
+        the prior Jacobian (`prior_jacobian`), and transposes to the
         ``(n_residuals, n_vary)`` convention expected by
         `scipy.optimize.least_squares`. This is the Jacobian function
         passed to `lmfit.Minimizer.minimize` in `sweep`.
+
+        Note: the volume penalty Jacobian (`volume_penalty_jacobian`) is
+        currently disabled here — see the comment in the method body.
 
         Parameters
         ----------
@@ -2740,14 +2749,10 @@ class PeakEllipsoid:
         jac_2d = self.jacobian_2d(params, *args_2d, c, inv_S, dr, du)
         jac_3d = self.jacobian_3d(params, *args_3d, c, inv_S, dr, du)
         jac_prior = self.prior_jacobian(params)
-        jac_vol = np.column_stack(
-            [
-                self.volume_penalty_jacobian(params, mode)
-                for mode in self._PENALTY_MODES
-            ]
-        )
+        # Volume penalty (volume_penalty_jacobian) is disabled: see the
+        # matching comment in residual().
 
-        jac = np.column_stack([jac_1d, jac_2d, jac_3d, jac_prior, jac_vol])
+        jac = np.column_stack([jac_1d, jac_2d, jac_3d, jac_prior])
         jac = np.nan_to_num(jac, nan=0.0, posinf=1e16, neginf=-1e16)
 
         return jac.T
@@ -3699,10 +3704,10 @@ class PeakEllipsoid:
 
         x = snr if snr > 1 else 1
 
-        sigma_c = self.smooth_saturating(x, 1.0, 100, 20)
-        sigma_log_s = self.smooth_saturating(x, 0.1, 10, 15)
-        sigma_log_d = self.smooth_saturating(x, 0.1, 10, 10)
-        sigma_rot = self.smooth_saturating(x, 0.1, 10, 10)
+        sigma_c = self.smooth_saturating(x, 5.0, 100, 20)
+        sigma_log_s = self.smooth_saturating(x, 1.0, 50, 15)
+        sigma_log_d = self.smooth_saturating(x, 0.05, 2.0, 10)
+        sigma_rot = self.smooth_saturating(x, 0.05, 2.0, 10)
 
         return sigma_c, sigma_log_s, sigma_log_d, sigma_rot
 
@@ -3864,15 +3869,17 @@ class PeakEllipsoid:
         report_fit=False,
     ):
         """
-        Run one `lmfit`/`scipy.optimize.least_squares` minimization pass, accepted only if SNR improves.
+        Run one `lmfit`/Levenberg-Marquardt minimization pass, accepted only if SNR improves.
 
         Optionally sets which parameters vary via `protocol`, then
-        minimizes `self.residual`/`self.jacobian` with
-        `lmfit.Minimizer` using the ``"least_squares"`` method. The
-        resulting fit is accepted (written back to `self.params`) only if
-        the post-fit 3D I/sigma (`_isig_3d` at ``scales=[1]``) is not
-        worse than before the fit; otherwise `self.params` is left
-        unchanged.
+        minimizes `self.residual`/`self.jacobian` with `lmfit.Minimizer`
+        using the ``"leastsq"`` method (MINPACK's Levenberg-Marquardt,
+        via `scipy.optimize.leastsq`; bounds are handled by `lmfit`'s own
+        internal parameter transform, since MINPACK's `leastsq` has no
+        native bounds support). The resulting fit is accepted (written
+        back to `self.params`) only if the post-fit 3D I/sigma (`_isig_3d`
+        at ``scales=[1]``) is not worse than before the fit; otherwise
+        `self.params` is left unchanged.
 
         Parameters
         ----------
@@ -3917,8 +3924,9 @@ class PeakEllipsoid:
         isig_before = self._isig_3d(self.params, args_3d, scales=[1])
 
         result = out.minimize(
-            method="least_squares",
-            jac=self.jacobian,
+            method="leastsq",
+            Dfun=self.jacobian,
+            col_deriv=0,
             max_nfev=n_iter,
         )
 

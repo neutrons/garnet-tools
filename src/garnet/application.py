@@ -244,20 +244,14 @@ class FormView(QWidget):
         self._theme_combo.addItem("document")
         self._theme_combo.addItem("dark")
         self._theme_combo.addItem("paraview")
-        self._theme_combo.setCurrentText("document")
-        self._theme_combo.setToolTip("Select 3D view theme.")
-        self.auto_scale_dropdown(self._theme_combo)
-
-        self._ui_combo = QComboBox(self)
-        self._ui_combo.addItem("Light")
-        self._ui_combo.addItem("Dark")
         _app = QApplication.instance()
         _is_dark = bool(_app.property("ui_dark")) if _app else False
-        self._ui_combo.setCurrentText("Dark" if _is_dark else "Light")
-        self._ui_combo.setToolTip(
-            "Switch the application between light and dark mode."
+        self._theme_combo.setCurrentText("dark" if _is_dark else "document")
+        self._theme_combo.setToolTip(
+            'Select 3D view theme. Selecting "dark" also switches the '
+            "application to dark mode."
         )
-        self.auto_scale_dropdown(self._ui_combo)
+        self.auto_scale_dropdown(self._theme_combo)
 
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -266,10 +260,9 @@ class FormView(QWidget):
         left_layout.addWidget(self._reset_view_button)
         left_layout.addWidget(self._camera_button)
         left_layout.addWidget(self._theme_combo)
-        left_layout.addWidget(self._ui_combo)
 
         directions_widget = QWidget(self)
-        directions_layout = QGridLayout(directions_widget)
+        directions_layout = QGridLayout()
         directions_layout.setContentsMargins(2, 2, 2, 2)
         directions_layout.setSpacing(2)
 
@@ -379,6 +372,10 @@ class FormView(QWidget):
             button.clicked.connect(slot)
             directions_layout.addWidget(button, row, col)
 
+        directions_outer_layout = QVBoxLayout(directions_widget)
+        directions_outer_layout.addLayout(directions_layout)
+        directions_outer_layout.addStretch(1)
+
         manual_tab = QWidget(self)
         manual_layout = QGridLayout()
 
@@ -481,7 +478,7 @@ class FormView(QWidget):
         manual_tab.setLayout(manual_values_layout)
 
         rotate_widget = QWidget(self)
-        rotate_layout = QGridLayout(rotate_widget)
+        rotate_layout = QGridLayout()
         rotate_layout.setContentsMargins(2, 2, 2, 2)
         rotate_layout.setSpacing(2)
 
@@ -534,6 +531,10 @@ class FormView(QWidget):
         rotate_layout.addWidget(QLabel("Camera [°]", self), 0, 4)
         rotate_layout.addWidget(self._camera_pos_line, 1, 4)
 
+        rotate_outer_layout = QVBoxLayout(rotate_widget)
+        rotate_outer_layout.addLayout(rotate_layout)
+        rotate_outer_layout.addStretch(1)
+
         view_tab = QTabWidget(self)
         view_tab.addTab(directions_widget, "Direction View")
         view_tab.addTab(manual_tab, "Manual View")
@@ -558,17 +559,6 @@ class FormView(QWidget):
         self._parallel_box.setToolTip("Toggle parallel projection")
         self._parallel_box.stateChanged.connect(self._on_projection_changed)
 
-        self._joystick_box = QCheckBox("Disable Joystick", self)
-        self._joystick_box.setChecked(True)
-        self._joystick_box.setToolTip(
-            "Uncheck to use joystick-style camera interaction "
-            "(hold mouse button for continuous motion) "
-            "instead of the default trackball style"
-        )
-        self._joystick_box.stateChanged.connect(
-            self._on_joystick_style_changed
-        )
-
         self._cons_box = QCheckBox("Expand Console", self)
         self._cons_box.setChecked(True)
         self._cons_box.setToolTip("Show or hide console output.")
@@ -577,44 +567,10 @@ class FormView(QWidget):
         right_layout.addWidget(self._recip_box)
         right_layout.addWidget(self._axes_box)
         right_layout.addWidget(self._parallel_box)
-        right_layout.addWidget(self._joystick_box)
         right_layout.addWidget(self._cons_box)
-
-        camera_info_font = QFont("Courier New")
-        camera_info_font.setStyleHint(QFont.Monospace)
-        camera_info_font.setPointSize(9)
-        camera_info_tip = (
-            "Current camera view/up direction in Cartesian and [hkl] "
-            "coordinates (unscaled)."
-        )
-
-        self._view_xyz_label = QLabel(self)
-        self._up_xyz_label = QLabel(self)
-        self._view_hkl_label = QLabel(self)
-        self._up_hkl_label = QLabel(self)
-
-        camera_info_layout = QGridLayout()
-        camera_info_layout.setContentsMargins(0, 0, 0, 0)
-        camera_info_layout.setColumnStretch(0, 1)
-        camera_info_layout.setColumnStretch(1, 1)
-        for label in (
-            self._view_xyz_label,
-            self._up_xyz_label,
-            self._view_hkl_label,
-            self._up_hkl_label,
-        ):
-            label.setFont(camera_info_font)
-            label.setToolTip(camera_info_tip)
-        camera_info_layout.addWidget(self._view_xyz_label, 0, 0)
-        camera_info_layout.addWidget(self._up_xyz_label, 0, 1)
-        camera_info_layout.addWidget(self._view_hkl_label, 1, 0)
-        camera_info_layout.addWidget(self._up_hkl_label, 1, 1)
-
-        self._update_camera_info(None, None, None, None)
 
         middle_layout = QVBoxLayout()
         middle_layout.addWidget(view_tab)
-        middle_layout.addLayout(camera_info_layout)
 
         ctrl_bar = QHBoxLayout()
         ctrl_bar.setContentsMargins(4, 2, 4, 2)
@@ -801,7 +757,6 @@ class FormView(QWidget):
 
         self.stop_button.clicked.connect(self.stop_process)
         self._theme_combo.currentIndexChanged.connect(self.update_pv_theme)
-        self._ui_combo.currentIndexChanged.connect(self.update_ui_theme)
 
         self.cpu_line.editingFinished.connect(self.update_mem_estimate)
         self.instrument_combo.activated.connect(
@@ -839,15 +794,14 @@ class FormView(QWidget):
         self.plotter.set_background(bg)
         self.plotter.render()
 
-    def update_ui_theme(self, _index=None):
-        mode = self._ui_combo.currentText()
+        is_dark = theme == "dark"
         app = QApplication.instance()
-        if mode == "Dark":
-            app.setStyleSheet(qdarkstyle.load_stylesheet(palette=DarkPalette))
-            app.setProperty("ui_dark", True)
-        else:
-            app.setStyleSheet(qdarkstyle.load_stylesheet(palette=LightPalette))
-            app.setProperty("ui_dark", False)
+        app.setStyleSheet(
+            qdarkstyle.load_stylesheet(
+                palette=DarkPalette if is_dark else LightPalette
+            )
+        )
+        app.setProperty("ui_dark", is_dark)
 
     @staticmethod
     def _format_bytes(n):
@@ -3308,107 +3262,13 @@ class FormView(QWidget):
             cam = self.plotter.camera
             roll = cam.roll
             d = np.array(cam.direction)
-            up = np.array(cam.up)
             elevation = np.degrees(np.arcsin(np.clip(d[2], -1.0, 1.0)))
             azimuth = np.degrees(np.arctan2(d[1], d[0]))
             self._camera_pos_line.setText(
                 f"{roll:.1f},{elevation:.1f},{azimuth:.1f}"
             )
-            view_hkl = self._hkl_from_vector(d)
-            up_hkl = self._hkl_from_vector(up)
-            self._update_camera_info(d, up, view_hkl, up_hkl)
         except Exception:
             pass
-
-    def _hkl_from_vector(self, vec):
-        """[hkl] indices (unscaled) of a display-world Cartesian vector."""
-
-        if self._preview_UB is None:
-            return None
-        T = self._crystal_T()
-        try:
-            return np.linalg.solve(T, vec)
-        except np.linalg.LinAlgError:
-            return None
-
-    _CAMERA_INFO_FIELD_WIDTH = 6
-
-    @classmethod
-    def _format_vector(cls, vec, decimals):
-        width = cls._CAMERA_INFO_FIELD_WIDTH
-        if vec is None:
-            field = "{:>{width}}".format("--", width=width)
-            return "({0},{0},{0})".format(field)
-        fmt = "({{:>{1}.{0}f}},{{:>{1}.{0}f}},{{:>{1}.{0}f}})".format(
-            decimals, width
-        )
-        return fmt.format(*vec)
-
-    @staticmethod
-    def _snap_to_integers(vec, tol=0.03, max_index=9):
-        """Best-effort snap of a direction vector to small integer ratios.
-
-        Components under ``tol`` (relative to the largest component) are
-        treated as zero, then the remaining components are rationalized
-        against the smallest of them by trying denominators up to
-        ``max_index``. Falls back to plain rounding if nothing rationalizes
-        cleanly (e.g. an irrational direction).
-        """
-
-        v = np.asarray(vec, dtype=float)
-        scale = np.max(np.abs(v))
-        if scale < 1e-8:
-            return np.zeros(3, dtype=int)
-
-        v = v / scale
-        mask = np.abs(v) >= tol
-        v = np.where(mask, v, 0.0)
-        if not np.any(mask):
-            return np.zeros(3, dtype=int)
-
-        base = np.min(np.abs(v[mask]))
-        for d in range(1, max_index + 1):
-            candidate = v / base * d
-            rounded = np.round(candidate)
-            err = np.max(np.abs(candidate - rounded)[mask])
-            if err < tol:
-                ints = rounded.astype(int)
-                nz = np.abs(ints[ints != 0])
-                g = max(int(np.gcd.reduce(nz)), 1) if nz.size else 1
-                return ints // g
-
-        return np.round(v / base).astype(int)
-
-    @classmethod
-    def _format_hkl_vector(cls, vec):
-        width = cls._CAMERA_INFO_FIELD_WIDTH
-        if vec is None:
-            field = "{:>{width}}".format("--", width=width)
-            return "({0},{0},{0})".format(field)
-        ints = cls._snap_to_integers(vec)
-        fmt = "({{:>{0}d}},{{:>{0}d}},{{:>{0}d}})".format(width)
-        return fmt.format(*ints.tolist())
-
-    def _update_camera_info(self, view_xyz, up_xyz, view_hkl, up_hkl):
-        """Update the read-only camera view/up direction display.
-
-        Shows the camera view and up vectors in Cartesian coordinates
-        and, when a UB matrix is set, in [hkl] coordinates (snapped to
-        small integers, since only the ratio is meaningful).
-        """
-
-        self._view_xyz_label.setText(
-            "View(xyz)={}".format(self._format_vector(view_xyz, 3))
-        )
-        self._up_xyz_label.setText(
-            "Up(xyz)={}".format(self._format_vector(up_xyz, 3))
-        )
-        self._view_hkl_label.setText(
-            "View(hkl)={}".format(self._format_hkl_vector(view_hkl))
-        )
-        self._up_hkl_label.setText(
-            "Up(hkl)={}".format(self._format_hkl_vector(up_hkl))
-        )
 
     def _on_roll_ccw(self):
         self._apply_rotation(self._rotate_roll)
@@ -3581,12 +3441,6 @@ class FormView(QWidget):
             self.plotter.enable_parallel_projection()
         else:
             self.plotter.disable_parallel_projection()
-
-    def _on_joystick_style_changed(self):
-        if self._joystick_box.isChecked():
-            self.plotter.enable_trackball_style()
-        else:
-            self.plotter.enable_joystick_style()
 
     def _axis_view(self, col, up_col):
         """View along crystal reciprocal axis col with up = axis up_col.
@@ -5565,6 +5419,22 @@ class Garnet(QMainWindow):
         model = FormModel()
         self.form = FormPresenter(view, model)
         layout.addWidget(view)
+
+    def closeEvent(self, event):
+        """
+        Explicitly close the PyVista plotter before the window and its
+        child widgets are destroyed.
+
+        ``BasePlotter.__del__`` calls ``close()`` on garbage collection
+        if the plotter was never explicitly closed. If that happens
+        after Qt has already destroyed the underlying C++
+        ``QtInteractor`` object (e.g. as part of normal window
+        teardown), it raises a shiboken "already deleted"
+        ``RuntimeError``. Closing the plotter here, while the widgets
+        are still alive, avoids that.
+        """
+        self.form.view.plotter.close()
+        super().closeEvent(event)
 
 
 def handle_exception(exc_type, exc_value, exc_traceback):

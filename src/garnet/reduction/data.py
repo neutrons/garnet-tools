@@ -59,7 +59,6 @@ from mantid.simpleapi import (
     CloneWorkspace,
     PlusMD,
     MinusMD,
-    MultiplyMD,
     SaveMD,
     LoadMD,
     CreateMDHistoWorkspace,
@@ -234,7 +233,7 @@ class BaseDataModel:
                 LoadEventNexus(
                     Filename=files[0],
                     OutputWorkspace=self.instrument,
-                    LoadNexusInstrumentXML=False,
+                    LoadNexusInstrumentXML=True,
                     # LoadLogs=False,
                 )
             else:
@@ -1432,7 +1431,7 @@ class LaueData(BaseDataModel):
                 FilterByTimeStop=time_cut,
                 FilterByTofMin=None,
                 FilterByTofMax=None,
-                LoadNexusInstrumentXML=False,
+                LoadNexusInstrumentXML=True,
             )
 
         if type(runs) is list and mtd[event_name].isGroup():
@@ -2145,12 +2144,15 @@ class LaueData(BaseDataModel):
 
             RemoveLogs(Workspace="flux_van")
 
-            MaskDetectorsIf(
-                InputWorkspace="flux_van",
-                Mode="DeselectIf",
-                Operator="NotFinite",
-                OutputWorkspace="flux_van",
-            )
+            ys = mtd["flux_van"].extractY()
+
+            if ys.shape[0] > 1:
+                MaskDetectorsIf(
+                    InputWorkspace="flux_van",
+                    Mode="DeselectIf",
+                    Operator="NotFinite",
+                    OutputWorkspace="flux_van",
+                )
 
             ConvertToHistogram(
                 InputWorkspace=self.instrument,
@@ -2193,11 +2195,19 @@ class LaueData(BaseDataModel):
             ys = mtd["flux_van"].extractY()
             nos = mtd["flux"].getSpectrumNumbers()
 
-            index_map = {spec: i for i, spec in enumerate(nos)}
+            if ys.shape[0] == 1:
+                # Single-spectrum flux file (not broken down by bank) --
+                # the per-bank spectrum-number mapping below doesn't
+                # apply, so broadcast the one curve to every bank.
+                y = ys[0]
+                for i in range(len(nos)):
+                    mtd["flux"].setY(i, y)
+            else:
+                index_map = {spec: i for i, spec in enumerate(nos)}
 
-            nos = mtd["flux_van"].getSpectrumNumbers()
-            for spec, y in zip(nos, ys):
-                mtd["flux"].setY(index_map[spec], y)
+                nos = mtd["flux_van"].getSpectrumNumbers()
+                for spec, y in zip(nos, ys):
+                    mtd["flux"].setY(index_map[spec], y)
 
             for i, y in enumerate(mtd["flux"].extractY()):
                 if np.isclose(np.sum(y), 0):
@@ -2349,7 +2359,7 @@ class LaueData(BaseDataModel):
             Load(
                 Filename=filename,
                 OutputWorkspace="bkg",
-                LoadNexusInstrumentXML=False,
+                LoadNexusInstrumentXML=True,
             )
 
             pc_bkg = mtd["bkg"].run().getProperty("gd_prtn_chrg").value

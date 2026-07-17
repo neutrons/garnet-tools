@@ -502,8 +502,6 @@
 </li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.reflections.AbsorptionCorrection.calculate_correction">calculate_correction() (AbsorptionCorrection method)</a>
 </li>
-      <li><a href="source/garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.calculate_ellipsoid_surface">calculate_ellipsoid_surface() (NuclearStructureRefinement method)</a>
-</li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ub.RefineSingleCrystalGoniometer.calculate_goniometer">calculate_goniometer() (RefineSingleCrystalGoniometer method)</a>
 </li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.calibration.Calibration.calculate_goniometer_angles">calculate_goniometer_angles() (Calibration method)</a>
@@ -582,10 +580,10 @@
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.plan.SubPlan.cleanup">cleanup() (SubPlan method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="source/garnet.reduction.html#garnet.reduction.data.BaseDataModel.clear_norm">clear_norm() (BaseDataModel method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="source/garnet.plots.html#garnet.plots.base.BasePlot.close">close() (BasePlot method)</a>
 
       <ul>
@@ -651,6 +649,8 @@
       <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.copy_combine">copy_combine() (PeakEllipsoid method)</a>
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ub.UBModel.copy_UB">copy_UB() (UBModel method)</a>
+</li>
+      <li><a href="source/garnet.reduction.html#garnet.reduction.integration.Integration.correct_intensities">correct_intensities() (Integration method)</a>
 </li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.calculate.CalculateUB.cost">cost() (CalculateUB method)</a>
 
@@ -730,8 +730,6 @@
       </ul></li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.ellipsoid_covariance">ellipsoid_covariance() (PeakEllipsoid method)</a>
 </li>
-      <li><a href="source/garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.ellipsoid_parameters">ellipsoid_parameters() (NuclearStructureRefinement method)</a>
-</li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.estimate_center_weighted">estimate_center_weighted() (PeakEllipsoid method)</a>
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.estimate_envelope">estimate_envelope() (PeakEllipsoid method)</a>
@@ -750,10 +748,10 @@
       </ul></li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.extinction_correction">extinction_correction() (NuclearStructureRefinement method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="source/garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.extinction_xp">extinction_xp() (NuclearStructureRefinement method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="source/garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.extinction_xs">extinction_xs() (NuclearStructureRefinement method)</a>
 </li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.extinction_xx">extinction_xx() (NuclearStructureRefinement method)</a>
@@ -1674,6 +1672,8 @@
 </li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.plot_sample_shape">plot_sample_shape() (NuclearStructureRefinement method)</a>
 </li>
+      <li><a href="source/garnet.utilities.html#garnet.utilities.reflections.Peaks.plot_signal_noise">plot_signal_noise() (Peaks method)</a>
+</li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.plot_wobble_correction">plot_wobble_correction() (NuclearStructureRefinement method)</a>
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.poisson_deviance_fit">poisson_deviance_fit() (PeakEllipsoid method)</a>
@@ -1693,8 +1693,6 @@
       <li><a href="source/garnet.reduction.html#garnet.reduction.resolution.ResolutionEllipsoid.predict_sample_S">predict_sample_S() (ResolutionEllipsoid method)</a>
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.peaks.PeaksModel.predict_satellite_peaks">predict_satellite_peaks() (PeaksModel method)</a>
-</li>
-      <li><a href="source/garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.prepare_absorption_table">prepare_absorption_table() (NuclearStructureRefinement method)</a>
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.data.LaueData.preprocess_detector_banks">preprocess_detector_banks() (LaueData method)</a>
 </li>
@@ -1990,6 +1988,8 @@
 </li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.structure.StructureAnalysis">StructureAnalysis (class in garnet.utilities.structure)</a>
 </li>
+      <li><a href="source/garnet.reduction.html#garnet.reduction.integration.Integration.stub_peak_info">stub_peak_info() (Integration method)</a>
+</li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.plan.SubPlan">SubPlan (class in garnet.reduction.plan)</a>
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.data.LaueData.subtract_background">subtract_background() (LaueData method)</a>
@@ -2118,10 +2118,10 @@
 </li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.vanadium.Vanadium">Vanadium (class in garnet.utilities.vanadium)</a>
 </li>
-      <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.vech6">vech6() (PeakEllipsoid method)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.vech6">vech6() (PeakEllipsoid method)</a>
+</li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.reflections.AbsorptionCorrection.verify_chemical_formula">verify_chemical_formula() (AbsorptionCorrection method)</a>
 
       <ul>
@@ -2134,10 +2134,6 @@
         <li><a href="source/garnet.reduction.html#garnet.reduction.parametrization.Parametrization.view">(Parametrization method)</a>
 </li>
       </ul></li>
-      <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.volume_penalty_jacobian">volume_penalty_jacobian() (PeakEllipsoid method)</a>
-</li>
-      <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.volume_penalty_residual">volume_penalty_residual() (PeakEllipsoid method)</a>
-</li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.voxel_volume">voxel_volume() (PeakEllipsoid method)</a>
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.voxels">voxels() (PeakEllipsoid method)</a>

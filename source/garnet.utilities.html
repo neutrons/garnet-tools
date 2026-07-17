@@ -1354,7 +1354,7 @@
 <span id="garnet-utilities-refinement-module"></span><h2>garnet.utilities.refinement module<a class="headerlink" href="#module-garnet.utilities.refinement" title="Link to this heading">#</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">NuclearStructureRefinement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cell</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">space_group</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sites</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameters</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L43-L2041"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">NuclearStructureRefinement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cell</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">space_group</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sites</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameters</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L44-L1953"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
@@ -1409,28 +1409,22 @@
 <tr class="row-even"><td><p><strong>add_detector_run_scale_parameters</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>calculate_ellipsoid_surface</strong></p></td>
+<tr class="row-odd"><td><p><strong>calculate_scale_factor</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>calculate_scale_factor</strong></p></td>
+<tr class="row-even"><td><p><strong>calculate_statistics</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>calculate_statistics</strong></p></td>
+<tr class="row-odd"><td><p><strong>calculate_structure_factors</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>calculate_structure_factors</strong></p></td>
+<tr class="row-even"><td><p><strong>chemical_formula_z_parameter</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>chemical_formula_z_parameter</strong></p></td>
+<tr class="row-odd"><td><p><strong>cost</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>cost</strong></p></td>
-<td></td>
-</tr>
-<tr class="row-odd"><td><p><strong>detector_bank_scale_factors</strong></p></td>
-<td></td>
-</tr>
-<tr class="row-even"><td><p><strong>ellipsoid_parameters</strong></p></td>
+<tr class="row-even"><td><p><strong>detector_bank_scale_factors</strong></p></td>
 <td></td>
 </tr>
 <tr class="row-odd"><td><p><strong>extinction_xp</strong></p></td>
@@ -1478,28 +1472,25 @@
 <tr class="row-odd"><td><p><strong>plot_result</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>prepare_absorption_table</strong></p></td>
+<tr class="row-even"><td><p><strong>report</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>report</strong></p></td>
+<tr class="row-odd"><td><p><strong>run_angle_scale_factors</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>run_angle_scale_factors</strong></p></td>
+<tr class="row-even"><td><p><strong>save_detector_scales</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>save_detector_scales</strong></p></td>
+<tr class="row-odd"><td><p><strong>spherical_absorption</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>spherical_absorption</strong></p></td>
+<tr class="row-even"><td><p><strong>spherical_absorption_correction</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>spherical_absorption_correction</strong></p></td>
+<tr class="row-odd"><td><p><strong>spherical_extinction</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>spherical_extinction</strong></p></td>
-<td></td>
-</tr>
-<tr class="row-odd"><td><p><strong>update_sample</strong></p></td>
+<tr class="row-even"><td><p><strong>update_sample</strong></p></td>
 <td></td>
 </tr>
 </tbody>
@@ -1507,27 +1498,27 @@
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.absorption_correction">
-<span class="sig-name descname"><span class="pre">absorption_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coeffs</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1924-L1946"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.absorption_correction" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">absorption_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coeffs</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1904-L1908"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.absorption_correction" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.add_absorption_extinction_parameters">
-<span class="sig-name descname"><span class="pre">add_absorption_extinction_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L483-L520"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.add_absorption_extinction_parameters" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add_absorption_extinction_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L484-L521"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.add_absorption_extinction_parameters" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.add_beam_parameters">
-<span class="sig-name descname"><span class="pre">add_beam_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L522-L526"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.add_beam_parameters" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add_beam_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L523-L527"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.add_beam_parameters" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.add_detector_run_scale_parameters">
-<span class="sig-name descname"><span class="pre">add_detector_run_scale_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L528-L568"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.add_detector_run_scale_parameters" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add_detector_run_scale_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L529-L569"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.add_detector_run_scale_parameters" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.beam_weights">
-<span class="sig-name descname"><span class="pre">beam_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">G</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">by</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1885-L1922"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.beam_weights" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">beam_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">G</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">by</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1865-L1902"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.beam_weights" title="Link to this definition">#</a></dt>
 <dd><p>Calculate Gaussian beam weights for sample points.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1554,23 +1545,18 @@
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.calculate_ellipsoid_surface">
-<span class="sig-name descname"><span class="pre">calculate_ellipsoid_surface</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coeffs</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1868-L1878"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.calculate_ellipsoid_surface" title="Link to this definition">#</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.calculate_scale_factor">
-<span class="sig-name descname"><span class="pre">calculate_scale_factor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">F2s</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L991-L1011"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.calculate_scale_factor" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">calculate_scale_factor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">F2s</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L992-L1012"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.calculate_scale_factor" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.calculate_statistics">
-<span class="sig-name descname"><span class="pre">calculate_statistics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cutoff</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1382-L1445"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.calculate_statistics" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">calculate_statistics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cutoff</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1383-L1446"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.calculate_statistics" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.calculate_structure_amplitudes">
-<span class="sig-name descname"><span class="pre">calculate_structure_amplitudes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L754-L805"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.calculate_structure_amplitudes" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">calculate_structure_amplitudes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L755-L806"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.calculate_structure_amplitudes" title="Link to this definition">#</a></dt>
 <dd><p>Compute complex structure amplitudes Fs (per unique hkl) for given <cite>params</cite>.</p>
 <p>This is identical to the inner part of <cite>calculate_structure_factors</cite>
 but returns the complex amplitudes (not squared magnitudes).</p>
@@ -1578,32 +1564,27 @@ but returns the complex amplitudes (not squared magnitudes).</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.calculate_structure_factors">
-<span class="sig-name descname"><span class="pre">calculate_structure_factors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L749-L752"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.calculate_structure_factors" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">calculate_structure_factors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L750-L753"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.calculate_structure_factors" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.chemical_formula_z_parameter">
-<span class="sig-name descname"><span class="pre">chemical_formula_z_parameter</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L807-L845"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.chemical_formula_z_parameter" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">chemical_formula_z_parameter</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L808-L846"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.chemical_formula_z_parameter" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.cost">
-<span class="sig-name descname"><span class="pre">cost</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">F2s</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">I_obs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sig</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L984-L989"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.cost" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">cost</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">F2s</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">I_obs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sig</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L985-L990"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.cost" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.detector_bank_scale_factors">
-<span class="sig-name descname"><span class="pre">detector_bank_scale_factors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L978-L979"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.detector_bank_scale_factors" title="Link to this definition">#</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.ellipsoid_parameters">
-<span class="sig-name descname"><span class="pre">ellipsoid_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coeffs</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1857-L1866"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.ellipsoid_parameters" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">detector_bank_scale_factors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L979-L980"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.detector_bank_scale_factors" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.extinction_correction">
-<span class="sig-name descname"><span class="pre">extinction_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">param</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">F2</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L924-L976"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.extinction_correction" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">extinction_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">param</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">F2</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L925-L977"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.extinction_correction" title="Link to this definition">#</a></dt>
 <dd><p>Calculate structure factor-dependent extinction correction.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
@@ -1655,72 +1636,72 @@ but returns the complex amplitudes (not squared magnitudes).</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.extinction_xp">
-<span class="sig-name descname"><span class="pre">extinction_xp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">r2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">F2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lamda</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">V</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L912-L916"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.extinction_xp" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">extinction_xp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">r2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">F2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lamda</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">V</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L913-L917"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.extinction_xp" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.extinction_xs">
-<span class="sig-name descname"><span class="pre">extinction_xs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">g</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">F2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">two_theta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lamda</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Tbar</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">V</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L906-L910"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.extinction_xs" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">extinction_xs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">g</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">F2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">two_theta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lamda</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Tbar</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">V</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L907-L911"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.extinction_xs" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.extinction_xx">
-<span class="sig-name descname"><span class="pre">extinction_xx</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">F2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">two_theta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lamda</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">V</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L918-L922"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.extinction_xx" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">extinction_xx</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">F2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">two_theta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lamda</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">V</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L919-L923"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.extinction_xx" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.extract_info">
-<span class="sig-name descname"><span class="pre">extract_info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L636-L723"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.extract_info" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">extract_info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L637-L724"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.extract_info" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.extract_parameters">
-<span class="sig-name descname"><span class="pre">extract_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Uiso</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L570-L628"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.extract_parameters" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">extract_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Uiso</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L571-L629"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.extract_parameters" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.generate_parameters">
-<span class="sig-name descname"><span class="pre">generate_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L275-L471"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.generate_parameters" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">generate_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L276-L472"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.generate_parameters" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.generate_symmetry_transforms">
-<span class="sig-name descname"><span class="pre">generate_symmetry_transforms</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L255-L273"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.generate_symmetry_transforms" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">generate_symmetry_transforms</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L256-L274"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.generate_symmetry_transforms" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.initialize_correction">
-<span class="sig-name descname"><span class="pre">initialize_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'type</span> <span class="pre">II'</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1998-L2007"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.initialize_correction" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">initialize_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'type</span> <span class="pre">II'</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1944-L1953"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.initialize_correction" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.initialize_crystal_structure">
-<span class="sig-name descname"><span class="pre">initialize_crystal_structure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sites</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L725-L736"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.initialize_crystal_structure" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">initialize_crystal_structure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sites</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L726-L737"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.initialize_crystal_structure" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.initialize_material">
-<span class="sig-name descname"><span class="pre">initialize_material</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L738-L747"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.initialize_material" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">initialize_material</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L739-L748"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.initialize_material" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.initialize_unit_cell_atoms">
-<span class="sig-name descname"><span class="pre">initialize_unit_cell_atoms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rcond</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enforce_identity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L136-L253"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.initialize_unit_cell_atoms" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">initialize_unit_cell_atoms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rcond</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enforce_identity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L137-L254"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.initialize_unit_cell_atoms" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.load_hkls">
-<span class="sig-name descname"><span class="pre">load_hkls</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L630-L634"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.load_hkls" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">load_hkls</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L631-L635"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.load_hkls" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.normalization_correction">
-<span class="sig-name descname"><span class="pre">normalization_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1880-L1883"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.normalization_correction" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">normalization_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1860-L1863"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.normalization_correction" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.objective_correction">
-<span class="sig-name descname"><span class="pre">objective_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1032-L1063"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.objective_correction" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">objective_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1033-L1064"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.objective_correction" title="Link to this definition">#</a></dt>
 <dd><p>Objective for absorption/extinction refinement.</p>
 <p>Structure and scale are held fixed; F2s are precomputed for the
 current structural model.</p>
@@ -1728,7 +1709,7 @@ current structural model.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.objective_structure">
-<span class="sig-name descname"><span class="pre">objective_structure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1013-L1030"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.objective_structure" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">objective_structure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1014-L1031"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.objective_structure" title="Link to this definition">#</a></dt>
 <dd><p>Objective for structure + scale refinement.</p>
 <p>This stage varies positional, occupancy and displacement
 parameters together with the overall scale, while using the
@@ -1737,41 +1718,36 @@ current absorption/extinction parameters as fixed values.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.plot_absorption_correction">
-<span class="sig-name descname"><span class="pre">plot_absorption_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1503-L1538"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.plot_absorption_correction" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">plot_absorption_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1504-L1539"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.plot_absorption_correction" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.plot_hkl_families">
-<span class="sig-name descname"><span class="pre">plot_hkl_families</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1594-L1650"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.plot_hkl_families" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">plot_hkl_families</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1595-L1651"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.plot_hkl_families" title="Link to this definition">#</a></dt>
 <dd><p>Create multi-page PDF with one page per hkl family.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.plot_result">
-<span class="sig-name descname"><span class="pre">plot_result</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1454-L1501"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.plot_result" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">plot_result</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1455-L1502"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.plot_result" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.plot_sample_shape">
-<span class="sig-name descname"><span class="pre">plot_sample_shape</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1743-L1855"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.plot_sample_shape" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">plot_sample_shape</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1744-L1858"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.plot_sample_shape" title="Link to this definition">#</a></dt>
 <dd><p>Plot the refined ellipsoidal sample shape with beam directions.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.plot_wobble_correction">
-<span class="sig-name descname"><span class="pre">plot_wobble_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">off</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1540-L1592"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.plot_wobble_correction" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">plot_wobble_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">off</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1541-L1593"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.plot_wobble_correction" title="Link to this definition">#</a></dt>
 <dd><p>Plot wobble correction scale factors vs rotation angle.</p>
 <p>Shows observed data points and model curves for different wavelengths.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.prepare_absorption_table">
-<span class="sig-name descname"><span class="pre">prepare_absorption_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1948-L1962"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.prepare_absorption_table" title="Link to this definition">#</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.refine">
-<span class="sig-name descname"><span class="pre">refine</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">report</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cutoff</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_iter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">abs_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">off_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">det_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">norm_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ext_model</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'shelx'</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1130-L1309"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.refine" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">refine</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">report</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cutoff</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_iter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">abs_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">off_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">det_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">norm_corr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ext_model</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'shelx'</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1131-L1310"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.refine" title="Link to this definition">#</a></dt>
 <dd><p>Iterative refinement protocol: 7 stages per iteration.</p>
 <dl class="simple">
 <dt>Per iteration:</dt><dd><ol class="arabic simple">
@@ -1789,48 +1765,48 @@ current absorption/extinction parameters as fixed values.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.report">
-<span class="sig-name descname"><span class="pre">report</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">det_corr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_corr</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1311-L1380"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.report" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">report</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">det_corr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_corr</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1312-L1381"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.report" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.run_angle_scale_factors">
-<span class="sig-name descname"><span class="pre">run_angle_scale_factors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L981-L982"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.run_angle_scale_factors" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">run_angle_scale_factors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L982-L983"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.run_angle_scale_factors" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.save_corrected_peaks">
-<span class="sig-name descname"><span class="pre">save_corrected_peaks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1652-L1741"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.save_corrected_peaks" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">save_corrected_peaks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1653-L1742"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.save_corrected_peaks" title="Link to this definition">#</a></dt>
 <dd><p>Apply absorption corrections to all peaks and save to new file.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.save_detector_scales">
-<span class="sig-name descname"><span class="pre">save_detector_scales</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1447-L1452"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.save_detector_scales" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">save_detector_scales</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1448-L1453"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.save_detector_scales" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.spherical_absorption">
-<span class="sig-name descname"><span class="pre">spherical_absorption</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L847-L864"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.spherical_absorption" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">spherical_absorption</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L848-L865"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.spherical_absorption" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.spherical_absorption_correction">
-<span class="sig-name descname"><span class="pre">spherical_absorption_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">muR</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">two_theta</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L866-L867"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.spherical_absorption_correction" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">spherical_absorption_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">muR</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">two_theta</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L867-L868"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.spherical_absorption_correction" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.spherical_extinction">
-<span class="sig-name descname"><span class="pre">spherical_extinction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L869-L904"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.spherical_extinction" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">spherical_extinction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L870-L905"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.spherical_extinction" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.update_sample">
-<span class="sig-name descname"><span class="pre">update_sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">parameters</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L473-L481"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.update_sample" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">update_sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">parameters</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L474-L482"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.update_sample" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.refinement.NuclearStructureRefinement.wobble_correction">
-<span class="sig-name descname"><span class="pre">wobble_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">off</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1964-L1996"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.wobble_correction" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">wobble_correction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">off</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/refinement.py#L1910-L1942"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.refinement.NuclearStructureRefinement.wobble_correction" title="Link to this definition">#</a></dt>
 <dd><p>Scale model for off-centering/wobble correction.</p>
 <p>Based on WobbleCorrection model: accounts for beam displacement
 and sample misalignment effects on intensity measurements.</p>
@@ -1861,33 +1837,38 @@ and sample misalignment effects on intensity measurements.</p>
 <span id="garnet-utilities-reflections-module"></span><h2>garnet.utilities.reflections module<a class="headerlink" href="#module-garnet.utilities.reflections" title="Link to this heading">#</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">AbsorptionCorrection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chemical_formula</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">z_parameter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_vector</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">1]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">v_vector</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[1,</span> <span class="pre">0,</span> <span class="pre">0]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L117-L484"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">AbsorptionCorrection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chemical_formula</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">z_parameter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_vector</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">1]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">v_vector</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[1,</span> <span class="pre">0,</span> <span class="pre">0]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L116-L466"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p class="rubric">Methods</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#garnet.utilities.reflections.AbsorptionCorrection.apply_correction" title="garnet.utilities.reflections.AbsorptionCorrection.apply_correction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">apply_correction</span></code></a>()</p></td>
+<td><p>Correct every peak's intensity for absorption in one vectorized pass via <code class="docutils literal notranslate"><span class="pre">AbsorptionEllipsoid</span></code>, instead of a per-orientation Mantid <code class="docutils literal notranslate"><span class="pre">AddAbsorptionWeightedPathLengths</span></code> ray-trace loop.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
 <div class="pst-scrollable-table-container"><table class="table">
 <tbody>
-<tr class="row-odd"><td><p><strong>apply_correction</strong></p></td>
+<tr class="row-odd"><td><p><strong>calculate_correction</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>calculate_correction</strong></p></td>
+<tr class="row-even"><td><p><strong>save_ellipsoid_stl</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>save_ellipsoid_stl</strong></p></td>
+<tr class="row-odd"><td><p><strong>set_material</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>set_material</strong></p></td>
+<tr class="row-even"><td><p><strong>set_orientation</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>set_orientation</strong></p></td>
+<tr class="row-odd"><td><p><strong>set_shape</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>set_shape</strong></p></td>
+<tr class="row-even"><td><p><strong>verify_chemical_formula</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>verify_chemical_formula</strong></p></td>
-<td></td>
-</tr>
-<tr class="row-even"><td><p><strong>write_absortion_parameters</strong></p></td>
+<tr class="row-odd"><td><p><strong>write_absortion_parameters</strong></p></td>
 <td></td>
 </tr>
 </tbody>
@@ -1895,49 +1876,59 @@ and sample misalignment effects on intensity measurements.</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.apply_correction">
-<span class="sig-name descname"><span class="pre">apply_correction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L406-L484"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.apply_correction" title="Link to this definition">#</a></dt>
-<dd></dd></dl>
+<span class="sig-name descname"><span class="pre">apply_correction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L407-L466"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.apply_correction" title="Link to this definition">#</a></dt>
+<dd><p>Correct every peak’s intensity for absorption in one
+vectorized pass via <code class="docutils literal notranslate"><span class="pre">AbsorptionEllipsoid</span></code>, instead of a
+per-orientation Mantid <code class="docutils literal notranslate"><span class="pre">AddAbsorptionWeightedPathLengths</span></code>
+ray-trace loop. Each peak already carries its own incident-
+/scattered-beam directions in the sample frame (goniometer-
+independent), so no per-run <code class="docutils literal notranslate"><span class="pre">LoadSampleShape</span></code>/
+<code class="docutils literal notranslate"><span class="pre">SetGoniometer</span></code>/<code class="docutils literal notranslate"><span class="pre">FilterPeaks</span></code>/<code class="docutils literal notranslate"><span class="pre">CombinePeaksWorkspaces</span></code> is
+needed – the ellipsoid orientation (<code class="docutils literal notranslate"><span class="pre">self.alpha</span></code>,
+<code class="docutils literal notranslate"><span class="pre">self.beta</span></code>, <code class="docutils literal notranslate"><span class="pre">self.gamma</span></code>) is fixed relative to the sample
+for every peak regardless of goniometer setting.</p>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.calculate_correction">
-<span class="sig-name descname"><span class="pre">calculate_correction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L250-L355"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.calculate_correction" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">calculate_correction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L251-L354"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.calculate_correction" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.save_ellipsoid_stl">
-<span class="sig-name descname"><span class="pre">save_ellipsoid_stl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'/tmp/ellipsoid.stl'</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L180-L185"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.save_ellipsoid_stl" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">save_ellipsoid_stl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'/tmp/ellipsoid.stl'</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L179-L184"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.save_ellipsoid_stl" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.set_material">
-<span class="sig-name descname"><span class="pre">set_material</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L211-L216"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.set_material" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">set_material</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L212-L217"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.set_material" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.set_orientation">
-<span class="sig-name descname"><span class="pre">set_orientation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L218-L248"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.set_orientation" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">set_orientation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L219-L249"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.set_orientation" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.set_shape">
-<span class="sig-name descname"><span class="pre">set_shape</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L187-L209"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.set_shape" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">set_shape</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L186-L210"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.set_shape" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.verify_chemical_formula">
-<span class="sig-name descname"><span class="pre">verify_chemical_formula</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">formula</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L171-L178"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.verify_chemical_formula" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">verify_chemical_formula</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">formula</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L170-L177"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.verify_chemical_formula" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.write_absortion_parameters">
-<span class="sig-name descname"><span class="pre">write_absortion_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L357-L404"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.write_absortion_parameters" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">write_absortion_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L356-L405"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.write_absortion_parameters" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">point_group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L487-L1527"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">point_group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L469-L1551"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
@@ -1971,40 +1962,43 @@ and sample misalignment effects on intensity measurements.</p>
 <tr class="row-odd"><td><p><strong>peak_info</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>refine_UB</strong></p></td>
+<tr class="row-even"><td><p><strong>plot_signal_noise</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>refine_ellipsoids</strong></p></td>
+<tr class="row-odd"><td><p><strong>refine_UB</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>remove_non_indexed</strong></p></td>
+<tr class="row-even"><td><p><strong>refine_ellipsoids</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>remove_non_integrated</strong></p></td>
+<tr class="row-odd"><td><p><strong>remove_non_indexed</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>remove_off_centered</strong></p></td>
+<tr class="row-even"><td><p><strong>remove_non_integrated</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>renormalize_intensities</strong></p></td>
+<tr class="row-odd"><td><p><strong>remove_off_centered</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>renumber_peaks</strong></p></td>
+<tr class="row-even"><td><p><strong>renormalize_intensities</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>rescale_intensities</strong></p></td>
+<tr class="row-odd"><td><p><strong>renumber_peaks</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>reset_satellite</strong></p></td>
+<tr class="row-even"><td><p><strong>rescale_intensities</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>resort_hkl</strong></p></td>
+<tr class="row-odd"><td><p><strong>reset_satellite</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>save_peaks</strong></p></td>
+<tr class="row-even"><td><p><strong>resort_hkl</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>update_monitor</strong></p></td>
+<tr class="row-odd"><td><p><strong>save_peaks</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p><strong>update_monitor</strong></p></td>
 <td></td>
 </tr>
 </tbody>
@@ -2012,67 +2006,72 @@ and sample misalignment effects on intensity measurements.</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.calculate_statistics">
-<span class="sig-name descname"><span class="pre">calculate_statistics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1362-L1470"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.calculate_statistics" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">calculate_statistics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1386-L1494"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.calculate_statistics" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.get_cell">
-<span class="sig-name descname"><span class="pre">get_cell</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L716-L718"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.get_cell" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">get_cell</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L730-L732"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.get_cell" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.load_peaks">
-<span class="sig-name descname"><span class="pre">load_peaks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L793-L977"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.load_peaks" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">load_peaks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L807-L993"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.load_peaks" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.load_spectrum">
-<span class="sig-name descname"><span class="pre">load_spectrum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instrument</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L709-L714"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.load_spectrum" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">load_spectrum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instrument</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L723-L728"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.load_spectrum" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.median_absolute_devation">
-<span class="sig-name descname"><span class="pre">median_absolute_devation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">arr</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L577-L581"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.median_absolute_devation" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">median_absolute_devation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">arr</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L569-L573"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.median_absolute_devation" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.merge_intensities">
-<span class="sig-name descname"><span class="pre">merge_intensities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1073-L1105"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.merge_intensities" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">merge_intensities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1089-L1121"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.merge_intensities" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.peak_info">
-<span class="sig-name descname"><span class="pre">peak_info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L720-L782"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.peak_info" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">peak_info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L734-L796"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.peak_info" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.plot_signal_noise">
+<span class="sig-name descname"><span class="pre">plot_signal_noise</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L701-L721"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.plot_signal_noise" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.refine_UB">
-<span class="sig-name descname"><span class="pre">refine_UB</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L523-L550"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.refine_UB" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">refine_UB</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L505-L532"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.refine_UB" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.refine_ellipsoids">
-<span class="sig-name descname"><span class="pre">refine_ellipsoids</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L515-L521"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.refine_ellipsoids" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">refine_ellipsoids</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L497-L503"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.refine_ellipsoids" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.remove_non_indexed">
-<span class="sig-name descname"><span class="pre">remove_non_indexed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L697-L707"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_non_indexed" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">remove_non_indexed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L689-L699"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_non_indexed" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.remove_non_integrated">
-<span class="sig-name descname"><span class="pre">remove_non_integrated</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L683-L695"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_non_integrated" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">remove_non_integrated</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L675-L687"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_non_integrated" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.remove_off_centered">
-<span class="sig-name descname"><span class="pre">remove_off_centered</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L583-L635"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_off_centered" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">remove_off_centered</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L575-L627"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_off_centered" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.remove_volume_outliers">
-<span class="sig-name descname"><span class="pre">remove_volume_outliers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lo</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L637-L681"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_volume_outliers" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">remove_volume_outliers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lo</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L629-L673"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_volume_outliers" title="Link to this definition">#</a></dt>
 <dd><p>Flag peaks whose 3D Gaussian profile-fit intensity (I_3d) disagrees
 with the peak’s assigned intensity (peak.getIntensity()). Peaks
 whose I_3d / getIntensity() ratio falls outside [lo, hi] are
@@ -2081,44 +2080,44 @@ considered outliers and flagged for removal.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.renormalize_intensities">
-<span class="sig-name descname"><span class="pre">renormalize_intensities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flux</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">solid_angle</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L979-L1071"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.renormalize_intensities" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">renormalize_intensities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flux</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">solid_angle</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L995-L1087"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.renormalize_intensities" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.renumber_peaks">
-<span class="sig-name descname"><span class="pre">renumber_peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">60</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">decimals</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">6</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linkage</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'average'</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1323-L1360"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.renumber_peaks" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">renumber_peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">60</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">decimals</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">6</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linkage</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'average'</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1347-L1384"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.renumber_peaks" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.rescale_intensities">
-<span class="sig-name descname"><span class="pre">rescale_intensities</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L552-L575"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.rescale_intensities" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">rescale_intensities</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L534-L567"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.rescale_intensities" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.reset_satellite">
-<span class="sig-name descname"><span class="pre">reset_satellite</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1107-L1156"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.reset_satellite" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">reset_satellite</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1123-L1172"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.reset_satellite" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.resort_hkl">
-<span class="sig-name descname"><span class="pre">resort_hkl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1472-L1527"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.resort_hkl" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">resort_hkl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1496-L1551"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.resort_hkl" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.save_peaks">
-<span class="sig-name descname"><span class="pre">save_peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fit_dict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1158-L1313"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.save_peaks" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">save_peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fit_dict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1174-L1337"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.save_peaks" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.update_monitor">
-<span class="sig-name descname"><span class="pre">update_monitor</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L784-L791"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.update_monitor" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">update_monitor</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L798-L805"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.update_monitor" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.main">
-<span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1530-L1610"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.main" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1554-L1634"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.main" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 </section>
@@ -2459,7 +2458,6 @@ considered outliers and flagged for removal.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.add_beam_parameters"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.add_beam_parameters()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.add_detector_run_scale_parameters"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.add_detector_run_scale_parameters()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.beam_weights"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.beam_weights()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.calculate_ellipsoid_surface"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.calculate_ellipsoid_surface()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.calculate_scale_factor"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.calculate_scale_factor()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.calculate_statistics"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.calculate_statistics()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.calculate_structure_amplitudes"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.calculate_structure_amplitudes()</span></code></a></li>
@@ -2467,7 +2465,6 @@ considered outliers and flagged for removal.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.chemical_formula_z_parameter"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.chemical_formula_z_parameter()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.cost"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.cost()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.detector_bank_scale_factors"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.detector_bank_scale_factors()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.ellipsoid_parameters"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.ellipsoid_parameters()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.extinction_correction"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.extinction_correction()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.extinction_xp"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.extinction_xp()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.extinction_xs"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.extinction_xs()</span></code></a></li>
@@ -2489,7 +2486,6 @@ considered outliers and flagged for removal.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.plot_result"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.plot_result()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.plot_sample_shape"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.plot_sample_shape()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.plot_wobble_correction"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.plot_wobble_correction()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.prepare_absorption_table"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.prepare_absorption_table()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.refine"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.refine()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.report"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.report()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.refinement.NuclearStructureRefinement.run_angle_scale_factors"><code class="docutils literal notranslate"><span class="pre">NuclearStructureRefinement.run_angle_scale_factors()</span></code></a></li>
@@ -2524,6 +2520,7 @@ considered outliers and flagged for removal.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.median_absolute_devation"><code class="docutils literal notranslate"><span class="pre">Peaks.median_absolute_devation()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.merge_intensities"><code class="docutils literal notranslate"><span class="pre">Peaks.merge_intensities()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.peak_info"><code class="docutils literal notranslate"><span class="pre">Peaks.peak_info()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.plot_signal_noise"><code class="docutils literal notranslate"><span class="pre">Peaks.plot_signal_noise()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.refine_UB"><code class="docutils literal notranslate"><span class="pre">Peaks.refine_UB()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.refine_ellipsoids"><code class="docutils literal notranslate"><span class="pre">Peaks.refine_ellipsoids()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.remove_non_indexed"><code class="docutils literal notranslate"><span class="pre">Peaks.remove_non_indexed()</span></code></a></li>

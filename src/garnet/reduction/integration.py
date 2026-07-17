@@ -23,7 +23,7 @@ from garnet.reduction.peaks import PeaksModel, PeakModel, centering_reflection
 from garnet.reduction.ellipsoid import PeakEllipsoid
 from garnet.reduction.resolution import ResolutionEllipsoid
 from garnet.reduction.data import DataModel
-from garnet.reduction.intensity import IntegrationModel
+from garnet.reduction.projection import PeakProjection
 
 INTEGRATION = os.path.abspath(__file__)
 directory = os.path.dirname(INTEGRATION)
@@ -34,7 +34,7 @@ REFLECTIONS = os.path.abspath(filename)
 assert os.path.exists(REFLECTIONS)
 
 
-class Integration(IntegrationModel):
+class Integration(PeakProjection):
     def __init__(self, plan):
         super(Integration, self).__init__(plan)
 
@@ -71,6 +71,8 @@ class Integration(IntegrationModel):
             self.params["OptimizeUB"] = False
         if self.params.get("OptimizePeaks") is None:
             self.params["OptimizePeaks"] = False
+        if self.params.get("ProfileFit") is None:
+            self.params["ProfileFit"] = True
 
         self.check(
             self.params["MaxOrder"], ">=", 0, "MaxOrder must be non-negative"
@@ -80,6 +82,12 @@ class Integration(IntegrationModel):
             "is",
             bool,
             "CrossTerms must be a boolean",
+        )
+        self.check(
+            type(self.params["ProfileFit"]),
+            "is",
+            bool,
+            "ProfileFit must be a boolean",
         )
 
     @staticmethod
@@ -335,36 +343,42 @@ class Integration(IntegrationModel):
             self.peaks, self.data = peaks, data
             self.r_cut = r_cut
 
-            banks = peaks.get_bank_names("peaks")
+            if self.params["ProfileFit"]:
+                banks = peaks.get_bank_names("peaks")
 
-            for bank in banks:
-                if self.make_plot:
-                    self.peak_plot = PeakPlot()
+                for bank in banks:
+                    if self.make_plot:
+                        self.peak_plot = PeakPlot()
 
-                data.mask_to_bank("data", bank)
+                    data.mask_to_bank("data", bank)
 
-                data.preprocess_detector_banks(bank)
+                    data.preprocess_detector_banks(bank)
 
-                data.convert_to_Q_sample(bank, bank, False, bank + "_dets")
+                    data.convert_to_Q_sample(bank, bank, False, bank + "_dets")
 
-                peak_dict = self.extract_peak_info("peaks", r_cut, bank=bank)
+                    peak_dict = self.extract_peak_info(
+                        "peaks", r_cut, bank=bank
+                    )
 
-                data.delete_workspace(bank)
+                    data.delete_workspace(bank)
 
-                data.delete_workspace(bank + "_dets")
+                    data.delete_workspace(bank + "_dets")
 
-                results = self.integrate_peaks(peak_dict)
+                    results = self.integrate_peaks(peak_dict)
 
-                del peak_dict
+                    del peak_dict
 
-                self.update_peak_info("peaks", results)
+                    self.update_peak_info("peaks", results)
 
-                del results
+                    del results
 
-                gc.collect()
+                    gc.collect()
 
-                if self.make_plot:
-                    self.peak_plot.close()
+                    if self.make_plot:
+                        self.peak_plot.close()
+            else:
+                self.stub_peak_info("peaks")
+                self.correct_intensities("peaks")
 
             peaks.update_scale_factor("peaks", data.monitor)
 
@@ -850,3 +864,64 @@ class Integration(IntegrationModel):
 
             else:
                 peak.set_peak_intensity(i, 0, 0)
+
+    def stub_peak_info(self, peaks_ws):
+        """
+        Populate placeholder diagnostic info.
+        """
+        peak = PeakModel(peaks_ws)
+
+        for i in range(peak.get_number_peaks()):
+            p = mtd[peaks_ws].getPeak(i)
+
+            info = {
+                "d3x": 0.0,
+                "bkg": 0.0,
+                "bkg_err": 0.0,
+                "n_vox": 0,
+                "vol_frac": 1.0,
+                "intens_raw": p.getIntensity(),
+                "sig_raw": p.getSigmaIntensity(),
+                "pk_data": 1.0,
+                "pk_norm": 1.0,
+                "bkg_data": 0.0,
+                "bkg_norm": 1.0,
+                "ratio": 1.0,
+                "cntrt": self.cntrt,
+            }
+
+            peak.add_diagnostic_info(i, info)
+
+    def correct_intensities(self, peaks_ws):
+        """
+        Apply the delta-function absolute-scale normalization
+        (``DataModel.approximate_norm``) to each peak's raw
+        intensity/sigma, keyed by wavelength/scattering angle/detector
+        ID. Only needed for the ``ProfileFit=False`` (radii-only)
+        path -- the profile-fit path already normalizes per-bank via
+        ``extract_peak_info``'s ``normalize_to_hkl``/``_norm``
+        histogram extraction, so applying this on top would
+        double-normalize.
+        """
+        peak = PeakModel(peaks_ws)
+
+        proton_charge = mtd["data"].run().getProtonCharge()
+
+        for i in range(peak.get_number_peaks()):
+            p = mtd[peaks_ws].getPeak(i)
+
+            lamda = peak.get_wavelength(i)
+            two_theta, _ = peak.get_angles(i)
+            det_ID = peak.get_detector_id(i)
+
+            norm = self.data.approximate_norm(
+                lamda, two_theta, det_ID, proton_charge
+            )
+
+            if not (np.isfinite(norm) and norm > 0):
+                continue
+
+            intens = p.getIntensity() / norm
+            sig = p.getSigmaIntensity() / norm
+
+            peak.set_peak_intensity(i, intens, sig)

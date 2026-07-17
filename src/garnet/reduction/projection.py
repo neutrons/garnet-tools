@@ -260,7 +260,7 @@ def voxel_weights(Q0, Q1, Q2, c, neighbors, t_max=0.95, k_nearest=12):
     return weights
 
 
-class IntegrationModel(SubPlan):
+class PeakProjection(SubPlan):
     """
     Base class providing shared geometry and binning utilities for
     integration workflows.

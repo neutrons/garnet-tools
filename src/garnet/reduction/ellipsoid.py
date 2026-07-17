@@ -9,31 +9,7 @@ import scipy.ndimage
 
 from lmfit import Minimizer, Parameters, fit_report
 
-_R_SCALE_1D = np.sqrt(scipy.stats.chi2.ppf(0.997, df=1))
-_R_SCALE_2D = np.sqrt(scipy.stats.chi2.ppf(0.997, df=2))
 _R_SCALE_3D = np.sqrt(scipy.stats.chi2.ppf(0.997, df=3))
-
-# r0,r1,r2 (and S) are calibrated to the full-3D 99.7% confidence contour
-# (_R_SCALE_3D, df=3). A mode's own sub-block of S needs its determinant
-# rescaled to that mode's own df=d 99.7%-contour convention.
-_MODE_NDIM = {
-    "1d_0": 1,
-    "1d_1": 1,
-    "1d_2": 1,
-    "2d_0": 2,
-    "2d_1": 2,
-    "2d_2": 2,
-    "3d": 3,
-}
-_MODE_R_SCALE = {
-    "1d_0": _R_SCALE_1D,
-    "1d_1": _R_SCALE_1D,
-    "1d_2": _R_SCALE_1D,
-    "2d_0": _R_SCALE_2D,
-    "2d_1": _R_SCALE_2D,
-    "2d_2": _R_SCALE_2D,
-    "3d": _R_SCALE_3D,
-}
 
 
 class PeakEllipsoid:
@@ -403,221 +379,6 @@ class PeakEllipsoid:
         for k, uname in enumerate(["u0", "u1", "u2"]):
             idx = params_list.index(uname)
             jac[idx, 7:10] = rot_scale * domega[k]
-
-        ind = [i for i, (_, par) in enumerate(params.items()) if par.vary]
-        return jac[ind]
-
-    #: Every mode with its own A<mode>/B<mode> amplitude/background pair,
-    #: hence its own volume penalty term.
-    _PENALTY_MODES = (
-        "1d_0",
-        "1d_1",
-        "1d_2",
-        "2d_0",
-        "2d_1",
-        "2d_2",
-        "3d",
-    )
-
-    def _mode_S_det(self, r0, r1, r2, u0, u1, u2, mode):
-        """
-        Determinant of the covariance sub-block S for a mode, on that mode's own df=d contour scale.
-
-        The sub-block is the plain sub-block of
-        ``S = U diag(r0^2, r1^2, r2^2) U^T`` selected the same way
-        `ellipsoid_covariance` selects `inv_S` sub-blocks per mode (no
-        chi-squared scale factor applied at this stage). Since `S` is
-        generally not diagonal in the lab frame, 1D/2D sub-block
-        determinants (and hence this quantity) do depend on orientation,
-        unlike the full 3x3 determinant. For ``mode="3d"``, `S` is
-        diagonal with entries ``r0^2, r1^2, r2^2`` in its own (rotated)
-        local frame, and the determinant is rotation-invariant, so
-        ``det(S) = (r0*r1*r2)**2`` is computed directly without building
-        `U` or the full matrix product.
-
-        `r0, r1, r2` (and therefore `S`) are calibrated to the full-3D
-        99.7% confidence contour (`_R_SCALE_3D`, chi-squared with
-        ``df=3``). A mode of dimensionality ``d = _MODE_NDIM[mode]`` (1,
-        2, or 3) has its own ``df=d`` chi-squared contour convention, so
-        the raw sub-block determinant is rescaled by
-        ``(_MODE_R_SCALE[mode] / _R_SCALE_3D) ** (2*d)`` to convert it
-        from the df=3 scale to the mode's own df=d scale. This factor is
-        exactly 1 for ``mode="3d"`` (already on the df=3 scale) and
-        greater than 1 for 1D/2D modes (a df=d contour at the same
-        confidence level is narrower than the corresponding df=3 slice).
-
-        Parameters
-        ----------
-        r0 : float
-            Ellipsoid principal radius along the first rotated axis.
-        r1 : float
-            Ellipsoid principal radius along the second rotated axis.
-        r2 : float
-            Ellipsoid principal radius along the third rotated axis.
-        u0 : float
-            First component of the orientation rotation vector.
-        u1 : float
-            Second component of the orientation rotation vector.
-        u2 : float
-            Third component of the orientation rotation vector.
-        mode : str
-            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
-            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``.
-
-        Returns
-        -------
-        det_S : float
-            df=d-rescaled determinant of the mode's covariance sub-block
-            (a plain scalar value for 1D modes, where the "sub-block" is
-            a single diagonal entry of `S`).
-        """
-
-        if mode == "3d":
-            det_S = (r0 * r1 * r2) ** 2
-        else:
-            S = self.S_matrix(r0, r1, r2, u0, u1, u2)
-
-            if mode == "2d_0":
-                S_mode = S[1:, 1:]
-            elif mode == "2d_1":
-                S_mode = S[0::2, 0::2]
-            elif mode == "2d_2":
-                S_mode = S[:2, :2]
-            elif mode == "1d_0":
-                S_mode = S[0, 0]
-            elif mode == "1d_1":
-                S_mode = S[1, 1]
-            elif mode == "1d_2":
-                S_mode = S[2, 2]
-            else:
-                raise ValueError("Unknown mode {}".format(mode))
-
-            det_S = np.linalg.det(S_mode) if np.ndim(S_mode) == 2 else S_mode
-
-        d = _MODE_NDIM[mode]
-        rescale = (_MODE_R_SCALE[mode] / _R_SCALE_3D) ** (2 * d)
-
-        return det_S * rescale
-
-    def volume_penalty_residual(self, params, mode, eps=1e-12):
-        """
-        Constant penalty term minimizing sqrt(B) / (pi^(d/4) * A * det(S)^(1/4)) for one mode.
-
-        A, B are the given mode's amplitude/background, and S is that
-        mode's own covariance sub-block (see `_mode_S_det`) — for the
-        ``"3d"`` mode, ``det(S)^(1/4)`` reduces to ``sqrt(r0*r1*r2)``. The
-        ``pi^(d/4)`` prefactor (``d`` = mode dimensionality) matches the
-        ``(2*pi)^(d/2)`` volume element of the Gaussian integral
-        normalization used by `gaussian_integral`, up to the factor of 2.
-        Unlike the SNR-adaptive prior widths, this term is always active
-        at a fixed strength, discouraging fits with weak amplitude and/or
-        a small volume relative to the background level.
-
-        Parameters
-        ----------
-        params : lmfit.Parameters
-            Current fit parameters; must contain ``A<mode>, B<mode>, r0,
-            r1, r2, u0, u1, u2``.
-        mode : str
-            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
-            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``.
-        eps : float, optional
-            Small positive floor used to avoid division by zero in `A`
-            and the volume term. Default is 1e-12.
-
-        Returns
-        -------
-        penalty : ndarray of shape (1,)
-            The single-element penalty residual
-            ``sqrt(B) / (pi**(d/4) * A * det(S)^(1/4))`` for this mode.
-        """
-
-        A = max(params["A" + mode].value, eps)
-        B = max(params["B" + mode].value, 0.0)
-        r0 = params["r0"].value
-        r1 = params["r1"].value
-        r2 = params["r2"].value
-        u0 = params["u0"].value
-        u1 = params["u1"].value
-        u2 = params["u2"].value
-
-        d = _MODE_NDIM[mode]
-        det_S = self._mode_S_det(r0, r1, r2, u0, u1, u2, mode)
-        vol = max(det_S, eps) ** 0.25
-
-        penalty = np.sqrt(B) / (np.pi ** (d / 4.0) * A * vol)
-
-        return np.array([penalty])
-
-    def volume_penalty_jacobian(self, params, mode, eps=1e-12, delta=1e-6):
-        """
-        Jacobian of `volume_penalty_residual` for one mode w.r.t. varying fit parameters.
-
-        The A/B derivatives are analytic; the r0,r1,r2,u0,u1,u2
-        derivatives are central finite differences of ``det(S)^(1/4)``,
-        since 1D/2D sub-block determinants (unlike the full 3x3
-        determinant) don't have a simple closed form in terms of the
-        radii alone.
-
-        Parameters
-        ----------
-        params : lmfit.Parameters
-            Current fit parameters; must contain ``A<mode>, B<mode>, r0,
-            r1, r2, u0, u1, u2``.
-        mode : str
-            One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
-            ``"1d_0"``, ``"1d_1"``, ``"1d_2"``.
-        eps : float, optional
-            Small positive floor matching `volume_penalty_residual`.
-            Default is 1e-12.
-        delta : float, optional
-            Central finite-difference step size for the shape
-            derivatives. Default is 1e-6.
-
-        Returns
-        -------
-        jac : ndarray of shape (n_vary, 1)
-            Jacobian column restricted to parameters with ``vary=True``,
-            one row per varying parameter.
-        """
-        params_list = [name for name, _ in params.items()]
-        jac = np.zeros((len(params_list), 1), dtype=float)
-
-        A = max(params["A" + mode].value, eps)
-        B = max(params["B" + mode].value, 0.0)
-        r = [params["r0"].value, params["r1"].value, params["r2"].value]
-        u = [params["u0"].value, params["u1"].value, params["u2"].value]
-
-        d = _MODE_NDIM[mode]
-        pi_factor = np.pi ** (d / 4.0)
-
-        def vol(rr, uu):
-            det_S = self._mode_S_det(*rr, *uu, mode)
-            return max(det_S, eps) ** 0.25
-
-        vol0 = vol(r, u)
-        penalty = np.sqrt(B) / (pi_factor * A * vol0)
-
-        aname, bname = "A" + mode, "B" + mode
-        if aname in params_list:
-            jac[params_list.index(aname), 0] = -penalty / A
-        if bname in params_list and B > 0:
-            jac[params_list.index(bname), 0] = penalty / (2.0 * B)
-
-        shape_names = ["r0", "r1", "r2", "u0", "u1", "u2"]
-        for i, name in enumerate(shape_names):
-            if name not in params_list:
-                continue
-            r_p, u_p = list(r), list(u)
-            r_m, u_m = list(r), list(u)
-            if i < 3:
-                r_p[i] += delta
-                r_m[i] -= delta
-            else:
-                u_p[i - 3] += delta
-                u_m[i - 3] -= delta
-            dvol = (vol(r_p, u_p) - vol(r_m, u_m)) / (2.0 * delta)
-            jac[params_list.index(name), 0] = -penalty / vol0 * dvol
 
         ind = [i for i, (_, par) in enumerate(params.items()) if par.vary]
         return jac[ind]
@@ -1591,8 +1352,7 @@ class PeakEllipsoid:
         -------
         dg : ndarray of shape (3,)
             Derivative of `gaussian_integral` with respect to each of the
-            three shape parameters corresponding to `d_inv_S`; entries
-            for axes not used by `mode` are zero.
+            three shape parameters corresponding to `d_inv_S`.
         """
         inv_var = self.ellipsoid_covariance(inv_S, mode)
 
@@ -1608,34 +1368,23 @@ class PeakEllipsoid:
 
         g = np.sqrt((2 * np.pi) ** k * det)
 
-        inv_var = self.ellipsoid_covariance(inv_S, mode)
         d_inv_var = [self.ellipsoid_covariance(val, mode) for val in d_inv_S]
 
-        if mode == "3d":
-            g0 = np.einsum("ij,ji->", inv_var, d_inv_var[0])
-            g1 = np.einsum("ij,ji->", inv_var, d_inv_var[1])
-            g2 = np.einsum("ij,ji->", inv_var, d_inv_var[2])
-        elif mode == "2d_0":
-            g1 = np.einsum("ij,ji->", inv_var, d_inv_var[1])
-            g2 = np.einsum("ij,ji->", inv_var, d_inv_var[2])
-            g0 = g1 * 0
-        elif mode == "2d_1":
-            g0 = np.einsum("ij,ji->", inv_var, d_inv_var[0])
-            g2 = np.einsum("ij,ji->", inv_var, d_inv_var[2])
-            g1 = g2 * 0
-        elif mode == "2d_2":
-            g0 = np.einsum("ij,ji->", inv_var, d_inv_var[0])
-            g1 = np.einsum("ij,ji->", inv_var, d_inv_var[1])
-            g2 = g0 * 0
-        elif mode == "1d_0":
-            g0 = d_inv_var[0] * inv_var
-            g1 = g2 = g0 * 0
-        elif mode == "1d_1":
-            g1 = d_inv_var[1] * inv_var
-            g2 = g0 = g1 * 0
-        elif mode == "1d_2":
-            g2 = d_inv_var[2] * inv_var
-            g0 = g1 = g2 * 0
+        # d(det(S))/dx = -det(S) * trace(S @ d(inv_var)/dx), where S = inv_var^-1
+        # (Jacobi's formula applied to det(inv_var) = 1/det(S)). All three
+        # shape parameters are contracted against the mode's own
+        # submatrix (not just the "own-axis" ones): under a rotated
+        # orientation the submatrix genuinely depends on all three radii,
+        # and a rotation about one axis perturbs the *other* two axes'
+        # submatrix, so no axis can be assumed zero a priori.
+        if mode == "3d" or "2d" in mode:
+            S_mode = np.linalg.inv(inv_var)
+            g0, g1, g2 = (
+                -np.einsum("ij,ji->", S_mode, dv) for dv in d_inv_var
+            )
+        else:
+            S_mode = 1.0 / inv_var
+            g0, g1, g2 = (-dv * S_mode for dv in d_inv_var)
 
         return 0.5 * g * np.array([g0, g1, g2])
 
@@ -1748,8 +1497,7 @@ class PeakEllipsoid:
         dg : ndarray
             Stacked derivatives of the Gaussian profile with respect to
             each of the three shape parameters corresponding to
-            `d_inv_S`, evaluated on the mode's coordinate grid; entries
-            for axes not used by `mode` are zero.
+            `d_inv_S`, evaluated on the mode's coordinate grid.
         """
         c0, c1, c2 = c
 
@@ -1760,43 +1508,32 @@ class PeakEllipsoid:
 
         if mode == "3d":
             dx = [dx0, dx1, dx2]
-            d2 = np.einsum("i...,ij,j...->...", dx, inv_var, dx)
-            g0 = np.einsum("i...,ij,j...->...", dx, d_inv_var[0], dx)
-            g1 = np.einsum("i...,ij,j...->...", dx, d_inv_var[1], dx)
-            g2 = np.einsum("i...,ij,j...->...", dx, d_inv_var[2], dx)
         elif mode == "2d_0":
             dx = [dx1[0, :, :], dx2[0, :, :]]
-            d2 = np.einsum("i...,ij,j...->...", dx, inv_var, dx)
-            g1 = np.einsum("i...,ij,j...->...", dx, d_inv_var[1], dx)
-            g2 = np.einsum("i...,ij,j...->...", dx, d_inv_var[2], dx)
-            g0 = g1 * 0
         elif mode == "2d_1":
             dx = [dx0[:, 0, :], dx2[:, 0, :]]
-            d2 = np.einsum("i...,ij,j...->...", dx, inv_var, dx)
-            g0 = np.einsum("i...,ij,j...->...", dx, d_inv_var[0], dx)
-            g2 = np.einsum("i...,ij,j...->...", dx, d_inv_var[2], dx)
-            g1 = g2 * 0
         elif mode == "2d_2":
             dx = [dx0[:, :, 0], dx1[:, :, 0]]
-            d2 = np.einsum("i...,ij,j...->...", dx, inv_var, dx)
-            g0 = np.einsum("i...,ij,j...->...", dx, d_inv_var[0], dx)
-            g1 = np.einsum("i...,ij,j...->...", dx, d_inv_var[1], dx)
-            g2 = g0 * 0
         elif mode == "1d_0":
             dx = dx0[:, 0, 0]
-            d2 = inv_var * dx**2
-            g0 = d_inv_var[0] * dx**2
-            g1 = g2 = g0 * 0
         elif mode == "1d_1":
             dx = dx1[0, :, 0]
-            d2 = inv_var * dx**2
-            g1 = d_inv_var[1] * dx**2
-            g2 = g0 = g1 * 0
         elif mode == "1d_2":
             dx = dx2[0, 0, :]
+
+        # Each of the three shape parameters is contracted against the
+        # mode's own submatrix/dx (not just the "own-axis" ones): under a
+        # rotated orientation the submatrix genuinely depends on all three
+        # radii, and a rotation about one axis perturbs the *other* two
+        # axes' submatrix, so no axis can be assumed zero a priori.
+        if mode == "3d" or "2d" in mode:
+            d2 = np.einsum("i...,ij,j...->...", dx, inv_var, dx)
+            g0, g1, g2 = (
+                np.einsum("i...,ij,j...->...", dx, dv, dx) for dv in d_inv_var
+            )
+        else:
             d2 = inv_var * dx**2
-            g2 = d_inv_var[2] * dx**2
-            g0 = g1 = g2 * 0
+            g0, g1, g2 = (dv * dx**2 for dv in d_inv_var)
 
         g = np.exp(-0.5 * d2)
 
@@ -2638,9 +2375,6 @@ class PeakEllipsoid:
         This is the residual function passed to `lmfit.Minimizer` in
         `sweep`.
 
-        Note: the volume penalty (`volume_penalty_residual`) is currently
-        disabled here — see the comment in the method body.
-
         Parameters
         ----------
         params : lmfit.Parameters
@@ -2681,10 +2415,6 @@ class PeakEllipsoid:
         cost_2d = self.residual_2d(params, *args_2d, c, inv_S)
         cost_3d = self.residual_3d(params, *args_3d, c, inv_S)
         cost_prior = self.prior_residual(params)
-        # Volume penalty (volume_penalty_residual) is disabled: as written
-        # it rewards *larger* volumes, backwards from the intended
-        # anti-collapse regularizer. Paused pending a redesign that
-        # rewards smaller volumes with larger intensity above background.
 
         cost = np.concatenate([cost_1d, cost_2d, cost_3d, cost_prior])
         cost = np.nan_to_num(cost, nan=0.0, posinf=1e16, neginf=-1e16)
@@ -2702,9 +2432,6 @@ class PeakEllipsoid:
         ``(n_residuals, n_vary)`` convention expected by
         `scipy.optimize.least_squares`. This is the Jacobian function
         passed to `lmfit.Minimizer.minimize` in `sweep`.
-
-        Note: the volume penalty Jacobian (`volume_penalty_jacobian`) is
-        currently disabled here — see the comment in the method body.
 
         Parameters
         ----------
@@ -2749,8 +2476,6 @@ class PeakEllipsoid:
         jac_2d = self.jacobian_2d(params, *args_2d, c, inv_S, dr, du)
         jac_3d = self.jacobian_3d(params, *args_3d, c, inv_S, dr, du)
         jac_prior = self.prior_jacobian(params)
-        # Volume penalty (volume_penalty_jacobian) is disabled: see the
-        # matching comment in residual().
 
         jac = np.column_stack([jac_1d, jac_2d, jac_3d, jac_prior])
         jac = np.nan_to_num(jac, nan=0.0, posinf=1e16, neginf=-1e16)
@@ -3588,13 +3313,13 @@ class PeakEllipsoid:
 
             protocol = [True] * 3 + [False] * 6
 
-            self.sweep(args_1d, args_2d, args_3d, None, n_iter, report_fit)
+            self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
             self.update_adaptive_prior(args_1d, args_2d, args_3d)
 
             protocol = [False] * 3 + [True] * 6
 
-            self.sweep(args_1d, args_2d, args_3d, None, n_iter, report_fit)
+            self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
         return args_1d, args_2d, args_3d
 

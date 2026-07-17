@@ -10,7 +10,6 @@ from mantid.simpleapi import (
     LoadNexus,
     FilterPeaks,
     SortPeaksWorkspace,
-    CombinePeaksWorkspaces,
     StatisticsOfPeaksWorkspace,
     CountReflections,
     SaveHKL,
@@ -22,7 +21,6 @@ from mantid.simpleapi import (
     SetGoniometer,
     SetSample,
     LoadSampleShape,
-    AddAbsorptionWeightedPathLengths,
     RemoveMaskedSpectra,
     GroupDetectors,
     CreateGroupingWorkspace,
@@ -59,6 +57,7 @@ import argparse
 
 from garnet.reduction.ub import Optimization
 from garnet.reduction.resolution import ResolutionEllipsoid
+from garnet.utilities.absorption import AbsorptionEllipsoid
 
 point_group_dict = {
     "-1": "-1 (Triclinic)",
@@ -208,6 +207,8 @@ class AbsorptionCorrection:
             self.shapestl = os.path.splitext(self.filename)[0] + ".stl"
             self.save_ellipsoid_stl(self.params, self.shapestl)
 
+        self.absorption_ellipsoid = AbsorptionEllipsoid()
+
     def set_material(self):
         self.mat_dict = {
             "ChemicalFormula": self.chemical_formula,
@@ -248,8 +249,6 @@ class AbsorptionCorrection:
         self.Rs = Rs
 
     def calculate_correction(self):
-        peaks = self.peaks + "_corr"
-
         filename = os.path.splitext(self.filename)[0] + "_abs.pdf"
 
         self.apply_correction()
@@ -257,7 +256,7 @@ class AbsorptionCorrection:
         with PdfPages(filename) as pdf:
             for i, (R, run) in enumerate(zip(self.Rs, self.runs)):
                 FilterPeaks(
-                    InputWorkspace=peaks,
+                    InputWorkspace=self.peaks,
                     FilterVariable="RunNumber",
                     FilterValue=run,
                     Operator="=",
@@ -379,6 +378,8 @@ class AbsorptionCorrection:
 
         lines = [
             "{}\n".format(self.chemical_formula),
+            "Z parameter: {:.4f}\n".format(self.z_parameter),
+            "unit cell volume: {:.4f} A^3\n".format(self.volume),
             "absoption cross section: {:.4f} barn\n".format(sigma_a),
             "scattering cross section: {:.4f} barn\n".format(sigma_s),
             "linear absorption coefficient: {:.4f} 1/cm\n".format(mu_a),
@@ -404,84 +405,65 @@ class AbsorptionCorrection:
                     f.write(line)
 
     def apply_correction(self):
-        peaks = self.peaks + "_corr"
+        """
+        Correct every peak's intensity for absorption in one
+        vectorized pass via ``AbsorptionEllipsoid``, instead of a
+        per-orientation Mantid ``AddAbsorptionWeightedPathLengths``
+        ray-trace loop. Each peak already carries its own incident-
+        /scattered-beam directions in the sample frame (goniometer-
+        independent), so no per-run ``LoadSampleShape``/
+        ``SetGoniometer``/``FilterPeaks``/``CombinePeaksWorkspaces`` is
+        needed -- the ellipsoid orientation (``self.alpha``,
+        ``self.beta``, ``self.gamma``) is fixed relative to the sample
+        for every peak regardless of goniometer setting.
+        """
+        SetSample(
+            InputWorkspace=self.peaks,
+            Material=self.mat_dict,
+        )
 
-        for i, (R, run) in enumerate(zip(self.Rs, self.runs)):
-            FilterPeaks(
-                InputWorkspace=self.peaks,
-                FilterVariable="RunNumber",
-                FilterValue=run,
-                Operator="=",
-                OutputWorkspace="_tmp",
-            )
+        mat = mtd[self.peaks].sample().getMaterial()
+        n = mat.numberDensityEffective
 
-            LoadSampleShape(
-                InputWorkspace="_tmp",
-                Filename=self.shapestl,
-                Scale="mm",
-                XDegrees=self.alpha,
-                YDegrees=self.beta,
-                ZDegrees=self.gamma,
-                OutputWorkspace="_tmp",
-            )
+        thickness, width, height = np.array(self.params) / 10.0  # mm -> cm
 
-            SetSample(
-                InputWorkspace="_tmp",
-                Material=self.mat_dict,
-            )
+        vol = np.pi / 6 * thickness * width * height
+        ratio_b = width / thickness
+        ratio_c = height / thickness
 
-            R = mtd["_tmp"].getPeak(0).getGoniometerMatrix()
+        coeffs = (self.alpha, self.beta, self.gamma, vol, ratio_b, ratio_c)
 
-            gon = mtd["_tmp"].run().getGoniometer()
-
-            gon.setR(R)
-            omega, chi, phi = gon.getEulerAngles("YZY")
-
-            SetGoniometer(
-                Workspace="_tmp",
-                Axis0="{},0,1,0,1".format(omega),
-                Axis1="{},0,0,1,1".format(chi),
-                Axis2="{},0,1,0,1".format(phi),
-            )
-
-            AddAbsorptionWeightedPathLengths(
-                InputWorkspace="_tmp",
-                ApplyCorrection=False,
-                UseSinglePath=False,
-            )
-
-            if i == 0:
-                CloneWorkspace(InputWorkspace="_tmp", OutputWorkspace=peaks)
-            else:
-                CombinePeaksWorkspaces(
-                    LHSWorkspace=peaks,
-                    RHSWorkspace="_tmp",
-                    OutputWorkspace=peaks,
-                )
-
-        CloneWorkspace(InputWorkspace=peaks, OutputWorkspace=self.peaks)
-
-        mat = mtd["_tmp"].sample().getMaterial()
+        lamdas, ri_hat, sf_hat = [], [], []
 
         for peak in mtd[self.peaks]:
-            lamda = peak.getWavelength()
-            Tbar = peak.getAbsorptionWeightedPathLength()
+            lamdas.append(peak.getWavelength())
+            ri_hat.append(peak.getSourceDirectionSampleFrame())
+            sf_hat.append(peak.getDetectorDirectionSampleFrame())
 
-            mu = mat.numberDensityEffective * (
-                mat.totalScatterXSection() + mat.absorbXSection(lamda)
-            )
+        lamdas = np.array(lamdas)
 
-            corr = np.exp(mu * Tbar)
+        mu = n * (
+            mat.totalScatterXSection()
+            + np.array([mat.absorbXSection(lamda) for lamda in lamdas])
+        )
+
+        T, Tbar = self.absorption_ellipsoid.correction(
+            coeffs, mu, np.array(ri_hat), np.array(sf_hat)
+        )
+
+        for i, peak in enumerate(mtd[self.peaks]):
+            corr = 1 / T[i]
 
             print(
                 "mu = {:4.2f} corr = {:4.2f} Tbar = {:4.2f}".format(
-                    mu, corr, Tbar
+                    mu[i], corr, Tbar[i]
                 )
             )
 
             peak.setBinCount(corr)
             peak.setIntensity(peak.getIntensity() * corr)
             peak.setSigmaIntensity(peak.getSigmaIntensity() * corr)
+            peak.setAbsorptionWeightedPathLength(Tbar[i])
 
 
 class Peaks:
@@ -559,13 +541,23 @@ class Peaks:
             self.scale = scale
             self.maximal = maximal
 
+        I_min, I_max = -maximal * 10, maximal * 10
+
         indices = np.arange(mtd[self.peaks].getNumberPeaks())
         for i, peak in zip(indices.tolist(), mtd[self.peaks]):
             peak.setIntensity(scale * peak.getIntensity())
-            if peak.getIntensity() > maximal * 10:
+            if peak.getIntensity() > I_max:
                 peak.setSigmaIntensity(peak.getIntensity())
             else:
                 peak.setSigmaIntensity(scale * peak.getSigmaIntensity())
+
+            peak.setIntensity(
+                float(np.clip(peak.getIntensity(), I_min, I_max))
+            )
+            peak.setSigmaIntensity(
+                float(np.clip(peak.getSigmaIntensity(), I_min, I_max))
+            )
+
             peak.setPeakNumber(peak.getRunNumber())
             peak.setBinCount(peak.getRunNumber())
             # peak.setRunNumber(1)
@@ -706,6 +698,28 @@ class Peaks:
             if diff > tol:
                 peak.setSigmaIntensity(float("-inf"))
 
+    def plot_signal_noise(self, peaks=None):
+        if peaks is None:
+            peaks = self.peaks
+
+        filename = os.path.splitext(self.filename)[0]
+
+        intens = np.array(mtd[peaks].column("Intens"))
+        sig_noise = np.array(mtd[peaks].column("Intens/SigInt"))
+
+        mask = (intens > 0) & (sig_noise > 0)
+
+        fig, ax = plt.subplots(1, 1, layout="constrained")
+        ax.loglog(
+            intens[mask], sig_noise[mask], ".", color="C0", rasterized=True
+        )
+        ax.axhline(2, color="k", linestyle="--", linewidth=1)
+        ax.set_xlabel("Intensity")
+        ax.set_ylabel("Signal/Noise")
+        ax.minorticks_on()
+        fig.savefig(filename + "_sn.pdf")
+        plt.close(fig)
+
     def load_spectrum(self, filename, instrument):
         LoadIsawSpectrum(
             SpectraFile=filename,
@@ -842,6 +856,8 @@ class Peaks:
         ax.minorticks_on()
         ax.set_ylabel("Count rate")
         fig.savefig(filename + "_rate.pdf")
+
+        self.plot_signal_noise()
 
         self.remove_non_integrated()
         self.remove_non_indexed()
@@ -1174,6 +1190,14 @@ class Peaks:
         )
 
         self.rescale_intensities()
+
+        FilterPeaks(
+            InputWorkspace=peaks,
+            OutputWorkspace=peaks,
+            FilterVariable="Signal/Noise",
+            FilterValue=2,
+            Operator=">=",
+        )
 
         SortPeaksWorkspace(
             InputWorkspace=peaks,

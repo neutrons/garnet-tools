@@ -2196,9 +2196,6 @@ class LaueData(BaseDataModel):
             nos = mtd["flux"].getSpectrumNumbers()
 
             if ys.shape[0] == 1:
-                # Single-spectrum flux file (not broken down by bank) --
-                # the per-bank spectrum-number mapping below doesn't
-                # apply, so broadcast the one curve to every bank.
                 y = ys[0]
                 for i in range(len(nos)):
                     mtd["flux"].setY(i, y)
@@ -2268,9 +2265,38 @@ class LaueData(BaseDataModel):
 
         solid_angle_ind = self.solid_angle_ind[det_ID]
 
-        return L_inv * solid_angle_ind
+        return L_inv * self.solid_angle_y[solid_angle_ind]
 
-    def approximate_norm(self, lamda, two_theta, det_ID):
+    def approximate_norm(self, lamda, two_theta, det_ID, proton_charge):
+        """
+        Delta-function normalization for a single peak, keyed directly
+        by detector ID (unlike ``reflections.py``'s vestigial
+        ``renormalize_intensities``, which bank-averages via a
+        ``GroupDetectors`` "scale" workspace).
+
+        ``vol`` (``get_volume_in_Q``) is ``L_inv * solid_angle_y``, the
+        ideal geometric solid angle divided by the Lorentz factor;
+        multiplying by ``sa_y`` (the measured vanadium response) and
+        dividing by ``vol`` therefore already works out to
+        ``spectrum * (sa_y / solid_angle_y) * L`` -- i.e. the
+        geometric efficiency (measured-vs-ideal solid angle) times the
+        Lorentz factor -- so no separate efficiency division belongs
+        here; adding one would just cancel ``sa_y``/``solid_angle_y``
+        back out.
+
+        Parameters
+        ----------
+        lamda : float
+            Peak wavelength (Angstrom).
+        two_theta : float
+            Scattering angle (degrees).
+        det_ID : int
+            Detector ID the peak lands on.
+        proton_charge : float
+            Proton charge of the run being integrated, e.g. from
+            ``mtd[event_name].run().getProtonCharge()``.
+
+        """
         vol = self.get_volume_in_Q(lamda, two_theta, det_ID)
 
         i = np.searchsorted(self.lamda_x, lamda, side="right") - 1
@@ -2278,7 +2304,9 @@ class LaueData(BaseDataModel):
         spec_ind = self.spec_ind[det_ID]
         sa_ind = self.sa_ind[det_ID]
 
-        return self.spect_y[spec_ind][i] * self.sa_y[sa_ind] / vol
+        return (
+            self.spect_y[spec_ind][i] * self.sa_y[sa_ind] * proton_charge / vol
+        )
 
     def crop_for_normalization(self, event_name):
         """

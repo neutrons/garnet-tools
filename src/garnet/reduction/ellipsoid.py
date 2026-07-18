@@ -6,10 +6,39 @@ import scipy.spatial.transform
 import scipy.stats
 import scipy.signal
 import scipy.ndimage
+import scipy.special
 
 from lmfit import Minimizer, Parameters, fit_report
 
 _R_SCALE_3D = np.sqrt(scipy.stats.chi2.ppf(0.997, df=3))
+
+# Orthonormal basis spanning the traceless subspace of log-radius space
+# (each column sums to zero and is orthogonal to [1, 1, 1] and to the
+# other column), used to separate an overall log-size change from the
+# two independent log-aspect-ratio ("shape") changes.
+SHAPE_BASIS = np.array(
+    [
+        [1.0 / np.sqrt(2.0), 1.0 / np.sqrt(6.0)],
+        [-1.0 / np.sqrt(2.0), 1.0 / np.sqrt(6.0)],
+        [0.0, -2.0 / np.sqrt(6.0)],
+    ]
+)
+
+# Parameters that determine the modeled Gaussian's center/shape/orientation
+# (and therefore its support), as opposed to the per-mode amplitude/background
+# parameters A<mode>/B<mode>, which the missing-support penalty is defined to
+# be independent of.
+_MISSING_SUPPORT_GEOMETRY_PARAMS = (
+    "c0",
+    "c1",
+    "c2",
+    "log_size",
+    "shape_1",
+    "shape_2",
+    "domega_x",
+    "domega_y",
+    "domega_z",
+)
 
 
 class PeakEllipsoid:
@@ -34,11 +63,17 @@ class PeakEllipsoid:
         self.prior_distortion_sigma = 0.1
         self.prior_rot_sigma = 0.1
 
+        # Missing-support penalty (see missing_support_penalty): tolerated
+        # fraction of modeled peak support in zero-normalization voxels,
+        # softplus transition width, and penalty strength.
+        self.missing_tolerance = 0.03
+        self.missing_smoothing = 0.01
+        self.missing_sigma = 0.05
+
         self._prior_radii = np.ones(3)
         self._prior_inv_sqrt = np.eye(3)
 
         self._prior_r = np.ones(3)
-        self._prior_u = np.zeros(3)
         self._prior_U = np.eye(3)
 
     def vech6(self, M):
@@ -65,10 +100,11 @@ class PeakEllipsoid:
         (Re)initialize `self.params` bounds and starting values from the data extent.
 
         Centers are initialized to zero and bounded to within half the
-        coordinate-array extent along each axis; radii are initialized to
-        half the largest axis extent and bounded between twice the
-        smallest voxel spacing and twice the per-axis half-extent;
-        rotation-vector components are initialized to zero and bounded to
+        coordinate-array extent along each axis. Size (`log_size`) and
+        shape (`shape_1`, `shape_2`) are initialized to zero, reproducing
+        whatever reference ellipsoid `update_estimate` later provides;
+        relative-orientation components (`domega_x`, `domega_y`,
+        `domega_z`) are initialized to zero and bounded to
         ``[-pi, pi]``. Also resets `self.combine_params` to ``None``.
 
         Parameters
@@ -83,10 +119,6 @@ class PeakEllipsoid:
             Unused placeholder for a voxel-spacing argument (the voxel
             spacing actually used is recomputed from ``x0, x1, x2``).
         """
-        dx0 = x0[:, 0, 0][1] - x0[:, 0, 0][0]
-        dx1 = x1[0, :, 0][1] - x1[0, :, 0][0]
-        dx2 = x2[0, 0, :][1] - x2[0, 0, :][0]
-
         r0_max = (x0[:, 0, 0][-1] - x0[:, 0, 0][0]) / 2
         r1_max = (x1[0, :, 0][-1] - x1[0, :, 0][0]) / 2
         r2_max = (x2[0, 0, :][-1] - x2[0, 0, :][0]) / 2
@@ -104,21 +136,17 @@ class PeakEllipsoid:
             c2 + r2_max,
         )
 
-        r_max = 0.5 * np.max([r0_max, r1_max, r2_max])
-
-        dx = 2 * np.min([dx0, dx1, dx2])
-
         self.params.add("c0", value=c0, min=c0_min, max=c0_max)
         self.params.add("c1", value=c1, min=c1_min, max=c1_max)
         self.params.add("c2", value=c2, min=c2_min, max=c2_max)
 
-        self.params.add("r0", value=r_max, min=dx, max=2 * r0_max)
-        self.params.add("r1", value=r_max, min=dx, max=2 * r1_max)
-        self.params.add("r2", value=r_max, min=dx, max=2 * r2_max)
+        self.params.add("log_size", value=0.0)
+        self.params.add("shape_1", value=0.0)
+        self.params.add("shape_2", value=0.0)
 
-        self.params.add("u0", value=0.0, min=-np.pi, max=np.pi)
-        self.params.add("u1", value=0.0, min=-np.pi, max=np.pi)
-        self.params.add("u2", value=0.0, min=-np.pi, max=np.pi)
+        self.params.add("domega_x", value=0.0, min=-np.pi, max=np.pi)
+        self.params.add("domega_y", value=0.0, min=-np.pi, max=np.pi)
+        self.params.add("domega_z", value=0.0, min=-np.pi, max=np.pi)
 
         self.combine_params = None
 
@@ -137,13 +165,14 @@ class PeakEllipsoid:
         Seed `self.params` and the resolution-model prior from an initial ellipsoid estimate.
 
         Centers are reset to the origin (since coordinates are peak-centered),
-        radii are set to the given values (clipped to twice the lower bound
-        if outside the parameter bounds), and the orientation is derived
-        from the given axis vectors (flipping the third axis if needed to
-        keep `U` a proper rotation). Also (re)initializes the SNR-adaptive
-        prior state (`self.prior_cov`, `self._prior_radii`,
-        `self._prior_inv_sqrt`, `self._prior_r`, `self._prior_u`,
-        `self._prior_U`) and resets the prior widths
+        and the reference (predicted) radii and orientation are taken
+        directly from the given values (flipping the third axis vector if
+        needed to keep `U` a proper rotation). The `log_size`, `shape_1`,
+        `shape_2`, `domega_x`, `domega_y`, `domega_z` parameters are reset
+        to zero, so the fit starts out exactly reproducing this reference
+        ellipsoid. Also (re)initializes the SNR-adaptive prior state
+        (`self.prior_cov`, `self._prior_radii`, `self._prior_inv_sqrt`,
+        `self._prior_r`, `self._prior_U`) and resets the prior widths
         (`self.prior_center_sigma`, `self.prior_cov_sigma`,
         `self.prior_distortion_sigma`, `self.prior_rot_sigma`) to their
         default starting values. Also sets `self.estimated_fit`.
@@ -163,97 +192,93 @@ class PeakEllipsoid:
         if np.linalg.det(U) < 0:
             U[:, 2] *= -1
 
-        u = scipy.spatial.transform.Rotation.from_matrix(U).as_rotvec()
-
-        u0, u1, u2 = u
-
         self.params["c0"].set(value=0)
         self.params["c1"].set(value=0)
         self.params["c2"].set(value=0)
 
-        for name, value in zip(["r0", "r1", "r2"], [r0, r1, r2]):
-            p = self.params[name]
-            if p.min < value < p.max:
-                p.set(value=value)
-            else:
-                p.set(value=2 * p.min)
+        self.params["log_size"].set(value=0.0)
+        self.params["shape_1"].set(value=0.0)
+        self.params["shape_2"].set(value=0.0)
 
-        self.params["u0"].set(value=u0)
-        self.params["u1"].set(value=u1)
-        self.params["u2"].set(value=u2)
+        self.params["domega_x"].set(value=0.0)
+        self.params["domega_y"].set(value=0.0)
+        self.params["domega_z"].set(value=0.0)
 
-        self.params["u0"].set(min=-np.pi, max=np.pi)
-        self.params["u1"].set(min=-np.pi, max=np.pi)
-        self.params["u2"].set(min=-np.pi, max=np.pi)
+        prior_cov = U @ np.diag([r0**2, r1**2, r2**2]) @ U.T
 
-        self.estimated_fit = (
-            np.array([0.0, 0.0, 0.0]),
-            self.S_matrix(r0, r1, r2, u0, u1, u2),
-        )
+        self.estimated_fit = (np.array([0.0, 0.0, 0.0]), prior_cov)
 
-        self.prior_cov = self.S_matrix(r0, r1, r2, u0, u1, u2)
+        self.prior_cov = prior_cov
 
         r_sq, U0 = np.linalg.eigh(self.prior_cov)
         self._prior_radii = np.sqrt(np.maximum(r_sq, 1e-12))
         self._prior_inv_sqrt = U0 @ np.diag(1.0 / self._prior_radii) @ U0.T
 
-        # Predicted radii/orientation, kept axis-matched to r0,r1,r2/u0,u1,u2
-        # for the per-axis log-radius and relative-rotation prior terms.
+        # Reference (predicted) radii/orientation that log_size, shape_1,
+        # shape_2, and domega_x, domega_y, domega_z are defined relative to.
         self._prior_r = np.array([r0, r1, r2], dtype=float)
-        self._prior_u = np.array([u0, u1, u2], dtype=float)
-        self._prior_U = self.U_matrix(u0, u1, u2)
+        self._prior_U = U
 
         self.prior_center_sigma = 1.0
         self.prior_cov_sigma = 0.3
         self.prior_distortion_sigma = 0.1
         self.prior_rot_sigma = 0.1
 
-    def omega_deriv_u(self, u0, u1, u2, delta=1e-6):
+    def shape_from_params(self, params):
         """
-        Finite-difference derivative of the prior-relative rotation vector.
+        Reconstruct the absolute radii and orientation rotation vector from the size/shape/orientation parameters.
 
-        Computes d(omega)/d(u_k) for k=0,1,2 by central differences, where
-        omega is the rotation vector of ``U0^T @ U(u0,u1,u2)`` (the
-        orientation relative to the predicted resolution-model
-        orientation `self._prior_U`).
+        Converts ``log_size, shape_1, shape_2`` to the absolute radii via
+        `SHAPE_BASIS` and the reference radii `self._prior_r`, and
+        ``domega_x, domega_y, domega_z`` to an absolute orientation
+        rotation vector via ``R = self._prior_U @ Exp(domega)``. The
+        resulting ``(r0, r1, r2, u0, u1, u2)`` are the arguments expected
+        by the parameterization-agnostic geometry helpers (`S_matrix`,
+        `inv_S_matrix`, `centroid_inverse_covariance`, ...).
 
         Parameters
         ----------
-        u0 : float
-            First component of the current rotation vector.
-        u1 : float
-            Second component of the current rotation vector.
-        u2 : float
-            Third component of the current rotation vector.
-        delta : float, optional
-            Finite-difference step size. Default is 1e-6.
+        params : lmfit.Parameters
+            Current fit parameters; must contain ``log_size, shape_1,
+            shape_2, domega_x, domega_y, domega_z``.
 
         Returns
         -------
-        domega0 : ndarray of shape (3,)
-            d(omega)/d(u0).
-        domega1 : ndarray of shape (3,)
-            d(omega)/d(u1).
-        domega2 : ndarray of shape (3,)
-            d(omega)/d(u2).
+        r0 : float
+            Ellipsoid principal radius along the first rotated axis.
+        r1 : float
+            Ellipsoid principal radius along the second rotated axis.
+        r2 : float
+            Ellipsoid principal radius along the third rotated axis.
+        u0 : float
+            First component of the absolute orientation rotation vector.
+        u1 : float
+            Second component of the absolute orientation rotation vector.
+        u2 : float
+            Third component of the absolute orientation rotation vector.
         """
-
-        def omega_at(uu0, uu1, uu2):
-            U = self.U_matrix(uu0, uu1, uu2)
-            R_rel = self._prior_U.T @ U
-            return scipy.spatial.transform.Rotation.from_matrix(
-                R_rel
-            ).as_rotvec()
-
-        domega0 = omega_at(u0 + delta, u1, u2) - omega_at(u0 - delta, u1, u2)
-        domega1 = omega_at(u0, u1 + delta, u2) - omega_at(u0, u1 - delta, u2)
-        domega2 = omega_at(u0, u1, u2 + delta) - omega_at(u0, u1, u2 - delta)
-
-        return (
-            0.5 * domega0 / delta,
-            0.5 * domega1 / delta,
-            0.5 * domega2 / delta,
+        log_size = params["log_size"].value
+        shape = np.array([params["shape_1"].value, params["shape_2"].value])
+        domega = np.array(
+            [
+                params["domega_x"].value,
+                params["domega_y"].value,
+                params["domega_z"].value,
+            ]
         )
+
+        log_radius_change = log_size + SHAPE_BASIS @ shape
+        r0, r1, r2 = self._prior_r * np.exp(log_radius_change)
+
+        delta_R = scipy.spatial.transform.Rotation.from_rotvec(
+            domega
+        ).as_matrix()
+        R = self._prior_U @ delta_R
+        u0, u1, u2 = scipy.spatial.transform.Rotation.from_matrix(
+            R
+        ).as_rotvec()
+
+        return r0, r1, r2, u0, u1, u2
 
     def prior_residual(self, params):
         """
@@ -261,25 +286,26 @@ class PeakEllipsoid:
 
         Builds the stacked whitened residual vector for four prior
         components: center (Mahalanobis distance of the center from the
-        origin under the prior covariance), radius scale (mean log-radius
-        deviation from the predicted radii), radius distortion (per-axis
-        log-radius deviation after removing the mean), and orientation
-        (rotation-vector distance from the predicted orientation). Each
-        component is divided by its current SNR-adaptive prior sigma
-        (`self.prior_center_sigma`, `self.prior_cov_sigma`,
-        `self.prior_distortion_sigma`, `self.prior_rot_sigma`).
+        origin under the prior covariance), size (`log_size`), shape
+        (`shape_1`, `shape_2`), and orientation (`domega_x`, `domega_y`,
+        `domega_z`) -- the latter three groups are already defined
+        relative to the resolution-model prior, so their residuals are
+        simply the parameter values themselves. Each component is divided
+        by its current SNR-adaptive prior sigma (`self.prior_center_sigma`,
+        `self.prior_cov_sigma`, `self.prior_distortion_sigma`,
+        `self.prior_rot_sigma`).
 
         Parameters
         ----------
         params : lmfit.Parameters
-            Current fit parameters; must contain ``c0, c1, c2, r0, r1,
-            r2, u0, u1, u2``.
+            Current fit parameters; must contain ``c0, c1, c2, log_size,
+            shape_1, shape_2, domega_x, domega_y, domega_z``.
 
         Returns
         -------
-        terms : ndarray of shape (10,)
-            Concatenated residuals: 3 center + 1 scale + 3 distortion +
-            3 orientation components.
+        terms : ndarray of shape (9,)
+            Concatenated residuals: 3 center + 1 size + 2 shape + 3
+            orientation components.
         """
         terms = []
 
@@ -292,31 +318,17 @@ class PeakEllipsoid:
         u_mu = _R_SCALE_3D * self._prior_inv_sqrt @ c
         terms += (u_mu / self.prior_center_sigma).tolist()
 
-        r0 = params["r0"].value
-        r1 = params["r1"].value
-        r2 = params["r2"].value
-        u0 = params["u0"].value
-        u1 = params["u1"].value
-        u2 = params["u2"].value
+        # Size residual: P_size = (log_size / sigma_log_s)^2
+        terms.append(params["log_size"].value / self.prior_cov_sigma)
 
-        # Radius decomposition: per-axis log-radius vs. predicted radii
-        delta = np.log(np.array([r0, r1, r2])) - np.log(self._prior_r)
-        alpha = np.mean(delta)
-        d = delta - alpha
+        # Shape residuals: P_shape = sum (shape_i / sigma_log_d)^2
+        terms.append(params["shape_1"].value / self.prior_distortion_sigma)
+        terms.append(params["shape_2"].value / self.prior_distortion_sigma)
 
-        # Scale residual: P_scale = (alpha / sigma_log_s)^2
-        terms.append(alpha / self.prior_cov_sigma)
-
-        # Distortion residuals: P_distortion = sum (d_i / sigma_log_d)^2
-        terms += (d / self.prior_distortion_sigma).tolist()
-
-        # Orientation: relative rotation vector from U0 to U
-        U = self.U_matrix(u0, u1, u2)
-        R_rel = self._prior_U.T @ U
-        omega = scipy.spatial.transform.Rotation.from_matrix(R_rel).as_rotvec()
-
-        # Orientation residual: P_rotation = || omega / sigma_rot ||^2
-        terms += (omega / self.prior_rot_sigma).tolist()
+        # Orientation residual: P_rotation = || domega / sigma_rot ||^2
+        terms.append(params["domega_x"].value / self.prior_rot_sigma)
+        terms.append(params["domega_y"].value / self.prior_rot_sigma)
+        terms.append(params["domega_z"].value / self.prior_rot_sigma)
 
         return np.asarray(terms, dtype=float)
 
@@ -324,29 +336,30 @@ class PeakEllipsoid:
         """
         Analytic Jacobian of `prior_residual` with respect to the varying fit parameters.
 
-        Residual ordering matches `prior_residual`: 3 center + 1 scale +
-        3 distortion + 3 orientation = 10 columns. Center derivatives are
-        exact (linear in `c`); radius-decomposition derivatives are exact
-        (analytic d(log r)/dr); orientation derivatives use the
-        finite-difference helper `omega_deriv_u`.
+        Residual ordering matches `prior_residual`: 3 center + 1 size + 2
+        shape + 3 orientation = 9 columns. Since `log_size`, `shape_1`,
+        `shape_2`, and `domega_x, domega_y, domega_z` are already the
+        prior-relative quantities, their residual derivatives are exact
+        and diagonal (one nonzero entry per parameter); only the center
+        derivatives mix across the three center parameters.
 
         Parameters
         ----------
         params : lmfit.Parameters
-            Current fit parameters; must contain ``c0, c1, c2, r0, r1,
-            r2, u0, u1, u2``.
+            Current fit parameters; must contain ``c0, c1, c2, log_size,
+            shape_1, shape_2, domega_x, domega_y, domega_z``.
 
         Returns
         -------
-        jac : ndarray of shape (n_vary, 10)
+        jac : ndarray of shape (n_vary, 9)
             Jacobian rows restricted to parameters with ``vary=True``, one
             row per varying parameter and one column per prior residual
             term.
         """
-        # Residuals: [r_c0, r_c1, r_c2, r_alpha, r_d0, r_d1, r_d2, r_om0, r_om1, r_om2]
-        # 3 center + 1 scale + 3 distortion + 3 orientation = 10 columns
+        # Residuals: [r_c0, r_c1, r_c2, r_size, r_sh1, r_sh2, r_om_x, r_om_y, r_om_z]
+        # 3 center + 1 size + 2 shape + 3 orientation = 9 columns
         params_list = [name for name, _ in params.items()]
-        jac = np.zeros((len(params_list), 10), dtype=float)
+        jac = np.zeros((len(params_list), 9), dtype=float)
 
         # Center: ∂r_c_i/∂c_j = R * (S₀^{-1/2})_{i,j} / σ_c
         center_scale = _R_SCALE_3D / self.prior_center_sigma
@@ -354,31 +367,16 @@ class PeakEllipsoid:
             idx = params_list.index(cname)
             jac[idx, :3] = center_scale * self._prior_inv_sqrt[:, j]
 
-        # Radius decomposition: d(alpha)/d(r_j) = (1/3)/r_j,
-        # d(d_i)/d(r_j) = (delta_ij - 1/3)/r_j
-        r = np.array(
-            [params["r0"].value, params["r1"].value, params["r2"].value]
-        )
-        eta_scale = 1.0 / self.prior_cov_sigma
-        cov_d = 1.0 / self.prior_distortion_sigma
-        centering = np.eye(3) - np.full((3, 3), 1.0 / 3.0)
+        jac[params_list.index("log_size"), 3] = 1.0 / self.prior_cov_sigma
 
-        for j, rname in enumerate(["r0", "r1", "r2"]):
-            idx = params_list.index(rname)
-            dlogr = 1.0 / r[j]
-            jac[idx, 3] = eta_scale * dlogr / 3.0
-            jac[idx, 4:7] = cov_d * centering[:, j] * dlogr
+        shape_scale = 1.0 / self.prior_distortion_sigma
+        jac[params_list.index("shape_1"), 4] = shape_scale
+        jac[params_list.index("shape_2"), 5] = shape_scale
 
-        # Orientation: finite-difference d(omega)/d(u_k)
-        u0 = params["u0"].value
-        u1 = params["u1"].value
-        u2 = params["u2"].value
-        domega = self.omega_deriv_u(u0, u1, u2)
         rot_scale = 1.0 / self.prior_rot_sigma
-
-        for k, uname in enumerate(["u0", "u1", "u2"]):
-            idx = params_list.index(uname)
-            jac[idx, 7:10] = rot_scale * domega[k]
+        jac[params_list.index("domega_x"), 6] = rot_scale
+        jac[params_list.index("domega_y"), 7] = rot_scale
+        jac[params_list.index("domega_z"), 8] = rot_scale
 
         ind = [i for i, (_, par) in enumerate(params.items()) if par.vary]
         return jac[ind]
@@ -1209,13 +1207,14 @@ class PeakEllipsoid:
 
         return dinv_S0, dinv_S1, dinv_S2
 
-    def inv_S_deriv_u(self, r0, r1, r2, u0, u1, u2):
+    def inv_S_deriv_size_shape(self, r0, r1, r2, u0, u1, u2):
         """
-        Analytic derivatives of `inv_S` with respect to each rotation-vector component u0, u1, u2.
+        Analytic derivatives of `inv_S` with respect to log_size, shape_1, shape_2.
 
-        Uses the finite-difference orientation derivatives from
-        `U_deriv_u` combined with the product rule for
-        ``inv_S = U @ V @ U.T``.
+        Chain-rules the per-radius derivatives from `inv_S_deriv_r`
+        through ``d(r_i)/d(log_size) = r_i`` and
+        ``d(r_i)/d(shape_k) = r_i * SHAPE_BASIS[i, k]`` (since
+        ``r_i = prior_r_i * exp(log_size + SHAPE_BASIS @ shape)``).
 
         Parameters
         ----------
@@ -1234,59 +1233,78 @@ class PeakEllipsoid:
 
         Returns
         -------
-        dinv_S0 : ndarray of shape (3, 3)
-            d(inv_S)/d(u0).
-        dinv_S1 : ndarray of shape (3, 3)
-            d(inv_S)/d(u1).
-        dinv_S2 : ndarray of shape (3, 3)
-            d(inv_S)/d(u2).
+        dinv_S_size : ndarray of shape (3, 3)
+            d(inv_S)/d(log_size).
+        dinv_S_shape1 : ndarray of shape (3, 3)
+            d(inv_S)/d(shape_1).
+        dinv_S_shape2 : ndarray of shape (3, 3)
+            d(inv_S)/d(shape_2).
         """
-        V = np.diag([1 / r0**2, 1 / r1**2, 1 / r2**2])
+        d_inv_S_r = self.inv_S_deriv_r(r0, r1, r2, u0, u1, u2)
+        r = np.array([r0, r1, r2])
 
-        U = self.U_matrix(u0, u1, u2)
-        dU0, dU1, dU2 = self.U_deriv_u(u0, u1, u2)
+        dinv_S_size = sum(r[i] * d_inv_S_r[i] for i in range(3))
+        dinv_S_shape1 = sum(
+            r[i] * SHAPE_BASIS[i, 0] * d_inv_S_r[i] for i in range(3)
+        )
+        dinv_S_shape2 = sum(
+            r[i] * SHAPE_BASIS[i, 1] * d_inv_S_r[i] for i in range(3)
+        )
 
-        dinv_S0 = dU0 @ V @ U.T + U @ V @ dU0.T
-        dinv_S1 = dU1 @ V @ U.T + U @ V @ dU1.T
-        dinv_S2 = dU2 @ V @ U.T + U @ V @ dU2.T
+        return dinv_S_size, dinv_S_shape1, dinv_S_shape2
 
-        return dinv_S0, dinv_S1, dinv_S2
-
-    def U_deriv_u(self, u0, u1, u2, delta=1e-6):
+    def inv_S_deriv_domega(self, r0, r1, r2, domega, delta=1e-6):
         """
-        Finite-difference derivatives of the rotation matrix U with respect to u0, u1, u2.
+        Finite-difference derivatives of `inv_S` with respect to domega_x, domega_y, domega_z.
+
+        Perturbs the relative-rotation vector `domega` about the
+        reference orientation `self._prior_U`, i.e.
+        ``R(domega) = self._prior_U @ Exp(domega)``, and central-differences
+        ``inv_S = R @ diag(1/r0^2, 1/r1^2, 1/r2^2) @ R.T``.
 
         Parameters
         ----------
-        u0 : float
-            First component of the orientation rotation vector.
-        u1 : float
-            Second component of the orientation rotation vector.
-        u2 : float
-            Third component of the orientation rotation vector.
+        r0 : float
+            Ellipsoid principal radius along the first rotated axis.
+        r1 : float
+            Ellipsoid principal radius along the second rotated axis.
+        r2 : float
+            Ellipsoid principal radius along the third rotated axis.
+        domega : sequence of float
+            Current relative-rotation vector ``(domega_x, domega_y,
+            domega_z)``.
         delta : float, optional
             Finite-difference step size. Default is 1e-6.
 
         Returns
         -------
-        dU0 : ndarray of shape (3, 3)
-            d(U)/d(u0), by central difference.
-        dU1 : ndarray of shape (3, 3)
-            d(U)/d(u1), by central difference.
-        dU2 : ndarray of shape (3, 3)
-            d(U)/d(u2), by central difference.
+        dinv_S_x : ndarray of shape (3, 3)
+            d(inv_S)/d(domega_x).
+        dinv_S_y : ndarray of shape (3, 3)
+            d(inv_S)/d(domega_y).
+        dinv_S_z : ndarray of shape (3, 3)
+            d(inv_S)/d(domega_z).
         """
-        dU0 = self.U_matrix(u0 + delta, u1, u2) - self.U_matrix(
-            u0 - delta, u1, u2
-        )
-        dU1 = self.U_matrix(u0, u1 + delta, u2) - self.U_matrix(
-            u0, u1 - delta, u2
-        )
-        dU2 = self.U_matrix(u0, u1, u2 + delta) - self.U_matrix(
-            u0, u1, u2 - delta
-        )
+        V = np.diag([1 / r0**2, 1 / r1**2, 1 / r2**2])
+        domega = np.asarray(domega, dtype=float)
 
-        return 0.5 * dU0 / delta, 0.5 * dU1 / delta, 0.5 * dU2 / delta
+        def inv_S_at(dw):
+            R = (
+                self._prior_U
+                @ scipy.spatial.transform.Rotation.from_rotvec(dw).as_matrix()
+            )
+            return R @ V @ R.T
+
+        derivs = []
+        for k in range(3):
+            step = np.zeros(3)
+            step[k] = delta
+            derivs.append(
+                (inv_S_at(domega + step) - inv_S_at(domega - step))
+                / (2 * delta)
+            )
+
+        return tuple(derivs)
 
     def gaussian_integral(self, inv_S, mode="3d"):
         """
@@ -1342,8 +1360,9 @@ class PeakEllipsoid:
             Inverse ellipsoid covariance-like matrix (99.7%-contour
             convention).
         d_inv_S : sequence of ndarray
-            Three derivatives of `inv_S`, e.g. from `inv_S_deriv_r` or
-            `inv_S_deriv_u`, each of shape (3, 3).
+            Three derivatives of `inv_S`, e.g. from `inv_S_deriv_r`,
+            `inv_S_deriv_size_shape`, or `inv_S_deriv_domega`, each of
+            shape (3, 3).
         mode : str, optional
             One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
             ``"1d_0"``, ``"1d_1"``, ``"1d_2"``. Default is ``"3d"``.
@@ -1467,9 +1486,10 @@ class PeakEllipsoid:
         Derivative of the unnormalized `gaussian` profile with respect to a shape parameter group.
 
         Given the derivatives of `inv_S` with respect to a group of
-        three shape parameters (radii via `inv_S_deriv_r`, or
-        orientation via `inv_S_deriv_u`), returns the corresponding
-        derivatives of the Gaussian profile itself.
+        three shape parameters (radii via `inv_S_deriv_r`, size/shape via
+        `inv_S_deriv_size_shape`, or relative orientation via
+        `inv_S_deriv_domega`), returns the corresponding derivatives of
+        the Gaussian profile itself.
 
         Parameters
         ----------
@@ -1486,8 +1506,9 @@ class PeakEllipsoid:
             convention).
         d_inv_S : sequence of ndarray
             Three derivatives of `inv_S` with respect to the shape
-            parameter group (e.g. from `inv_S_deriv_r` or
-            `inv_S_deriv_u`), each of shape (3, 3).
+            parameter group (e.g. from `inv_S_deriv_r`,
+            `inv_S_deriv_size_shape`, or `inv_S_deriv_domega`), each of
+            shape (3, 3).
         mode : str, optional
             One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
             ``"1d_0"``, ``"1d_1"``, ``"1d_2"``. Default is ``"3d"``.
@@ -1817,7 +1838,8 @@ class PeakEllipsoid:
         ----------
         params : lmfit.Parameters
             Current fit parameters; must contain ``A<mode>``, ``B<mode>``,
-            ``c0, c1, c2, r0, r1, r2, u0, u1, u2``.
+            ``c0, c1, c2, log_size, shape_1, shape_2, domega_x, domega_y,
+            domega_z``.
         x0 : ndarray
             3D meshgrid coordinate array along axis 0.
         x1 : ndarray
@@ -1835,11 +1857,11 @@ class PeakEllipsoid:
         inv_S : ndarray of shape (3, 3)
             Inverse ellipsoid covariance-like matrix.
         dr : tuple of ndarray
-            Derivatives of `inv_S` with respect to ``r0, r1, r2`` (from
-            `inv_S_deriv_r`).
+            Derivatives of `inv_S` with respect to ``log_size, shape_1,
+            shape_2`` (from `inv_S_deriv_size_shape`).
         du : tuple of ndarray
-            Derivatives of `inv_S` with respect to ``u0, u1, u2`` (from
-            `inv_S_deriv_u`).
+            Derivatives of `inv_S` with respect to ``domega_x, domega_y,
+            domega_z`` (from `inv_S_deriv_domega`).
         mode : str
             One of ``"3d"``, ``"2d_0"``, ``"2d_1"``, ``"2d_2"``,
             ``"1d_0"``, ``"1d_1"``, ``"1d_2"``.
@@ -1872,10 +1894,10 @@ class PeakEllipsoid:
         dc0, dc1, dc2 = factor * n * A * yc_gauss
 
         yr_gauss = self.gaussian_jac_S(x0, x1, x2, c, inv_S, dr, mode=mode)
-        dr0, dr1, dr2 = factor * n * A * yr_gauss
+        d_size, d_shape1, d_shape2 = factor * n * A * yr_gauss
 
         yu_gauss = self.gaussian_jac_S(x0, x1, x2, c, inv_S, du, mode=mode)
-        du0, du1, du2 = factor * n * A * yu_gauss
+        d_omega_x, d_omega_y, d_omega_z = factor * n * A * yu_gauss
 
         names_values = {
             "A" + mode: dA,
@@ -1883,12 +1905,12 @@ class PeakEllipsoid:
             "c0": dc0,
             "c1": dc1,
             "c2": dc2,
-            "r0": dr0,
-            "r1": dr1,
-            "r2": dr2,
-            "u0": du0,
-            "u1": du1,
-            "u2": du2,
+            "log_size": d_size,
+            "shape_1": d_shape1,
+            "shape_2": d_shape2,
+            "domega_x": d_omega_x,
+            "domega_y": d_omega_y,
+            "domega_z": d_omega_z,
         }
 
         for name, value in names_values.items():
@@ -2012,11 +2034,11 @@ class PeakEllipsoid:
             Inverse ellipsoid covariance-like matrix. Default is
             ``None``.
         dr : tuple of ndarray, optional
-            Derivatives of `inv_S` with respect to ``r0, r1, r2``.
-            Default is ``None``.
+            Derivatives of `inv_S` with respect to ``log_size, shape_1,
+            shape_2``. Default is ``None``.
         du : tuple of ndarray, optional
-            Derivatives of `inv_S` with respect to ``u0, u1, u2``.
-            Default is ``None``.
+            Derivatives of `inv_S` with respect to ``domega_x, domega_y,
+            domega_z``. Default is ``None``.
 
         Returns
         -------
@@ -2192,11 +2214,11 @@ class PeakEllipsoid:
             Inverse ellipsoid covariance-like matrix. Default is
             ``None``.
         dr : tuple of ndarray, optional
-            Derivatives of `inv_S` with respect to ``r0, r1, r2``.
-            Default is ``None``.
+            Derivatives of `inv_S` with respect to ``log_size, shape_1,
+            shape_2``. Default is ``None``.
         du : tuple of ndarray, optional
-            Derivatives of `inv_S` with respect to ``u0, u1, u2``.
-            Default is ``None``.
+            Derivatives of `inv_S` with respect to ``domega_x, domega_y,
+            domega_z``. Default is ``None``.
 
         Returns
         -------
@@ -2346,11 +2368,11 @@ class PeakEllipsoid:
             Inverse ellipsoid covariance-like matrix. Default is
             ``None``.
         dr : tuple of ndarray, optional
-            Derivatives of `inv_S` with respect to ``r0, r1, r2``.
-            Default is ``None``.
+            Derivatives of `inv_S` with respect to ``log_size, shape_1,
+            shape_2``. Default is ``None``.
         du : tuple of ndarray, optional
-            Derivatives of `inv_S` with respect to ``u0, u1, u2``.
-            Default is ``None``.
+            Derivatives of `inv_S` with respect to ``domega_x, domega_y,
+            domega_z``. Default is ``None``.
 
         Returns
         -------
@@ -2369,11 +2391,12 @@ class PeakEllipsoid:
 
         Computes the center and inverse covariance from `params`, then
         concatenates the 1D, 2D, and 3D Poisson-deviance residuals with
-        the prior residual (`prior_residual`). Non-finite entries are
-        replaced with 0 or a large finite value so that
-        `scipy.optimize.least_squares` sees a well-behaved cost vector.
-        This is the residual function passed to `lmfit.Minimizer` in
-        `sweep`.
+        the prior residual (`prior_residual`) and a single scalar
+        missing-support penalty (`missing_support_penalty`, evaluated
+        on the 3D-mode grid). Non-finite entries are replaced with 0 or
+        a large finite value so that `scipy.optimize.least_squares`
+        sees a well-behaved cost vector. This is the residual function
+        passed to `lmfit.Minimizer` in `sweep`.
 
         Parameters
         ----------
@@ -2399,13 +2422,7 @@ class PeakEllipsoid:
         c1 = params["c1"].value
         c2 = params["c2"].value
 
-        r0 = params["r0"].value
-        r1 = params["r1"].value
-        r2 = params["r2"].value
-
-        u0 = params["u0"].value
-        u1 = params["u1"].value
-        u2 = params["u2"].value
+        r0, r1, r2, u0, u1, u2 = self.shape_from_params(params)
 
         c, inv_S = self.centroid_inverse_covariance(
             c0, c1, c2, r0, r1, r2, u0, u1, u2
@@ -2415,8 +2432,13 @@ class PeakEllipsoid:
         cost_2d = self.residual_2d(params, *args_2d, c, inv_S)
         cost_3d = self.residual_3d(params, *args_3d, c, inv_S)
         cost_prior = self.prior_residual(params)
+        cost_missing = self.missing_support_penalty(
+            c, inv_S, args_3d[0], args_3d[1], args_3d[2], args_3d[4]
+        )
 
-        cost = np.concatenate([cost_1d, cost_2d, cost_3d, cost_prior])
+        cost = np.concatenate(
+            [cost_1d, cost_2d, cost_3d, cost_prior, [cost_missing]]
+        )
         cost = np.nan_to_num(cost, nan=0.0, posinf=1e16, neginf=-1e16)
 
         return cost
@@ -2426,9 +2448,11 @@ class PeakEllipsoid:
         Full stacked Jacobian matching the residual ordering of `residual`.
 
         Computes the center, inverse covariance, and shape derivatives
-        (`inv_S_deriv_r`, `inv_S_deriv_u`) from `params`, then
+        (`inv_S_deriv_size_shape`, `inv_S_deriv_domega`) from `params`, then
         column-stacks the 1D, 2D, and 3D Poisson-deviance Jacobians with
-        the prior Jacobian (`prior_jacobian`), and transposes to the
+        the prior Jacobian (`prior_jacobian`) and the missing-support
+        penalty's analytic Jacobian column
+        (`missing_support_penalty_jacobian`), and transposes to the
         ``(n_residuals, n_vary)`` convention expected by
         `scipy.optimize.least_squares`. This is the Jacobian function
         passed to `lmfit.Minimizer.minimize` in `sweep`.
@@ -2457,27 +2481,40 @@ class PeakEllipsoid:
         c1 = params["c1"].value
         c2 = params["c2"].value
 
-        r0 = params["r0"].value
-        r1 = params["r1"].value
-        r2 = params["r2"].value
+        r0, r1, r2, u0, u1, u2 = self.shape_from_params(params)
 
-        u0 = params["u0"].value
-        u1 = params["u1"].value
-        u2 = params["u2"].value
+        domega = np.array(
+            [
+                params["domega_x"].value,
+                params["domega_y"].value,
+                params["domega_z"].value,
+            ]
+        )
 
         c, inv_S = self.centroid_inverse_covariance(
             c0, c1, c2, r0, r1, r2, u0, u1, u2
         )
 
-        dr = self.inv_S_deriv_r(r0, r1, r2, u0, u1, u2)
-        du = self.inv_S_deriv_u(r0, r1, r2, u0, u1, u2)
+        dr = self.inv_S_deriv_size_shape(r0, r1, r2, u0, u1, u2)
+        du = self.inv_S_deriv_domega(r0, r1, r2, domega)
 
         jac_1d = self.jacobian_1d(params, *args_1d, c, inv_S, dr, du)
         jac_2d = self.jacobian_2d(params, *args_2d, c, inv_S, dr, du)
         jac_3d = self.jacobian_3d(params, *args_3d, c, inv_S, dr, du)
         jac_prior = self.prior_jacobian(params)
+        jac_missing = self.missing_support_penalty_jacobian(
+            params,
+            args_3d[0],
+            args_3d[1],
+            args_3d[2],
+            args_3d[4],
+            c,
+            inv_S,
+            dr,
+            du,
+        )
 
-        jac = np.column_stack([jac_1d, jac_2d, jac_3d, jac_prior])
+        jac = np.column_stack([jac_1d, jac_2d, jac_3d, jac_prior, jac_missing])
         jac = np.nan_to_num(jac, nan=0.0, posinf=1e16, neginf=-1e16)
 
         return jac.T
@@ -2566,6 +2603,265 @@ class PeakEllipsoid:
 
         return metrics
 
+    def missing_support_fraction(self, x0, x1, x2, c, inv_S, n, mode="3d"):
+        """
+        Fraction of the modeled peak's total Gaussian mass not captured by valid (measured) voxels.
+
+        Uses the unit-amplitude Gaussian profile (`gaussian`) rather
+        than the amplitude-scaled model, so the fraction cannot be
+        reduced merely by shrinking the fitted intensity. The
+        denominator is the analytic whole-space integral
+        (`gaussian_integral`), not a sum restricted to the fitting
+        box's finite grid: there is no data at all beyond the box, so
+        any part of the modeled peak that extends past its edges is,
+        by construction, exactly as unmeasured as an internal
+        zero-normalization gap -- a peak growing large enough to spill
+        out of the box should be penalized the same way as one drifting
+        into a detector gap. `missing_support` is therefore
+        ``total_support - valid_support`` (clipped at 0 for
+        discretization noise), where `valid_support` sums the profile
+        over in-box voxels with finite, positive normalization only.
+        Diagnostic only: not used to affect the fit.
+
+        Parameters
+        ----------
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        c : sequence of float
+            Peak center ``(c0, c1, c2)``.
+        inv_S : ndarray of shape (3, 3)
+            Inverse ellipsoid covariance-like matrix.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts on the same grid
+            as `x0, x1, x2`; non-finite or non-positive entries mark
+            unmeasured voxels.
+        mode : str, optional
+            One of the modes accepted by `gaussian`. Default is
+            ``"3d"``.
+
+        Returns
+        -------
+        missing_fraction : float
+            ``missing_support / total_support``, or ``nan`` if
+            `total_support` is not finite or not positive.
+        missing_support : float
+            ``total_support - valid_support``, clipped at 0.
+        total_support : float
+            Analytic whole-space integral of the unit-amplitude
+            Gaussian profile (`gaussian_integral`), independent of the
+            fitting box.
+        """
+        profile = self.gaussian(x0, x1, x2, c, inv_S, mode=mode)
+
+        voxel_volume = np.prod(self.voxels(x0, x1, x2))
+
+        weighted_profile = profile * voxel_volume
+
+        valid_mask = np.isfinite(n) & (n > 0)
+
+        valid_support = float(np.sum(weighted_profile[valid_mask]))
+        total_support = float(self.gaussian_integral(inv_S, mode=mode))
+
+        if not np.isfinite(total_support) or total_support <= 0:
+            return (
+                float("nan"),
+                max(total_support - valid_support, 0.0),
+                total_support,
+            )
+
+        missing_support = max(total_support - valid_support, 0.0)
+        missing_fraction = missing_support / total_support
+
+        return missing_fraction, missing_support, total_support
+
+    def missing_support_penalty(self, c, inv_S, x0, x1, x2, n, mode="3d"):
+        """
+        Smooth softplus penalty on the missing-support fraction (`missing_support_fraction`).
+
+        Below `self.missing_tolerance`, the penalty is negligible;
+        above it, it rises smoothly with transition width
+        `self.missing_smoothing` and strength `self.missing_sigma`. A
+        softplus (`np.logaddexp`) is used instead of a hard
+        ``max(0, ...)`` so the penalty stays differentiable at the
+        threshold, per the LMFit missing-support-penalty plan.
+
+        Parameters
+        ----------
+        c : sequence of float
+            Peak center ``(c0, c1, c2)``.
+        inv_S : ndarray of shape (3, 3)
+            Inverse ellipsoid covariance-like matrix.
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts on the same grid
+            as `x0, x1, x2`.
+        mode : str, optional
+            One of the modes accepted by `gaussian`. Default is
+            ``"3d"``.
+
+        Returns
+        -------
+        penalty : float
+            The scalar softplus residual, or ``0.0`` if the modeled
+            support cannot be evaluated (`missing_support_fraction`
+            returns a non-finite fraction).
+        """
+        missing_fraction, _, _ = self.missing_support_fraction(
+            x0, x1, x2, c, inv_S, n, mode=mode
+        )
+
+        if not np.isfinite(missing_fraction):
+            return 0.0
+
+        z = (
+            missing_fraction - self.missing_tolerance
+        ) / self.missing_smoothing
+
+        return (
+            self.missing_smoothing * np.logaddexp(0.0, z) / self.missing_sigma
+        )
+
+    def missing_support_penalty_jacobian(
+        self, params, x0, x1, x2, n, c, inv_S, dr, du, mode="3d"
+    ):
+        """
+        Analytic Jacobian row of `missing_support_penalty` with respect to the varying fit parameters.
+
+        Chain-rules the softplus derivative
+        ``d(residual_missing)/df = sigmoid(z) / sigma_missing`` (where
+        ``z = (missing_fraction - tolerance) / smoothing``) through the
+        quotient-rule derivative of the missing-support fraction ``f =
+        W_missing / W`` (``W`` the analytic whole-space integral
+        `gaussian_integral`, ``W_missing = max(W - W_valid, 0)`` where
+        `W_valid` is the voxel-volume-weighted profile support summed
+        over in-box valid voxels only -- see `missing_support_fraction`):
+        ``df/dtheta = (W * dW_missing/dtheta - W_missing * dW/dtheta) /
+        W**2``. `W`'s own derivative comes from `gaussian_integral_jac_S`
+        (applied to `dr`/`du`) and is identically 0 for the center
+        parameters, since translating the peak does not change its
+        total integral. The per-voxel profile derivative
+        ``dprofile/dtheta`` (used for `W_valid`) is the same Gaussian
+        derivative already computed for the Poisson-deviance Jacobian
+        (`gaussian_jac_c` for center, `gaussian_jac_S` applied to
+        `dr`/`du` for size/shape/orientation), so no new profile
+        derivatives are computed here. `A<mode>`/`B<mode>`
+        amplitude/background parameters have no effect on the profile
+        geometry, so their entries are left at zero.
+
+        Parameters
+        ----------
+        params : lmfit.Parameters
+            Current fit parameters.
+        x0 : ndarray
+            3D meshgrid coordinate array along axis 0.
+        x1 : ndarray
+            3D meshgrid coordinate array along axis 1.
+        x2 : ndarray
+            3D meshgrid coordinate array along axis 2.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts on the same grid
+            as `x0, x1, x2`.
+        c : sequence of float
+            Peak center ``(c0, c1, c2)``.
+        inv_S : ndarray of shape (3, 3)
+            Inverse ellipsoid covariance-like matrix.
+        dr : tuple of ndarray
+            Derivatives of `inv_S` with respect to ``log_size,
+            shape_1, shape_2`` (from `inv_S_deriv_size_shape`).
+        du : tuple of ndarray
+            Derivatives of `inv_S` with respect to ``domega_x,
+            domega_y, domega_z`` (from `inv_S_deriv_domega`).
+        mode : str, optional
+            One of the modes accepted by `gaussian`. Default is
+            ``"3d"``.
+
+        Returns
+        -------
+        jac : ndarray of shape (n_vary, 1)
+            Jacobian column restricted to parameters with
+            ``vary=True``.
+        """
+        params_list = [name for name, _ in params.items()]
+        jac = np.zeros((len(params_list), 1), dtype=float)
+
+        profile = self.gaussian(x0, x1, x2, c, inv_S, mode=mode)
+        voxel_volume = np.prod(self.voxels(x0, x1, x2))
+        weighted_profile = profile * voxel_volume
+
+        valid_mask = np.isfinite(n) & (n > 0)
+        valid_support = np.sum(weighted_profile[valid_mask])
+        total_support = self.gaussian_integral(inv_S, mode=mode)
+
+        ind = [i for i, (_, par) in enumerate(params.items()) if par.vary]
+
+        if not np.isfinite(total_support) or total_support <= 0:
+            return jac[ind]
+
+        # missing_support = max(total_support - valid_support, 0); its
+        # derivative is 0 in the clipped (over-covered) regime, exactly
+        # like a ReLU.
+        active = (total_support - valid_support) > 0.0
+        missing_support = max(total_support - valid_support, 0.0)
+        missing_fraction = missing_support / total_support
+
+        z = (
+            missing_fraction - self.missing_tolerance
+        ) / self.missing_smoothing
+        dpenalty_df = scipy.special.expit(z) / self.missing_sigma
+
+        dg_c = self.gaussian_jac_c(x0, x1, x2, c, inv_S, mode=mode)
+        dg_size_shape = self.gaussian_jac_S(
+            x0, x1, x2, c, inv_S, dr, mode=mode
+        )
+        dg_omega = self.gaussian_jac_S(x0, x1, x2, c, inv_S, du, mode=mode)
+
+        # total_support is the analytic whole-space integral: translation
+        # invariant (0 for c0,c1,c2), and its size/shape/orientation
+        # derivatives come from gaussian_integral_jac_S rather than a
+        # box-grid sum.
+        dW_total_size_shape = self.gaussian_integral_jac_S(
+            inv_S, dr, mode=mode
+        )
+        dW_total_omega = self.gaussian_integral_jac_S(inv_S, du, mode=mode)
+
+        dprofile_dW_total_by_name = {
+            "c0": (dg_c[0], 0.0),
+            "c1": (dg_c[1], 0.0),
+            "c2": (dg_c[2], 0.0),
+            "log_size": (dg_size_shape[0], dW_total_size_shape[0]),
+            "shape_1": (dg_size_shape[1], dW_total_size_shape[1]),
+            "shape_2": (dg_size_shape[2], dW_total_size_shape[2]),
+            "domega_x": (dg_omega[0], dW_total_omega[0]),
+            "domega_y": (dg_omega[1], dW_total_omega[1]),
+            "domega_z": (dg_omega[2], dW_total_omega[2]),
+        }
+
+        for name in _MISSING_SUPPORT_GEOMETRY_PARAMS:
+            if name not in params or not params[name].vary:
+                continue
+
+            dprofile, dW_total = dprofile_dW_total_by_name[name]
+            dW_valid = np.sum(dprofile[valid_mask]) * voxel_volume
+            dmissing_dtheta = (dW_total - dW_valid) if active else 0.0
+
+            df_dtheta = (
+                total_support * dmissing_dtheta - missing_support * dW_total
+            ) / total_support**2
+
+            idx = params_list.index(name)
+            jac[idx, 0] = dpenalty_df * df_dtheta
+
+        return jac[ind]
+
     def extract_result(self, args_1d, args_2d, args_3d, xmod):
         """
         Finalize the fit: compute per-mode metrics and populate the post-fit result attributes.
@@ -2574,7 +2870,9 @@ class PeakEllipsoid:
         1D/2D/3D mode, computes background offsets from `bkg_1d`/`bkg_2d`/
         `bkg_3d` if present, and calls `collect_mode_fit_metrics` for each
         mode group to populate `self.reddev`, `self.intensity`,
-        `self.sigma`, and `self.fit_metrics`. Also derives the final
+        `self.sigma`, `self.fit_metrics`, and (from the 3D-mode grid)
+        `self.missing_fraction`, `self.missing_support`, and
+        `self.total_support` (see `missing_support_fraction`). Also derives the final
         ellipsoid shape (center, radii, principal axes) by eigen-decomposing
         ``S = inv(inv_S)``, shifts the center back by `xmod` (the modulo
         offset the caller applied before fitting), and populates
@@ -2667,19 +2965,19 @@ class PeakEllipsoid:
         if c2_err is None:
             c2_err = abs(c2) if c2 != 0 else float(_c_err_scale[2])
 
-        r0 = self.params["r0"].value
-        r1 = self.params["r1"].value
-        r2 = self.params["r2"].value
-
-        u0 = self.params["u0"].value
-        u1 = self.params["u1"].value
-        u2 = self.params["u2"].value
+        r0, r1, r2, u0, u1, u2 = self.shape_from_params(self.params)
 
         c_err = c0_err, c1_err, c2_err
 
         c, inv_S = self.centroid_inverse_covariance(
             c0, c1, c2, r0, r1, r2, u0, u1, u2
         )
+
+        (
+            self.missing_fraction,
+            self.missing_support,
+            self.total_support,
+        ) = self.missing_support_fraction(x0, x1, x2, c, inv_S, n3d)
 
         def _bkg_norm(bkg_arr, n_arr):
             return np.where(
@@ -3193,13 +3491,7 @@ class PeakEllipsoid:
         c1 = self.params["c1"].value
         c2 = self.params["c2"].value
 
-        r0 = self.params["r0"].value
-        r1 = self.params["r1"].value
-        r2 = self.params["r2"].value
-
-        u0 = self.params["u0"].value
-        u1 = self.params["u1"].value
-        u2 = self.params["u2"].value
+        r0, r1, r2, u0, u1, u2 = self.shape_from_params(self.params)
 
         c, inv_S = self.centroid_inverse_covariance(
             c0, c1, c2, r0, r1, r2, u0, u1, u2
@@ -3302,24 +3594,34 @@ class PeakEllipsoid:
         args_3d = [x0, x1, x2, d3d, n3d, w3d, bkg_3d]
 
         n_iter = 30
-        n_loop = 3
 
         protocol = [False] * 9
 
         self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
-        for _ in range(n_loop):
-            self.update_adaptive_prior(args_1d, args_2d, args_3d)
+        self.update_adaptive_prior(args_1d, args_2d, args_3d)
 
-            protocol = [True] * 3 + [False] * 6
+        protocol = [True] * 3 + [False] * 6
 
-            self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
+        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
-            self.update_adaptive_prior(args_1d, args_2d, args_3d)
+        self.update_adaptive_prior(args_1d, args_2d, args_3d)
 
-            protocol = [False] * 3 + [True] * 6
+        protocol = [True] * 4 + [False] * 5
 
-            self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
+        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
+
+        self.update_adaptive_prior(args_1d, args_2d, args_3d)
+
+        protocol = [True] * 6 + [False] * 3
+
+        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
+
+        self.update_adaptive_prior(args_1d, args_2d, args_3d)
+
+        protocol = [True] * 9
+
+        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
         return args_1d, args_2d, args_3d
 
@@ -3350,9 +3652,11 @@ class PeakEllipsoid:
         `self.prior_center_sigma`, `self.prior_cov_sigma`,
         `self.prior_distortion_sigma`, `self.prior_rot_sigma`. A width of
         0 fixes ("freezes") the corresponding parameter group (center,
-        radii, or orientation) at its predicted resolution-model value
-        (`self._prior_r`, `self._prior_u`) by setting ``vary=False``;
-        otherwise the group is allowed to vary.
+        size/shape, or orientation) at its reference-ellipsoid value
+        (zero, since `log_size`, `shape_1`, `shape_2`, `domega_x`,
+        `domega_y`, `domega_z` are already defined relative to the
+        reference) by setting ``vary=False``; otherwise the group is
+        allowed to vary.
 
         Parameters
         ----------
@@ -3389,15 +3693,15 @@ class PeakEllipsoid:
             if not center_vary:
                 self.params[name].set(value=0.0)
 
-        for name, value in zip(("r0", "r1", "r2"), self._prior_r):
+        for name in ("log_size", "shape_1", "shape_2"):
             self.params[name].set(vary=radius_vary)
             if not radius_vary:
-                self.params[name].set(value=float(value))
+                self.params[name].set(value=0.0)
 
-        for name, value in zip(("u0", "u1", "u2"), self._prior_u):
+        for name in ("domega_x", "domega_y", "domega_z"):
             self.params[name].set(vary=orient_vary)
             if not orient_vary:
-                self.params[name].set(value=float(value))
+                self.params[name].set(value=0.0)
 
     def prior_widths_from_snr(self, snr):
         """
@@ -3521,8 +3825,8 @@ class PeakEllipsoid:
         Parameters
         ----------
         params : lmfit.Parameters
-            Current fit parameters; must contain ``c0, c1, c2, r0, r1,
-            r2, u0, u1, u2``.
+            Current fit parameters; must contain ``c0, c1, c2, log_size,
+            shape_1, shape_2, domega_x, domega_y, domega_z``.
         args_3d : sequence
             ``(x0, x1, x2, d3d, n3d, w3d, bkg_3d)`` (or a shorter
             sequence without `bkg_3d`); `bkg_3d`, if present, is
@@ -3543,12 +3847,7 @@ class PeakEllipsoid:
         c0 = params["c0"].value
         c1 = params["c1"].value
         c2 = params["c2"].value
-        r0 = params["r0"].value
-        r1 = params["r1"].value
-        r2 = params["r2"].value
-        u0 = params["u0"].value
-        u1 = params["u1"].value
-        u2 = params["u2"].value
+        r0, r1, r2, u0, u1, u2 = self.shape_from_params(params)
 
         dx_vec = [x0 - c0, x1 - c1, x2 - c2]
 
@@ -3615,10 +3914,10 @@ class PeakEllipsoid:
         args_3d : sequence
             Positional arguments for `residual_3d`/`jacobian_3d`.
         protocol : sequence of bool, optional
-            9-element sequence of ``vary`` flags for
-            ``c0, c1, c2, r0, r1, r2, u0, u1, u2`` in that order. If
-            ``None``, the current `vary` settings on `self.params` are
-            left unchanged. Default is ``None``.
+            9-element sequence of ``vary`` flags for ``c0, c1, c2,
+            log_size, shape_1, shape_2, domega_x, domega_y, domega_z`` in
+            that order. If ``None``, the current `vary` settings on
+            `self.params` are left unchanged. Default is ``None``.
         n_iter : int, optional
             Maximum number of function evaluations (`max_nfev`) for the
             least-squares solver. Default is 50.
@@ -3631,13 +3930,13 @@ class PeakEllipsoid:
             self.params["c1"].set(vary=protocol[1])
             self.params["c2"].set(vary=protocol[2])
 
-            self.params["r0"].set(vary=protocol[3])
-            self.params["r1"].set(vary=protocol[4])
-            self.params["r2"].set(vary=protocol[5])
+            self.params["log_size"].set(vary=protocol[3])
+            self.params["shape_1"].set(vary=protocol[4])
+            self.params["shape_2"].set(vary=protocol[5])
 
-            self.params["u0"].set(vary=protocol[6])
-            self.params["u1"].set(vary=protocol[7])
-            self.params["u2"].set(vary=protocol[8])
+            self.params["domega_x"].set(vary=protocol[6])
+            self.params["domega_y"].set(vary=protocol[7])
+            self.params["domega_z"].set(vary=protocol[8])
 
         out = Minimizer(
             self.residual,

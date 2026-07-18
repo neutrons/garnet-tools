@@ -720,6 +720,52 @@ class Peaks:
         fig.savefig(filename + "_sn.pdf")
         plt.close(fig)
 
+    def plot_volume_fraction(self, peaks=None):
+        if peaks is None:
+            peaks = self.peaks
+
+        filename = os.path.splitext(self.filename)[0]
+
+        vol_frac = []
+        for peak in mtd[peaks]:
+            h, k, l = [int(v) for v in peak.getIntHKL()]
+            m, n, p = [int(v) for v in peak.getIntMNP()]
+            key = (peak.getRunNumber(), h, k, l, m, n, p)
+
+            info = self.info_dict.get(key)
+            if info is not None:
+                vol_frac.append(info["vol_frac"])
+
+        vol_frac = np.array(vol_frac)
+
+        fig, ax = plt.subplots(1, 1, layout="constrained")
+        ax.hist(vol_frac, bins=100, color="C0")
+        ax.set_xlabel("Volume fraction")
+        ax.set_ylabel("Count")
+        ax.minorticks_on()
+        fig.savefig(filename + "_volfrac.pdf")
+        plt.close(fig)
+
+    def remove_low_volume_fraction(self, cutoff=0.5):
+        """
+        Flag peaks whose fitted-ellipsoid volume fraction on the
+        detector (peaks_vol_frac) falls below ``cutoff``. A low
+        vol_frac means intensity/sigma were extrapolated from a small
+        observed fraction of the peak (edge/gap clipping), which is
+        amplified by 1/vol_frac and therefore unreliable.
+        """
+        for peak in mtd[self.peaks]:
+            h, k, l = [int(v) for v in peak.getIntHKL()]
+            m, n, p = [int(v) for v in peak.getIntMNP()]
+            key = (peak.getRunNumber(), h, k, l, m, n, p)
+
+            info = self.info_dict.get(key)
+            if info is None:
+                continue
+
+            if info["vol_frac"] < cutoff:
+                peak.setSigmaIntensity(float("-inf"))
+
     def load_spectrum(self, filename, instrument):
         LoadIsawSpectrum(
             SpectraFile=filename,
@@ -858,6 +904,7 @@ class Peaks:
         fig.savefig(filename + "_rate.pdf")
 
         self.plot_signal_noise()
+        self.plot_volume_fraction()
 
         self.remove_non_integrated()
         self.remove_non_indexed()
@@ -871,6 +918,7 @@ class Peaks:
         )
 
         self.remove_off_centered()
+        self.remove_low_volume_fraction()
 
         FilterPeaks(
             InputWorkspace=self.peaks,

@@ -251,8 +251,6 @@ class BaseDataModel:
                 DetectorWorkspace=self.instrument,
             )
 
-            # RemoveLogs(Workspace=self.instrument)
-
             MaskDetectorsIf(
                 InputWorkspace=self.instrument,
                 Mode="DeselectIf",
@@ -260,21 +258,23 @@ class BaseDataModel:
                 OutputWorkspace=self.instrument,
             )
 
-            Rebin(
-                InputWorkspace=self.instrument,
-                OutputWorkspace=self.instrument,
-                Params="0,16660,16660",
-                PreserveEvents=False,
-            )
-
-            mtd[self.instrument] *= np.inf
-
             assert mtd[self.instrument].run().hasProperty("gd_prtn_chrg")
 
         else:
             LoadEmptyInstrument(
-                InstrumentName=self.ref_inst, OutputWorkspace=self.instrument
+                Filename=plan.get("InstrumentDefinition"),
+                InstrumentName=self.ref_inst,
+                OutputWorkspace=self.instrument,
             )
+
+        Rebin(
+            InputWorkspace=self.instrument,
+            OutputWorkspace=self.instrument,
+            Params="0,16660,16660",
+            PreserveEvents=False,
+        )
+
+        mtd[self.instrument] *= np.inf
 
         CloneWorkspace(
             InputWorkspace=self.instrument,
@@ -1654,13 +1654,18 @@ class LaueData(BaseDataModel):
             ws = self.instrument
 
         if not mtd.doesExist("detectors") and mtd.doesExist(ws):
-            ExtractMonitors(InputWorkspace=ws, DetectorWorkspace=ws)
+            try:
+                ExtractMonitors(InputWorkspace=ws, DetectorWorkspace=ws)
+            except RuntimeError:
+                pass
 
             PreprocessDetectorsToMD(
                 InputWorkspace=ws, OutputWorkspace="detectors"
             )
 
             self.det_IDs = mtd["detectors"].column("DetectorID")
+
+            self._generate_flux_normalization()
 
             if not mtd.doesExist("solid_angle"):
                 SolidAngle(InputWorkspace=ws, OutputWorkspace="solid_angle")
@@ -2056,7 +2061,7 @@ class LaueData(BaseDataModel):
             n_det_van //= cols // c * rows // r
             n_det_van *= cols // c * rows // r
 
-            lite_mode = n_det_van > n_det_inst
+            lite_mode = n_hist_van > n_histo_inst
 
             if lite_mode and n_hist_van == n_det_van:
                 PreprocessDetectorsToMD(
@@ -2225,40 +2230,70 @@ class LaueData(BaseDataModel):
             self.k_min = mtd["flux"].getXDimension().getMinimum()
             self.k_max = mtd["flux"].getXDimension().getMaximum()
 
-            if self.det_IDs is not None:
-                inds = mtd["sa"].getIndicesFromDetectorIDs(self.det_IDs)
+        self._generate_flux_normalization()
 
-                self.sa_y = mtd["sa"].extractY().ravel()
+    def _generate_flux_normalization(self):
+        """
+        Populate the per-detector flux/solid-angle normalization.
+        """
+        if self.det_IDs is None:
+            return
 
-                self.sa_ind = {
-                    det_ID: ind for det_ID, ind in zip(self.det_IDs, inds)
-                }
-                self.sa_ind[-1] = 0
+        if not (mtd.doesExist("sa") and mtd.doesExist("flux")):
+            return
 
-                lamda_min = 2 * np.pi / self.k_max
-                lamda_max = 2 * np.pi / self.k_min
+        if hasattr(self, "lamda_x"):
+            return
 
-                self.wavelength_band = [lamda_min, lamda_max]
+        inds = mtd["sa"].getIndicesFromDetectorIDs(self.det_IDs)
 
-                y = mtd["flux"].extractY()
-                x = mtd["flux"].extractX()
+        self.sa_y = mtd["sa"].extractY().ravel()
 
-                k = 0.5 * (x[:, 1:] + x[:, :-1])
-                y = np.diff(y) * y.shape[1]
+        self.sa_ind = {det_ID: ind for det_ID, ind in zip(self.det_IDs, inds)}
+        self.sa_ind[-1] = 0
 
-                x = 2 * np.pi / k
-                z = 2 * np.pi * y / x**2
-                y = z * ((x[:, 0] - x[:, -1]) / (k[:, -1] - k[:, 0]))[:, None]
+        two_theta = np.asarray(mtd["detectors"].column("TwoTheta"))
+        azimuthal = np.asarray(mtd["detectors"].column("Azimuthal"))
 
-                inds = mtd["flux"].getIndicesFromDetectorIDs(self.det_IDs)
+        gamma = np.arctan2(
+            np.sin(two_theta) * np.cos(azimuthal), np.cos(two_theta)
+        )
+        nu = np.arcsin(np.sin(two_theta) * np.sin(azimuthal))
 
-                self.spec_ind = {
-                    det_ID: ind for det_ID, ind in zip(self.det_IDs, inds)
-                }
-                self.spec_ind[-1] = 0
+        self.sa_gamma = np.zeros(self.sa_y.shape)
+        self.sa_nu = np.zeros(self.sa_y.shape)
+        self.sa_gamma[inds] = gamma
+        self.sa_nu[inds] = nu
 
-                self.lamda_x = x[:, ::-1].mean(axis=0)
-                self.spect_y = y[:, ::-1]
+        lamda_min = 2 * np.pi / self.k_max
+        lamda_max = 2 * np.pi / self.k_min
+
+        self.wavelength_band = [lamda_min, lamda_max]
+
+        y = mtd["flux"].extractY()
+        x = mtd["flux"].extractX()
+
+        k = 0.5 * (x[:, 1:] + x[:, :-1])
+
+        p = np.gradient(y, axis=1) / np.gradient(k, axis=1)
+
+        y = p * k**2 / (2 * np.pi)
+
+        x = 2 * np.pi / k
+
+        order = np.argsort(x, axis=1)
+        x = np.take_along_axis(x, order, axis=1)
+        y = np.take_along_axis(x, order, axis=1)
+
+        inds = mtd["flux"].getIndicesFromDetectorIDs(self.det_IDs)
+
+        self.spec_ind = {
+            det_ID: ind for det_ID, ind in zip(self.det_IDs, inds)
+        }
+        self.spec_ind[-1] = 0
+
+        self.lamda_x = x[:, ::-1].mean(axis=0)
+        self.spect_y = y[:, ::-1]
 
     def get_volume_in_Q(self, lamda, two_theta, det_ID):
         L_inv = 2 * np.sin(0.5 * np.deg2rad(two_theta)) ** 2 / lamda**4
@@ -2267,22 +2302,9 @@ class LaueData(BaseDataModel):
 
         return L_inv * self.solid_angle_y[solid_angle_ind]
 
-    def approximate_norm(self, lamda, two_theta, det_ID, proton_charge):
+    def approximate_norm(self, lamda, two_theta, det_ID, pc):
         """
-        Delta-function normalization for a single peak, keyed directly
-        by detector ID (unlike ``reflections.py``'s vestigial
-        ``renormalize_intensities``, which bank-averages via a
-        ``GroupDetectors`` "scale" workspace).
-
-        ``vol`` (``get_volume_in_Q``) is ``L_inv * solid_angle_y``, the
-        ideal geometric solid angle divided by the Lorentz factor;
-        multiplying by ``sa_y`` (the measured vanadium response) and
-        dividing by ``vol`` therefore already works out to
-        ``spectrum * (sa_y / solid_angle_y) * L`` -- i.e. the
-        geometric efficiency (measured-vs-ideal solid angle) times the
-        Lorentz factor -- so no separate efficiency division belongs
-        here; adding one would just cancel ``sa_y``/``solid_angle_y``
-        back out.
+        Delta-function normalization for a single peak.
 
         Parameters
         ----------
@@ -2292,9 +2314,8 @@ class LaueData(BaseDataModel):
             Scattering angle (degrees).
         det_ID : int
             Detector ID the peak lands on.
-        proton_charge : float
-            Proton charge of the run being integrated, e.g. from
-            ``mtd[event_name].run().getProtonCharge()``.
+        pc : float
+            Proton charge of the run being integrated.
 
         """
         vol = self.get_volume_in_Q(lamda, two_theta, det_ID)
@@ -2304,9 +2325,7 @@ class LaueData(BaseDataModel):
         spec_ind = self.spec_ind[det_ID]
         sa_ind = self.sa_ind[det_ID]
 
-        return (
-            self.spect_y[spec_ind][i] * self.sa_y[sa_ind] * proton_charge / vol
-        )
+        return self.spect_y[spec_ind][i] * self.sa_y[sa_ind] * pc / vol
 
     def crop_for_normalization(self, event_name):
         """
@@ -2414,7 +2433,7 @@ class LaueData(BaseDataModel):
             n_det_van //= cols // c * rows // r
             n_det_van *= cols // c * rows // r
 
-            lite_mode = n_det_van > n_det_inst
+            lite_mode = n_hist_van > n_histo_inst
 
             if lite_mode and n_hist_van == n_det_van:
                 PreprocessDetectorsToMD(

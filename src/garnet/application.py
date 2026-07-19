@@ -1209,8 +1209,12 @@ class FormView(QWidget):
         self.optimize_peaks_box = QCheckBox("Optimize Peaks", self)
         self.optimize_peaks_box.setChecked(False)
 
+        self.quick_integration_box = QCheckBox("Quick Integration", self)
+        self.quick_integration_box.setChecked(False)
+
         int_layout.addWidget(self.optimize_ub_box, 4, 0)
         int_layout.addWidget(self.optimize_peaks_box, 4, 1)
+        int_layout.addWidget(self.quick_integration_box, 4, 2)
 
         self.int_run_button = QPushButton("Run Integration", self)
         self.int_run_button.setIcon(qta.icon("fa6s.play"))
@@ -1372,6 +1376,12 @@ class FormView(QWidget):
 
     def set_optimize_peaks(self, state):
         self.optimize_peaks_box.setChecked(state)
+
+    def get_quick_integration(self):
+        return self.quick_integration_box.isChecked()
+
+    def set_quick_integration(self, state):
+        self.quick_integration_box.setChecked(state)
 
     # ── Sample/Material view helpers ─────────────────────────────────────────
 
@@ -4363,6 +4373,7 @@ class FormPresenter:
                 radius,
                 optimize_ub,
                 optimize_peaks,
+                quick_integration,
             ) = params
             self.view.set_satellite(max_order > 0)
             self.view.clear_satellite()
@@ -4378,6 +4389,7 @@ class FormPresenter:
             self.view.set_radius(radius)
             self.view.set_optimize_ub(optimize_ub)
             self.view.set_optimize_peaks(optimize_peaks)
+            self.view.set_quick_integration(quick_integration)
 
     def save_int(self):
         centering = self.view.get_centering()
@@ -4392,6 +4404,7 @@ class FormPresenter:
         radius = self.view.get_radius()
         optimize_ub = self.view.get_optimize_ub()
         optimize_peaks = self.view.get_optimize_peaks()
+        quick_integration = self.view.get_quick_integration()
         self.model.set_int(
             cell,
             centering,
@@ -4405,6 +4418,7 @@ class FormPresenter:
             radius,
             optimize_ub,
             optimize_peaks,
+            quick_integration,
         )
 
     def load_param(self):
@@ -4625,6 +4639,7 @@ class FormModel:
                 radius = params["Radius"]
                 optimize_ub = params.get("OptimizeUB", False)
                 optimize_peaks = params.get("OptimizePeaks", False)
+                quick_integration = not params.get("ProfileFit", True)
                 return (
                     cell,
                     centering,
@@ -4638,6 +4653,7 @@ class FormModel:
                     radius,
                     optimize_ub,
                     optimize_peaks,
+                    quick_integration,
                 )
 
     def set_int(
@@ -4654,6 +4670,7 @@ class FormModel:
         radius,
         optimize_ub=False,
         optimize_peaks=False,
+        quick_integration=False,
     ):
         if self.reduction.plan is not None:
             params = {}
@@ -4669,6 +4686,7 @@ class FormModel:
             params["Radius"] = radius
             params["OptimizeUB"] = optimize_ub
             params["OptimizePeaks"] = optimize_peaks
+            params["ProfileFit"] = not quick_integration
             self.reduction.plan["Integration"] = params
 
     def get_param(self):

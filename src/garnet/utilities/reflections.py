@@ -21,11 +21,6 @@ from mantid.simpleapi import (
     SetGoniometer,
     SetSample,
     LoadSampleShape,
-    RemoveMaskedSpectra,
-    GroupDetectors,
-    CreateGroupingWorkspace,
-    SolidAngle,
-    Divide,
     mtd,
 )
 
@@ -55,6 +50,8 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 import argparse
 
+from garnet.config.instruments import beamlines
+from garnet.reduction.data import DataModel
 from garnet.reduction.ub import Optimization
 from garnet.reduction.resolution import ResolutionEllipsoid
 from garnet.utilities.absorption import AbsorptionEllipsoid
@@ -111,6 +108,37 @@ point_group_dict = {
     "-43m": "-43m (Cubic)",
     "m-3m": "m-3m (Cubic)",
 }
+
+
+def plot_normalization(data, filename):
+    """
+    Debug plot of the per-spectrum wavelength-dependent flux spectra and
+    solid-angle detector efficiencies already generated on a ``DataModel``
+    (``load_generate_normalization``/``preprocess_detectors``), used for
+    the quick-fit normalization (``DataModel.approximate_norm``).
+    """
+    fig, ax = plt.subplots(1, 1, layout="constrained")
+    for y in data.spect_y:
+        ax.plot(data.lamda_x, y)
+    ax.set_xlabel(r"$\lambda$ [$\AA$]")
+    ax.set_ylabel(r"Flux [counts/$\AA$]")
+    ax.minorticks_on()
+    fig.savefig(filename + "_flux.pdf")
+    plt.close(fig)
+
+    fig, ax = plt.subplots(1, 1, layout="constrained")
+    sca = ax.scatter(
+        np.rad2deg(data.sa_gamma),
+        np.rad2deg(data.sa_nu),
+        c=data.sa_y,
+        s=4,
+    )
+    ax.set_xlabel(r"$\gamma$ [deg]")
+    ax.set_ylabel(r"$\nu$ [deg]")
+    fig.colorbar(sca, ax=ax, label="Solid angle efficiency")
+    ax.minorticks_on()
+    fig.savefig(filename + "_efficiency.pdf")
+    plt.close(fig)
 
 
 class AbsorptionCorrection:
@@ -1036,82 +1064,26 @@ class Peaks:
             SortAscending=False,
         )
 
-        # self.renormalize_intensities()
+    def renormalize_intensities(self, plan, vanadium_file, flux_file):
+        """
+        Reapply the flux/solid-angle/Lorentz normalization
+        (``DataModel.approximate_norm``) to each peak's raw
+        intensity/sigma (``self.norm_dict``) -- e.g. to redo the
+        correction with an updated flux file without re-integrating.
+        Builds the detector geometry from the first real run in the
+        plan (``DataModel.update_raw_path``), the same way the real
+        reduction does, rather than simulating an instrument.
+        """
+        data = DataModel(beamlines[plan["Instrument"]])
+        data.update_raw_path(plan)
 
-        # self.rescale_intensities()
+        data.load_generate_normalization(vanadium_file, flux_file)
+        data.preprocess_detectors(data.instrument)
 
-    def renormalize_intensities(self, flux, solid_angle):
-        self.flux_file = flux
-        self.solid_angle_file = solid_angle
+        norm_file = os.path.splitext(self.filename)[0] + "_normalization"
+        plot_normalization(data, norm_file)
 
-        LoadNexus(Filename=self.flux_file, OutputWorkspace="flux")
-        LoadNexus(Filename=self.solid_angle_file, OutputWorkspace="sa")
-
-        detIDs = mtd["peaks"].column("DetID")
-
-        inds = list(mtd["sa"].getIndicesFromDetectorIDs(detIDs))
-
-        y = mtd["sa"].extractY().ravel()
-
-        for i, peak in enumerate(mtd[self.peaks]):
-            ind = inds[i]
-            if y[ind] == 0:
-                peak.setSigmaIntensity(peak.getIntensity())
-
-        SolidAngle(InputWorkspace="sa", OutputWorkspace="solid_angle")
-
-        Divide(
-            LHSWorkspace="sa",
-            RHSWorkspace="solid_angle",
-            OutputWorkspace="efficiency",
-        )
-
-        CreateGroupingWorkspace(
-            InputWorkspace="sa",
-            GroupDetectorsBy="bank",
-            OutputWorkspace="group",
-        )
-
-        GroupDetectors(
-            InputWorkspace="efficiency",
-            OutputWorkspace="scale",
-            Behaviour="Average",
-            CopyGroupingFromWorkspace="group",
-        )
-
-        RemoveMaskedSpectra(InputWorkspace="scale", OutputWorkspace="scale")
-
-        s = mtd["scale"].extractY().ravel()
-
-        y = mtd["flux"].extractY()
-        x = mtd["flux"].extractX()
-
-        k = 0.5 * (x[:, 1:] + x[:, :-1])
-        y = np.diff(y) * y.shape[1]
-
-        x = 2 * np.pi / k
-        z = 2 * np.pi * y / x**2
-        y = z * ((x[:, 0] - x[:, -1]) / (k[:, -1] - k[:, 0]))[:, None]
-
-        x = x[:, ::-1]
-        y = y[:, ::-1]
-
-        j = np.searchsorted(x[0, :], 1.0)
-
-        scale = y[:, j]
-
-        filename = os.path.splitext(self.filename)[0]
-
-        fig, ax = plt.subplots(1, 1, layout="constrained")
-        for i in range(x.shape[0]):
-            ax.plot(x[i, :], y[i, :] / scale[i])
-        fig.savefig(filename + "_spec.pdf")
-
-        detIDs = mtd["peaks"].column("DetID")
-
-        rows = list(mtd["scale"].getIndicesFromDetectorIDs(detIDs))
-
-        for i, peak in enumerate(mtd[self.peaks]):
+        for peak in mtd[self.peaks]:
             h, k, l = [int(val) for val in peak.getIntHKL()]
             m, n, p = [int(val) for val in peak.getIntMNP()]
 
@@ -1120,19 +1092,19 @@ class Peaks:
             raw_intens, raw_sig = self.norm_dict[key]
 
             lamda = peak.getWavelength()
-            two_theta = peak.getScattering()
+            two_theta = np.rad2deg(peak.getScattering())
+            det_ID = peak.getDetectorID()
             proton_charge = peak.getBinCount()
 
-            L = 0.5 * lamda**4 / np.sin(0.5 * two_theta) ** 2
+            norm = data.approximate_norm(
+                lamda, two_theta, det_ID, proton_charge
+            )
 
-            corr = np.inf
-            row = rows[i]
+            if not (np.isfinite(norm) and norm > 0):
+                continue
 
-            col = np.searchsorted(x[row], lamda, side="right") - 1
-            corr = y[row, col] * s[row] * proton_charge / scale[row]
-
-            peak.setIntensity(raw_intens / L / corr)
-            peak.setSigmaIntensity(raw_sig / L / corr)
+            peak.setIntensity(raw_intens / norm)
+            peak.setSigmaIntensity(raw_sig / norm)
 
     def merge_intensities(self, name=None):
         if name is not None:

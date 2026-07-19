@@ -3008,9 +3008,15 @@ class PeakEllipsoid:
         onto all seven modes, quick-estimates each mode's
         amplitude/background (`quick_gaussian`), converts a measured
         background into per-mode background-count arrays, then runs an
-        initial unconstrained-amplitude `sweep` followed by `n_loop`
-        rounds alternating `update_adaptive_prior` with two `sweep`
-        calls (center-only, then radii/orientation).
+        annealed multiresolution schedule of `sweep` calls: geometry
+        parameters are unfrozen in stages (amplitude/background only,
+        then + center, + size, + shape, + orientation), each interleaved
+        with `update_adaptive_prior`, while the 1D/2D auxiliary residual
+        weights (`alpha_1d`/`alpha_2d`, relative to `self.mode_weights_1d`/
+        `self.mode_weights_2d`) are wound down stage by stage. A final
+        `sweep` at a small residual `alpha_1d`/`alpha_2d` (0.01x) leaves
+        the reported geometry and covariance effectively determined by
+        the 3D likelihood and priors alone.
 
         Parameters
         ----------
@@ -3161,33 +3167,44 @@ class PeakEllipsoid:
 
         n_iter = 30
 
-        protocol = [False] * 9
+        # Annealed multiresolution schedule: the 1D/2D auxiliary views
+        # guide the early geometry stages (weighted by alpha_1d/alpha_2d,
+        # relative to self.mode_weights_1d/2d), then their influence is
+        # wound down so the final stage is (nearly) a 3D-only MAP fit.
+        stages = [
+            ([False] * 9, 1.0, 1.0),
+            ([True] * 3 + [False] * 6, 1.0, 0.25),
+            ([True] * 4 + [False] * 5, 1.0, 0.5),
+            ([True] * 6 + [False] * 3, 0.5, 1.0),
+            ([True] * 9, 0.2, 1.0),
+        ]
 
-        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
+        for i, (protocol, alpha_1d, alpha_2d) in enumerate(stages):
+            args_1d[5] = self.uniform_mode_weights(
+                d1d, n1d, alpha_1d * self.mode_weights_1d
+            )
+            args_2d[5] = self.uniform_mode_weights(
+                d2d, n2d, alpha_2d * self.mode_weights_2d
+            )
 
-        self.update_adaptive_prior(args_1d, args_2d, args_3d)
+            self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
 
-        protocol = [True] * 3 + [False] * 6
+            if i < len(stages) - 1:
+                self.update_adaptive_prior(args_1d, args_2d, args_3d)
 
-        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
+        # Final stage: alpha_1d/alpha_2d are wound down to a small residual
+        # weight (not exactly zero) so A1d_*/B1d_*/A2d_*/B2d_* keep a
+        # well-conditioned Jacobian column instead of going fully
+        # unconstrained; the reported geometry and covariance are
+        # effectively determined by the 3D likelihood and priors alone.
+        args_1d[5] = self.uniform_mode_weights(
+            d1d, n1d, 0.01 * self.mode_weights_1d
+        )
+        args_2d[5] = self.uniform_mode_weights(
+            d2d, n2d, 0.01 * self.mode_weights_2d
+        )
 
-        self.update_adaptive_prior(args_1d, args_2d, args_3d)
-
-        protocol = [True] * 4 + [False] * 5
-
-        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
-
-        self.update_adaptive_prior(args_1d, args_2d, args_3d)
-
-        protocol = [True] * 6 + [False] * 3
-
-        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
-
-        self.update_adaptive_prior(args_1d, args_2d, args_3d)
-
-        protocol = [True] * 9
-
-        self.sweep(args_1d, args_2d, args_3d, protocol, n_iter, report_fit)
+        self.sweep(args_1d, args_2d, args_3d, [True] * 9, n_iter, report_fit)
 
         return args_1d, args_2d, args_3d
 

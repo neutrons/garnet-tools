@@ -25,7 +25,7 @@ from garnet.reduction.crystallography import (
 
 
 class StructureAnalysis:
-    def __init__(self, config, filename):
+    def __init__(self, config, filename, plan=None):
         defaults = {
             "ExtinctionModel": "SHELX",
             "ChemicalFormula": "Yb3-Al5-O12",
@@ -69,7 +69,17 @@ class StructureAnalysis:
             parameters = [parameters] * 3
         self.parameters = parameters
 
+        self.profile_fit = defaults.get("ProfileFit", True)
+        self.plan = plan
+        self.vanadium_file = defaults.get("VanadiumFile")
+        self.flux_file = defaults.get("FluxFile")
+
         self.load_peaks()
+
+        if not self.profile_fit:
+            self.peaks.renormalize_intensities(
+                self.plan, self.vanadium_file, self.flux_file
+            )
 
         apply_corr = False
         if not self.refine_abs:
@@ -147,6 +157,8 @@ if __name__ == "__main__":
     rp.load_plan(filename)
     params = rp.plan
 
+    inst = Integration(params)
+
     config = {}
     if params.get("Sample") is not None:
         config.update(params["Sample"])
@@ -154,8 +166,10 @@ if __name__ == "__main__":
         config.update(params["Material"])
     if params.get("Integration") is not None:
         config.update(params["Integration"])
+    config["VanadiumFile"] = params.get("VanadiumFile")
+    config["FluxFile"] = params.get("FluxFile")
     pprint.pp(config)
 
-    inst = Integration(params)
-
-    StructureAnalysis(config, inst.get_file(inst.get_output_file(), ""))
+    StructureAnalysis(
+        config, inst.get_file(inst.get_output_file(), ""), params
+    )

@@ -1219,6 +1219,34 @@ class PeaksModel:
 
             peak.setRunNumber(i + 1)
 
+    def stash_run_number(self, peaks):
+        """
+        Park the run number in bin count ahead of a temporary renumbering.
+
+        Parameters
+        ----------
+        peaks : str
+            Name of peaks table.
+
+        """
+
+        for peak in mtd[peaks]:
+            peak.setBinCount(peak.getRunNumber())
+
+    def restore_run_number(self, peaks):
+        """
+        Restore the run number stashed in bin count.
+
+        Parameters
+        ----------
+        peaks : str
+            Name of peaks table.
+
+        """
+
+        for peak in mtd[peaks]:
+            peak.setRunNumber(int(peak.getBinCount()))
+
     def load_peaks(self, filename, peaks):
         """
         Load peaks file.
@@ -1587,6 +1615,29 @@ class PeakModel:
         """
 
         return mtd[self.peaks].sample().getOrientedLattice().getUB()
+
+    def get_peak_intensity(self, no):
+        """
+        Obtain the peak intensity.
+
+        Parameters
+        ----------
+        no : int
+            Peak index number.
+
+        Returns
+        -------
+        intens : float
+            Intensity.
+        sig : float
+            Uncertainty.
+
+        """
+
+        intens = mtd[self.peaks].getPeak(no).getIntensity()
+        sig = mtd[self.peaks].getPeak(no).getSigmaIntensity()
+
+        return intens, sig
 
     def set_peak_intensity(self, no, intens, sig):
         """

@@ -130,7 +130,7 @@ class Integration(PeakProjection):
 
         peaks.reset_satellites("combine")
 
-        if mtd.doesExist("combine"):
+        if data.workspace_exists("combine"):
             peaks.save_peaks(result_file, "combine")
 
             opt = Optimization("combine")
@@ -224,8 +224,6 @@ class Integration(PeakProjection):
             app = "_sub" if data.workspace_exists("data_sub") else ""
 
             data.convert_to_Q_sample("data" + app, "md", lorentz_corr=True)
-
-            data.delete_workspace("data_sub")
 
             peaks.predict_peaks(
                 "data",
@@ -377,6 +375,26 @@ class Integration(PeakProjection):
                     if self.make_plot:
                         self.peak_plot.close()
             else:
+                data.convert_to_Q_sample(
+                    "data" + app, "md", lorentz_corr=False
+                )
+
+                peaks.stash_run_number("peaks")
+
+                radii = res.renumber_by_size(5)
+
+                peaks.integrate_peaks_with_radii(
+                    "md",
+                    "peaks",
+                    radii,
+                    centroid=False,
+                    update=False,
+                )
+
+                peaks.restore_run_number("peaks")
+
+                data.delete_workspace("md")
+
                 self.stub_peak_info("peaks")
                 self.correct_intensities("peaks")
 
@@ -390,6 +408,8 @@ class Integration(PeakProjection):
 
             data.delete_workspace("data")
 
+            data.delete_workspace("data_sub")
+
             data.delete_workspace("peaks")
 
         peaks.remove_weak_peaks("combine", -100)
@@ -398,7 +418,7 @@ class Integration(PeakProjection):
 
         # ---
 
-        if mtd.doesExist("combine"):
+        if data.workspace_exists("combine"):
             opt = Optimization("combine")
             opt.optimize_lattice(cell)
 
@@ -872,7 +892,7 @@ class Integration(PeakProjection):
         peak = PeakModel(peaks_ws)
 
         for i in range(peak.get_number_peaks()):
-            p = mtd[peaks_ws].getPeak(i)
+            intens_raw, sig_raw = peak.get_peak_intensity(i)
 
             info = {
                 "d3x": 0.0,
@@ -880,8 +900,8 @@ class Integration(PeakProjection):
                 "bkg_err": 0.0,
                 "n_vox": 0,
                 "vol_frac": 1.0,
-                "intens_raw": p.getIntensity(),
-                "sig_raw": p.getSigmaIntensity(),
+                "intens_raw": intens_raw,
+                "sig_raw": sig_raw,
                 "pk_data": 1.0,
                 "pk_norm": 1.0,
                 "bkg_data": 0.0,
@@ -894,22 +914,13 @@ class Integration(PeakProjection):
 
     def correct_intensities(self, peaks_ws):
         """
-        Apply the delta-function absolute-scale normalization
-        (``DataModel.approximate_norm``) to each peak's raw
-        intensity/sigma, keyed by wavelength/scattering angle/detector
-        ID. Only needed for the ``ProfileFit=False`` (radii-only)
-        path -- the profile-fit path already normalizes per-bank via
-        ``extract_peak_info``'s ``normalize_to_hkl``/``_norm``
-        histogram extraction, so applying this on top would
-        double-normalize.
+        Apply the delta-function absolute-scale normalization.
         """
         peak = PeakModel(peaks_ws)
 
-        proton_charge = mtd["data"].run().getProtonCharge()
+        proton_charge = self.data.monitor
 
         for i in range(peak.get_number_peaks()):
-            p = mtd[peaks_ws].getPeak(i)
-
             lamda = peak.get_wavelength(i)
             two_theta, _ = peak.get_angles(i)
             det_ID = peak.get_detector_id(i)
@@ -921,7 +932,9 @@ class Integration(PeakProjection):
             if not (np.isfinite(norm) and norm > 0):
                 continue
 
-            intens = p.getIntensity() / norm
-            sig = p.getSigmaIntensity() / norm
+            intens, sig = peak.get_peak_intensity(i)
+
+            intens /= norm
+            sig /= norm
 
             peak.set_peak_intensity(i, intens, sig)

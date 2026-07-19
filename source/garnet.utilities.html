@@ -1837,7 +1837,7 @@ and sample misalignment effects on intensity measurements.</p>
 <span id="garnet-utilities-reflections-module"></span><h2>garnet.utilities.reflections module<a class="headerlink" href="#module-garnet.utilities.reflections" title="Link to this heading">#</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">AbsorptionCorrection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chemical_formula</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">z_parameter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_vector</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">1]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">v_vector</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[1,</span> <span class="pre">0,</span> <span class="pre">0]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L116-L466"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">AbsorptionCorrection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chemical_formula</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">z_parameter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_vector</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">1]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">v_vector</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[1,</span> <span class="pre">0,</span> <span class="pre">0]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L144-L494"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
@@ -1876,7 +1876,7 @@ and sample misalignment effects on intensity measurements.</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.apply_correction">
-<span class="sig-name descname"><span class="pre">apply_correction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L407-L466"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.apply_correction" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">apply_correction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L435-L494"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.apply_correction" title="Link to this definition">#</a></dt>
 <dd><p>Correct every peak’s intensity for absorption in one
 vectorized pass via <code class="docutils literal notranslate"><span class="pre">AbsorptionEllipsoid</span></code>, instead of a
 per-orientation Mantid <code class="docutils literal notranslate"><span class="pre">AddAbsorptionWeightedPathLengths</span></code>
@@ -1891,50 +1891,56 @@ for every peak regardless of goniometer setting.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.calculate_correction">
-<span class="sig-name descname"><span class="pre">calculate_correction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L251-L354"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.calculate_correction" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">calculate_correction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L279-L382"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.calculate_correction" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.save_ellipsoid_stl">
-<span class="sig-name descname"><span class="pre">save_ellipsoid_stl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'/tmp/ellipsoid.stl'</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L179-L184"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.save_ellipsoid_stl" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">save_ellipsoid_stl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'/tmp/ellipsoid.stl'</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L207-L212"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.save_ellipsoid_stl" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.set_material">
-<span class="sig-name descname"><span class="pre">set_material</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L212-L217"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.set_material" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">set_material</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L240-L245"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.set_material" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.set_orientation">
-<span class="sig-name descname"><span class="pre">set_orientation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L219-L249"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.set_orientation" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">set_orientation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L247-L277"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.set_orientation" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.set_shape">
-<span class="sig-name descname"><span class="pre">set_shape</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L186-L210"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.set_shape" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">set_shape</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L214-L238"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.set_shape" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.verify_chemical_formula">
-<span class="sig-name descname"><span class="pre">verify_chemical_formula</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">formula</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L170-L177"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.verify_chemical_formula" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">verify_chemical_formula</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">formula</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L198-L205"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.verify_chemical_formula" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.AbsorptionCorrection.write_absortion_parameters">
-<span class="sig-name descname"><span class="pre">write_absortion_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L356-L405"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.write_absortion_parameters" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">write_absortion_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L384-L433"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.AbsorptionCorrection.write_absortion_parameters" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">point_group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L469-L1551"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">point_group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L497-L1571"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#garnet.utilities.reflections.Peaks.remove_volume_outliers" title="garnet.utilities.reflections.Peaks.remove_volume_outliers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">remove_volume_outliers</span></code></a>([lo, hi])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#garnet.utilities.reflections.Peaks.remove_low_volume_fraction" title="garnet.utilities.reflections.Peaks.remove_low_volume_fraction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">remove_low_volume_fraction</span></code></a>([cutoff])</p></td>
+<td><p>Flag peaks whose fitted-ellipsoid volume fraction on the detector (peaks_vol_frac) falls below <code class="docutils literal notranslate"><span class="pre">cutoff</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#garnet.utilities.reflections.Peaks.remove_volume_outliers" title="garnet.utilities.reflections.Peaks.remove_volume_outliers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">remove_volume_outliers</span></code></a>([lo, hi])</p></td>
 <td><p>Flag peaks whose 3D Gaussian profile-fit intensity (I_3d) disagrees with the peak's assigned intensity (peak.getIntensity()).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#garnet.utilities.reflections.Peaks.renormalize_intensities" title="garnet.utilities.reflections.Peaks.renormalize_intensities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">renormalize_intensities</span></code></a>(plan, vanadium_file, ...)</p></td>
+<td><p>Reapply the flux/solid-angle/Lorentz normalization (<code class="docutils literal notranslate"><span class="pre">DataModel.approximate_norm</span></code>) to each peak's raw intensity/sigma (<code class="docutils literal notranslate"><span class="pre">self.norm_dict</span></code>) -- e.g. to redo the correction with an updated flux file without re-integrating.</p></td>
 </tr>
 </tbody>
 </table>
@@ -1965,22 +1971,22 @@ for every peak regardless of goniometer setting.</p>
 <tr class="row-even"><td><p><strong>plot_signal_noise</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>refine_UB</strong></p></td>
+<tr class="row-odd"><td><p><strong>plot_volume_fraction</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>refine_ellipsoids</strong></p></td>
+<tr class="row-even"><td><p><strong>refine_UB</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>remove_non_indexed</strong></p></td>
+<tr class="row-odd"><td><p><strong>refine_ellipsoids</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>remove_non_integrated</strong></p></td>
+<tr class="row-even"><td><p><strong>remove_non_indexed</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>remove_off_centered</strong></p></td>
+<tr class="row-odd"><td><p><strong>remove_non_integrated</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>renormalize_intensities</strong></p></td>
+<tr class="row-even"><td><p><strong>remove_off_centered</strong></p></td>
 <td></td>
 </tr>
 <tr class="row-odd"><td><p><strong>renumber_peaks</strong></p></td>
@@ -2006,72 +2012,87 @@ for every peak regardless of goniometer setting.</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.calculate_statistics">
-<span class="sig-name descname"><span class="pre">calculate_statistics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1386-L1494"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.calculate_statistics" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">calculate_statistics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1406-L1514"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.calculate_statistics" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.get_cell">
-<span class="sig-name descname"><span class="pre">get_cell</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L730-L732"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.get_cell" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">get_cell</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L804-L806"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.get_cell" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.load_peaks">
-<span class="sig-name descname"><span class="pre">load_peaks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L807-L993"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.load_peaks" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">load_peaks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L881-L1065"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.load_peaks" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.load_spectrum">
-<span class="sig-name descname"><span class="pre">load_spectrum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instrument</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L723-L728"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.load_spectrum" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">load_spectrum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instrument</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L797-L802"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.load_spectrum" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.median_absolute_devation">
-<span class="sig-name descname"><span class="pre">median_absolute_devation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">arr</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L569-L573"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.median_absolute_devation" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">median_absolute_devation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">arr</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L597-L601"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.median_absolute_devation" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.merge_intensities">
-<span class="sig-name descname"><span class="pre">merge_intensities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1089-L1121"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.merge_intensities" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">merge_intensities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1109-L1141"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.merge_intensities" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.peak_info">
-<span class="sig-name descname"><span class="pre">peak_info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L734-L796"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.peak_info" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">peak_info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L808-L870"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.peak_info" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.plot_signal_noise">
-<span class="sig-name descname"><span class="pre">plot_signal_noise</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L701-L721"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.plot_signal_noise" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">plot_signal_noise</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L729-L749"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.plot_signal_noise" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.plot_volume_fraction">
+<span class="sig-name descname"><span class="pre">plot_volume_fraction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L751-L775"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.plot_volume_fraction" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.refine_UB">
-<span class="sig-name descname"><span class="pre">refine_UB</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L505-L532"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.refine_UB" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">refine_UB</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L533-L560"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.refine_UB" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.refine_ellipsoids">
-<span class="sig-name descname"><span class="pre">refine_ellipsoids</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L497-L503"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.refine_ellipsoids" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">refine_ellipsoids</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L525-L531"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.refine_ellipsoids" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.remove_low_volume_fraction">
+<span class="sig-name descname"><span class="pre">remove_low_volume_fraction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cutoff</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L777-L795"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_low_volume_fraction" title="Link to this definition">#</a></dt>
+<dd><p>Flag peaks whose fitted-ellipsoid volume fraction on the
+detector (peaks_vol_frac) falls below <code class="docutils literal notranslate"><span class="pre">cutoff</span></code>. A low
+vol_frac means intensity/sigma were extrapolated from a small
+observed fraction of the peak (edge/gap clipping), which is
+amplified by 1/vol_frac and therefore unreliable.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.remove_non_indexed">
-<span class="sig-name descname"><span class="pre">remove_non_indexed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L689-L699"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_non_indexed" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">remove_non_indexed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L717-L727"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_non_indexed" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.remove_non_integrated">
-<span class="sig-name descname"><span class="pre">remove_non_integrated</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L675-L687"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_non_integrated" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">remove_non_integrated</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L703-L715"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_non_integrated" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.remove_off_centered">
-<span class="sig-name descname"><span class="pre">remove_off_centered</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L575-L627"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_off_centered" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">remove_off_centered</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L603-L655"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_off_centered" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.remove_volume_outliers">
-<span class="sig-name descname"><span class="pre">remove_volume_outliers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lo</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L629-L673"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_volume_outliers" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">remove_volume_outliers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lo</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L657-L701"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.remove_volume_outliers" title="Link to this definition">#</a></dt>
 <dd><p>Flag peaks whose 3D Gaussian profile-fit intensity (I_3d) disagrees
 with the peak’s assigned intensity (peak.getIntensity()). Peaks
 whose I_3d / getIntensity() ratio falls outside [lo, hi] are
@@ -2080,45 +2101,61 @@ considered outliers and flagged for removal.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.renormalize_intensities">
-<span class="sig-name descname"><span class="pre">renormalize_intensities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flux</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">solid_angle</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L995-L1087"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.renormalize_intensities" title="Link to this definition">#</a></dt>
-<dd></dd></dl>
+<span class="sig-name descname"><span class="pre">renormalize_intensities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plan</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vanadium_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flux_file</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1067-L1107"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.renormalize_intensities" title="Link to this definition">#</a></dt>
+<dd><p>Reapply the flux/solid-angle/Lorentz normalization
+(<code class="docutils literal notranslate"><span class="pre">DataModel.approximate_norm</span></code>) to each peak’s raw
+intensity/sigma (<code class="docutils literal notranslate"><span class="pre">self.norm_dict</span></code>) – e.g. to redo the
+correction with an updated flux file without re-integrating.
+Builds the detector geometry from the first real run in the
+plan (<code class="docutils literal notranslate"><span class="pre">DataModel.update_raw_path</span></code>), the same way the real
+reduction does, rather than simulating an instrument.</p>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.renumber_peaks">
-<span class="sig-name descname"><span class="pre">renumber_peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">60</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">decimals</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">6</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linkage</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'average'</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1347-L1384"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.renumber_peaks" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">renumber_peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">60</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">decimals</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">6</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linkage</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'average'</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1367-L1404"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.renumber_peaks" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.rescale_intensities">
-<span class="sig-name descname"><span class="pre">rescale_intensities</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L534-L567"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.rescale_intensities" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">rescale_intensities</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L562-L595"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.rescale_intensities" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.reset_satellite">
-<span class="sig-name descname"><span class="pre">reset_satellite</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1123-L1172"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.reset_satellite" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">reset_satellite</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1143-L1192"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.reset_satellite" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.resort_hkl">
-<span class="sig-name descname"><span class="pre">resort_hkl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1496-L1551"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.resort_hkl" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">resort_hkl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1516-L1571"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.resort_hkl" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.save_peaks">
-<span class="sig-name descname"><span class="pre">save_peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fit_dict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1174-L1337"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.save_peaks" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">save_peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fit_dict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1194-L1357"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.save_peaks" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.Peaks.update_monitor">
-<span class="sig-name descname"><span class="pre">update_monitor</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L798-L805"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.update_monitor" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">update_monitor</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L872-L879"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.Peaks.update_monitor" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="garnet.utilities.reflections.main">
-<span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1554-L1634"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.main" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L1574-L1654"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.main" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="garnet.utilities.reflections.plot_normalization">
+<span class="sig-name descname"><span class="pre">plot_normalization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/reflections.py#L113-L141"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.reflections.plot_normalization" title="Link to this definition">#</a></dt>
+<dd><p>Debug plot of the per-spectrum wavelength-dependent flux spectra and
+solid-angle detector efficiencies already generated on a <code class="docutils literal notranslate"><span class="pre">DataModel</span></code>
+(<code class="docutils literal notranslate"><span class="pre">load_generate_normalization</span></code>/<code class="docutils literal notranslate"><span class="pre">preprocess_detectors</span></code>), used for
+the quick-fit normalization (<code class="docutils literal notranslate"><span class="pre">DataModel.approximate_norm</span></code>).</p>
+</dd></dl>
 
 </section>
 <section id="garnet-utilities-sliceview-module">
@@ -2128,7 +2165,7 @@ considered outliers and flagged for removal.</p>
 <span id="garnet-utilities-structure-module"></span><h2>garnet.utilities.structure module<a class="headerlink" href="#module-garnet.utilities.structure" title="Link to this heading">#</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="garnet.utilities.structure.StructureAnalysis">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">StructureAnalysis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/structure.py#L27-L140"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.structure.StructureAnalysis" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">StructureAnalysis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plan</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/structure.py#L27-L150"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.structure.StructureAnalysis" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -2153,27 +2190,27 @@ considered outliers and flagged for removal.</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.structure.StructureAnalysis.apply_correction">
-<span class="sig-name descname"><span class="pre">apply_correction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/structure.py#L108-L118"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.structure.StructureAnalysis.apply_correction" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">apply_correction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/structure.py#L118-L128"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.structure.StructureAnalysis.apply_correction" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.structure.StructureAnalysis.load_peaks">
-<span class="sig-name descname"><span class="pre">load_peaks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/structure.py#L100-L103"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.structure.StructureAnalysis.load_peaks" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">load_peaks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/structure.py#L110-L113"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.structure.StructureAnalysis.load_peaks" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.structure.StructureAnalysis.refimenent">
-<span class="sig-name descname"><span class="pre">refimenent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_iter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/structure.py#L120-L140"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.structure.StructureAnalysis.refimenent" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">refimenent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_iter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/structure.py#L130-L150"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.structure.StructureAnalysis.refimenent" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.structure.StructureAnalysis.save_mtz">
-<span class="sig-name descname"><span class="pre">save_mtz</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/structure.py#L87-L98"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.structure.StructureAnalysis.save_mtz" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">save_mtz</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/structure.py#L97-L108"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.structure.StructureAnalysis.save_mtz" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.structure.StructureAnalysis.save_peaks">
-<span class="sig-name descname"><span class="pre">save_peaks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/structure.py#L105-L106"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.structure.StructureAnalysis.save_peaks" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">save_peaks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/structure.py#L115-L116"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.structure.StructureAnalysis.save_peaks" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -2521,8 +2558,10 @@ considered outliers and flagged for removal.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.merge_intensities"><code class="docutils literal notranslate"><span class="pre">Peaks.merge_intensities()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.peak_info"><code class="docutils literal notranslate"><span class="pre">Peaks.peak_info()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.plot_signal_noise"><code class="docutils literal notranslate"><span class="pre">Peaks.plot_signal_noise()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.plot_volume_fraction"><code class="docutils literal notranslate"><span class="pre">Peaks.plot_volume_fraction()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.refine_UB"><code class="docutils literal notranslate"><span class="pre">Peaks.refine_UB()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.refine_ellipsoids"><code class="docutils literal notranslate"><span class="pre">Peaks.refine_ellipsoids()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.remove_low_volume_fraction"><code class="docutils literal notranslate"><span class="pre">Peaks.remove_low_volume_fraction()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.remove_non_indexed"><code class="docutils literal notranslate"><span class="pre">Peaks.remove_non_indexed()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.remove_non_integrated"><code class="docutils literal notranslate"><span class="pre">Peaks.remove_non_integrated()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.Peaks.remove_off_centered"><code class="docutils literal notranslate"><span class="pre">Peaks.remove_off_centered()</span></code></a></li>
@@ -2537,6 +2576,7 @@ considered outliers and flagged for removal.</p>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.reflections.plot_normalization"><code class="docutils literal notranslate"><span class="pre">plot_normalization()</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet-utilities-sliceview-module">garnet.utilities.sliceview module</a></li>

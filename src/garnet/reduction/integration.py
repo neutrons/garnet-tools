@@ -452,7 +452,7 @@ class Integration(PeakProjection):
             if self.params.get("SatMinD") is not None:
                 sat_min_d = self.params["SatMinD"]
 
-            peaks = PeaksModel(peaks_ws)
+            peaks = PeaksModel()
             peaks.predict_satellite_peaks(
                 peaks_ws,
                 md_ws,

@@ -387,9 +387,17 @@ class BaseDataModel:
         filenames = self.get_file_name_list(IPTS, runs)
         return ",".join(filenames)
 
-    def get_hkl_limits(self, ws):
+    def get_hkl_limits(self, ws, d_min=None):
         """
         The minimum and maximum Q-values.
+
+        Parameters
+        ----------
+        ws : str
+            Name of workspace with an oriented lattice.
+        d_min : float, optional
+            Minimum d-spacing to bound hkl by instead of the instrument
+            Q-coverage. The default is None.
 
         Returns
         -------
@@ -410,7 +418,9 @@ class BaseDataModel:
 
         abcstar = np.array([ol.astar(), ol.bstar(), ol.cstar()])
 
-        hkl_max = self.Q_max / (2 * np.pi) / abcstar
+        Q_max = 2 * np.pi / d_min if d_min is not None else self.Q_max
+
+        hkl_max = Q_max / (2 * np.pi) / abcstar
 
         return (-hkl_max).tolist(), hkl_max.tolist()
 
@@ -936,7 +946,7 @@ class BaseDataModel:
 
             return y, e, x0, x1, x2
 
-    def bin_Q_sample_to_hkl(self, md, peaks, hkl_histo, bins=201):
+    def bin_Q_sample_to_hkl(self, md, peaks, hkl_histo, bins=201, d_min=None):
         """
         Bin Q-sample data into a rough HKL histogram for a diagnostic check
         of whether the data is well aligned with the UB from a peaks
@@ -952,11 +962,14 @@ class BaseDataModel:
             Name of output HKL histogram workspace.
         bins : int, optional
             Number of bins per dimension. The default is 201.
+        d_min : float, optional
+            Minimum d-spacing to bound hkl by instead of the instrument
+            Q-coverage. The default is None.
 
         """
 
         if mtd.doesExist(md) and mtd.doesExist(peaks):
-            hkl_min, hkl_max = self.get_hkl_limits(peaks)
+            hkl_min, hkl_max = self.get_hkl_limits(peaks, d_min)
 
             extents = list(itertools.chain(*zip(hkl_min, hkl_max)))
 

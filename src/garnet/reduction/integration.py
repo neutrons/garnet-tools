@@ -300,12 +300,11 @@ class Integration(PeakProjection):
                 update=True,
             )
 
-            hist_ws = "hist"
-            data.bin_Q_sample_to_hkl("md", "peaks", hist_ws)
+            data.bin_Q_sample_to_hkl("md", "peaks", "hist", d_min=d_min)
 
             hist_file = self.get_diagnostic_file("run#{}_hist".format(run))
-            data.save_histograms(hist_file, hist_ws)
-            data.delete_workspace(hist_ws)
+            data.save_histograms(hist_file, "hist")
+            data.delete_workspace("hist")
 
             data.delete_workspace("md")
 

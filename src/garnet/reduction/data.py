@@ -49,6 +49,7 @@ from mantid.simpleapi import (
     DivideMD,
     MDNorm,
     ConvertWANDSCDtoQ,
+    ConvertQtoHKLMDHisto,
     ConvertUnits,
     CropWorkspaceForMDNorm,
     CropToComponent,
@@ -934,6 +935,38 @@ class BaseDataModel:
             y, e, x0, x1, x2 = self.extract_bin_info(md + "_bin")
 
             return y, e, x0, x1, x2
+
+    def bin_Q_sample_to_hkl(self, md, peaks, hkl_histo, bins=201):
+        """
+        Bin Q-sample data into a rough HKL histogram for a diagnostic check
+        of whether the data is well aligned with the UB from a peaks
+        workspace.
+
+        Parameters
+        ----------
+        md : str
+            Name of Q-sample MD workspace.
+        peaks : str
+            Name of peaks workspace providing the UB matrix.
+        hkl_histo : str
+            Name of output HKL histogram workspace.
+        bins : int, optional
+            Number of bins per dimension. The default is 201.
+
+        """
+
+        if mtd.doesExist(md) and mtd.doesExist(peaks):
+            hkl_min, hkl_max = self.get_hkl_limits(peaks)
+
+            extents = list(itertools.chain(*zip(hkl_min, hkl_max)))
+
+            ConvertQtoHKLMDHisto(
+                InputWorkspace=md,
+                PeaksWorkspace=peaks,
+                Extents=extents,
+                Bins=3 * [bins],
+                OutputWorkspace=hkl_histo,
+            )
 
     def slice_extents(self, UB, hkl):
         UB = np.asarray(UB, dtype=float)

@@ -234,7 +234,9 @@ class Integration(PeakProjection):
                 lamda_max,
             )
 
-            self.predict_add_satellite_peaks(lamda_min, lamda_max)
+            self.predict_add_satellite_peaks(
+                peaks, "peaks", "md", lamda_min, lamda_max
+            )
 
             peak = PeakModel("peaks")
 
@@ -276,7 +278,9 @@ class Integration(PeakProjection):
                 lamda_max,
             )
 
-            self.predict_add_satellite_peaks(lamda_min, lamda_max)
+            self.predict_add_satellite_peaks(
+                peaks, "peaks", "md", lamda_min, lamda_max
+            )
 
             peaks.integrate_peaks(
                 "md",
@@ -338,7 +342,9 @@ class Integration(PeakProjection):
                 lamda_max,
             )
 
-            self.predict_add_satellite_peaks(lamda_min, lamda_max)
+            self.predict_add_satellite_peaks(
+                peaks, "peaks", "md", lamda_min, lamda_max
+            )
 
             res.apply()
 
@@ -438,15 +444,17 @@ class Integration(PeakProjection):
 
         return result_file
 
-    def predict_add_satellite_peaks(self, lamda_min, lamda_max):
+    def predict_add_satellite_peaks(
+        self, peaks, peaks_ws, md_ws, lamda_min, lamda_max
+    ):
         if self.params["MaxOrder"] > 0:
             sat_min_d = self.params["MinD"]
             if self.params.get("SatMinD") is not None:
                 sat_min_d = self.params["SatMinD"]
 
-            self.peaks.predict_satellite_peaks(
-                "peaks",
-                "md",
+            peaks.predict_satellite_peaks(
+                peaks_ws,
+                md_ws,
                 self.params["Centering"],
                 lamda_min,
                 lamda_max,

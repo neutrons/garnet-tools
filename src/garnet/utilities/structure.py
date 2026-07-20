@@ -34,6 +34,7 @@ class StructureAnalysis:
             "VVector": [1, 0, 0],
             "ThicknessWidthHeight": [0, 0, 0],
             "Refine": True,
+            "ControlSoftware": "EPICS",
         }
 
         defaults.update(config)
@@ -73,6 +74,11 @@ class StructureAnalysis:
         self.plan = plan
         self.vanadium_file = defaults.get("VanadiumFile")
         self.flux_file = defaults.get("FluxFile")
+        self.control_software = defaults.get("ControlSoftware")
+
+        self.mu = 0.0
+        self.transmission = None
+        self.correction_type = "none"
 
         self.load_peaks()
 
@@ -113,11 +119,21 @@ class StructureAnalysis:
         self.cell = self.peaks.get_cell()
 
     def save_peaks(self):
-        self.peaks.save_peaks()
+        crystal_size = None
+        if (np.array(self.parameters) > 0).all():
+            crystal_size = self.parameters
+
+        self.peaks.save_peaks(
+            mu=self.mu,
+            transmission=self.transmission,
+            correction_type=self.correction_type,
+            control_software=self.control_software,
+            crystal_size=crystal_size,
+        )
 
     def apply_correction(self):
         if (np.array(self.parameters) > 0).all():
-            AbsorptionCorrection(
+            abs_correc = AbsorptionCorrection(
                 "peaks",
                 self.chemical_formula,
                 self.z,
@@ -126,6 +142,9 @@ class StructureAnalysis:
                 params=self.parameters,
                 filename=self.filename,
             )
+            self.mu = abs_correc.mu
+            self.transmission = abs_correc.T
+            self.correction_type = "ellipsoid"
 
     def refimenent(self, n_iter=10):
         nuclear = NuclearStructureRefinement(
@@ -148,6 +167,12 @@ class StructureAnalysis:
         self.vvector = nuclear.vvector
         self.parameters = nuclear.parameters
         self.chemical_formula, self.z = nuclear.chemical_formula_z_parameter()
+
+        mat = nuclear.material
+        self.mu = mat.numberDensityEffective * (
+            mat.totalScatterXSection() + mat.absorbXSection(1.8)
+        )
+        self.correction_type = "ellipsoid (refined)"
 
 
 if __name__ == "__main__":

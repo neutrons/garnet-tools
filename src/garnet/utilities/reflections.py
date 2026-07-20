@@ -112,10 +112,7 @@ point_group_dict = {
 
 def plot_normalization(data, filename):
     """
-    Debug plot of the per-spectrum wavelength-dependent flux spectra and
-    solid-angle detector efficiencies already generated on a ``DataModel``
-    (``load_generate_normalization``/``preprocess_detectors``), used for
-    the quick-fit normalization (``DataModel.approximate_norm``).
+    Debug plot of the per-spectrum wavelength-dependent flux spectra.
     """
     fig, ax = plt.subplots(1, 1, layout="constrained")
     for y in data.spect_y:
@@ -139,6 +136,72 @@ def plot_normalization(data, filename):
     ax.minorticks_on()
     fig.savefig(filename + "_efficiency.pdf")
     plt.close(fig)
+
+
+def error_volume(
+    a, b, c, alpha, beta, gamma, e_a, e_b, e_c, e_alpha, e_beta, e_gamma
+):
+    """
+    Propagate cell-edge and cell-angle esd's to a cell-volume esd by
+    central finite differences, since OrientedLattice has no direct
+    volume-esd accessor.
+    """
+
+    def volume(a, b, c, alpha, beta, gamma):
+        ca = np.cos(np.radians(alpha))
+        cb = np.cos(np.radians(beta))
+        cg = np.cos(np.radians(gamma))
+        return (
+            a
+            * b
+            * c
+            * np.sqrt(1.0 - ca**2 - cb**2 - cg**2 + 2.0 * ca * cb * cg)
+        )
+
+    v0 = volume(a, b, c, alpha, beta, gamma)
+
+    d_alpha = volume(a, b, c, alpha + 0.5 * e_alpha, beta, gamma) - volume(
+        a, b, c, alpha - 0.5 * e_alpha, beta, gamma
+    )
+    d_beta = volume(a, b, c, alpha, beta + 0.5 * e_beta, gamma) - volume(
+        a, b, c, alpha, beta - 0.5 * e_beta, gamma
+    )
+    d_gamma = volume(a, b, c, alpha, beta, gamma + 0.5 * e_gamma) - volume(
+        a, b, c, alpha, beta, gamma - 0.5 * e_gamma
+    )
+
+    return v0 * np.sqrt(
+        (e_a / a) ** 2
+        + (e_b / b) ** 2
+        + (e_c / c) ** 2
+        + (d_alpha / v0) ** 2
+        + (d_beta / v0) ** 2
+        + (d_gamma / v0) ** 2
+    )
+
+
+def format_value_esd(value, esd, max_precision=4):
+    """
+    Format ``value`` with its esd in the compact CIF convention,
+    e.g. ``9.5432(7)``. Falls back to a plain fixed-precision number
+    when no usable esd is available.
+    """
+    if esd is None or not np.isfinite(esd) or esd <= 0:
+        return "{:.{p}f}".format(value, p=max_precision)
+
+    precision = max_precision
+    while precision > 0 and round(esd * 10**precision) >= 100:
+        precision -= 1
+    while (
+        precision < max_precision and round(esd * 10 ** (precision + 1)) < 100
+    ):
+        precision += 1
+
+    digits = int(round(esd * 10**precision))
+    if digits == 0:
+        return "{:.{p}f}".format(value, p=precision)
+
+    return "{:.{p}f}({:d})".format(value, digits, p=precision)
 
 
 class AbsorptionCorrection:
@@ -404,6 +467,8 @@ class AbsorptionCorrection:
             mat.totalScatterXSection() + mat.absorbXSection(1.8)
         )
 
+        self.mu = mu  # linear absorption coefficient at 1.8 A, in cm^-1
+
         lines = [
             "{}\n".format(self.chemical_formula),
             "Z parameter: {:.4f}\n".format(self.z_parameter),
@@ -434,16 +499,7 @@ class AbsorptionCorrection:
 
     def apply_correction(self):
         """
-        Correct every peak's intensity for absorption in one
-        vectorized pass via ``AbsorptionEllipsoid``, instead of a
-        per-orientation Mantid ``AddAbsorptionWeightedPathLengths``
-        ray-trace loop. Each peak already carries its own incident-
-        /scattered-beam directions in the sample frame (goniometer-
-        independent), so no per-run ``LoadSampleShape``/
-        ``SetGoniometer``/``FilterPeaks``/``CombinePeaksWorkspaces`` is
-        needed -- the ellipsoid orientation (``self.alpha``,
-        ``self.beta``, ``self.gamma``) is fixed relative to the sample
-        for every peak regardless of goniometer setting.
+        Correct every peak's intensity for absorption.
         """
         SetSample(
             InputWorkspace=self.peaks,
@@ -478,6 +534,8 @@ class AbsorptionCorrection:
         T, Tbar = self.absorption_ellipsoid.correction(
             coeffs, mu, np.array(ri_hat), np.array(sf_hat)
         )
+
+        self.T = T  # per-peak absorption transmission factor
 
         for i, peak in enumerate(mtd[self.peaks]):
             corr = 1 / T[i]
@@ -1191,7 +1249,17 @@ class Peaks:
 
             ol.setModUB(self.modUB)
 
-    def save_peaks(self, name=None, fit_dict=None):
+    def save_peaks(
+        self,
+        name=None,
+        fit_dict=None,
+        mu=0.0,
+        transmission=None,
+        instrument=None,
+        correction_type=None,
+        control_software=None,
+        crystal_size=None,
+    ):
         if name is not None:
             peaks = name
             app = "_{}".format(name).replace(" ", "_")
@@ -1248,6 +1316,17 @@ class Peaks:
         self.refine_ellipsoids(peaks)
 
         SaveIsawUB(InputWorkspace=peaks, Filename=filename + ".mat")
+
+        self.write_cif_report(
+            peaks,
+            mu=mu,
+            transmission=transmission,
+            instrument=instrument,
+            correction_type=correction_type,
+            control_software=control_software,
+            crystal_size=crystal_size,
+            filename=filename + ".cif",
+        )
 
         self.resort_hkl(peaks, filename + ".hkl")
 
@@ -1442,6 +1521,9 @@ class Peaks:
 
         ws = mtd["StatisticsTable"]
 
+        self.point_group = point_group
+        self.statistics = ws.row(0)
+
         column_names = ws.getColumnNames()
         col_widths = [max(len(str(name)), 8) for name in column_names]
 
@@ -1512,6 +1594,249 @@ class Peaks:
         with open(filename.replace("_symm.txt", "_stats.txt"), "w") as f:
             f.write("{}\n".format(point_group))
             f.write(table)
+
+    def write_cif_report(
+        self,
+        peaks=None,
+        mu=0.0,
+        transmission=None,
+        correction_type=None,
+        instrument=None,
+        facility=None,
+        control_software=None,
+        crystal_size=None,
+        filename=None,
+    ):
+        """
+        Write a minimal CIF-format summary for post-reduction checking:
+        unit-cell constants with esd's, the measured wavelength/theta/
+        d-spacing range, crystal size, a transmission range, and the
+        merging statistics (Rint) from the last
+        ``calculate_statistics`` call.
+
+        ``transmission``, when given, is the actual per-peak
+        absorption factor already computed for the correction that
+        was applied (e.g. ``AbsorptionCorrection.T``) and is reported
+        as-is. Leave at None to instead approximate it from ``mu``
+        (the linear absorption coefficient in cm^-1, evaluated at a
+        single reference wavelength) and each peak's
+        absorption-weighted path length (Tbar); ``mu=0`` (default)
+        reports T = 1, i.e. no absorption correction applied.
+
+        ``crystal_size`` is the (thickness, width, height) full-axis
+        lengths of the sample ellipsoid in mm, e.g. ``self.params``
+        from ``AbsorptionCorrection`` or ``self.parameters`` from
+        ``NuclearStructureRefinement``; leave at None to report those
+        fields as unknown.
+        """
+        if peaks is None:
+            peaks = self.peaks
+
+        if not hasattr(self, "statistics"):
+            raise RuntimeError(
+                "Run calculate_statistics before write_cif_report."
+            )
+
+        if filename is None:
+            filename = os.path.splitext(self.filename)[0] + ".cif"
+
+        ol = mtd[peaks].sample().getOrientedLattice()
+
+        a, b, c = ol.a(), ol.b(), ol.c()
+        alpha, beta, gamma = ol.alpha(), ol.beta(), ol.gamma()
+        volume = ol.volume()
+
+        e_a, e_b, e_c = ol.errora(), ol.errorb(), ol.errorc()
+        e_alpha, e_beta, e_gamma = (
+            ol.erroralpha(),
+            ol.errorbeta(),
+            ol.errorgamma(),
+        )
+
+        e_volume = error_volume(
+            a,
+            b,
+            c,
+            alpha,
+            beta,
+            gamma,
+            e_a,
+            e_b,
+            e_c,
+            e_alpha,
+            e_beta,
+            e_gamma,
+        )
+
+        theta = np.array([peak.getScattering() for peak in mtd[peaks]])
+        theta = np.degrees(theta) / 2.0
+
+        wavelength = np.array(mtd[peaks].column("Wavelength"))
+        d_spacing = np.array(mtd[peaks].column("DSpacing"))
+
+        transmission_exact = transmission is not None
+
+        if transmission is None:
+            tbar = np.array(
+                [peak.getAbsorptionWeightedPathLength() for peak in mtd[peaks]]
+            )
+            transmission = np.exp(-mu * tbar)
+        else:
+            transmission = np.asarray(transmission, dtype=float)
+
+        if instrument is None:
+            instrument = mtd[peaks].getInstrument().getName()
+
+        if correction_type is None:
+            correction_type = "none" if mu == 0 else "ellipsoid"
+
+        if crystal_size is not None:
+            size = np.sort(np.asarray(crystal_size, dtype=float))[::-1]
+            size_max, size_mid, size_min = size
+
+            a_cm, b_cm, c_cm = np.asarray(crystal_size, dtype=float) / 10.0
+            volume_cm3 = (np.pi / 6.0) * a_cm * b_cm * c_cm
+            size_rad = np.cbrt(0.75 * volume_cm3 / np.pi) * 10.0  # cm -> mm
+        else:
+            size_max = size_mid = size_min = size_rad = None
+
+        def fmt_or_unknown(value, precision=4):
+            if value is None:
+                return "?"
+            return "{:.{p}f}".format(value, p=precision)
+
+        if mu > 0 or transmission_exact:
+            absorpt_process_details = (
+                "Absorption correction computed by Monte Carlo\n"
+                "integration over an ellipsoidal sample shape."
+            )
+            if transmission_exact:
+                absorpt_special_details = (
+                    "Transmission for each reflection is the\n"
+                    "ellipsoidal absorption factor computed for the\n"
+                    "applied correction, evaluated at that\n"
+                    "reflection's own wavelength. The value of\n"
+                    "{:.4f} mm^-1 shown in\n"
+                    "_exptl_absorpt_coefficient_mu is mu evaluated at\n"
+                    "a reference wavelength of 1.8 Angstrom, for\n"
+                    "reference only."
+                ).format(mu / 10.0)
+            else:
+                absorpt_special_details = (
+                    "The linear absorption coefficient mu is\n"
+                    "wavelength dependent; the value of {:.4f} mm^-1\n"
+                    "shown in _exptl_absorpt_coefficient_mu is\n"
+                    "evaluated at a reference wavelength of 1.8\n"
+                    "Angstrom. The transmission for each reflection\n"
+                    "is approximated from mu and that reflection's\n"
+                    "absorption-weighted path length (Tbar)."
+                ).format(mu / 10.0)
+        else:
+            absorpt_process_details = "No absorption correction applied."
+            absorpt_special_details = "No absorption correction applied."
+
+        stats = self.statistics
+
+        lines = [
+            "data_{}".format(os.path.splitext(os.path.basename(filename))[0]),
+            "",
+            "_cell_length_a          {}".format(format_value_esd(a, e_a)),
+            "_cell_length_b          {}".format(format_value_esd(b, e_b)),
+            "_cell_length_c          {}".format(format_value_esd(c, e_c)),
+            "_cell_angle_alpha       {}".format(
+                format_value_esd(alpha, e_alpha)
+            ),
+            "_cell_angle_beta        {}".format(
+                format_value_esd(beta, e_beta)
+            ),
+            "_cell_angle_gamma       {}".format(
+                format_value_esd(gamma, e_gamma)
+            ),
+            "_cell_volume            {}".format(
+                format_value_esd(volume, e_volume, max_precision=2)
+            ),
+            "",
+            "_cell_measurement_reflns_used     {}".format(
+                mtd[peaks].getNumberPeaks()
+            ),
+            "_cell_measurement_theta_min       {:.3f}".format(theta.min()),
+            "_cell_measurement_theta_max       {:.3f}".format(theta.max()),
+            "",
+            "_diffrn_ambient_temperature          ?",
+            '_diffrn_radiation_wavelength         "{:.2f}-{:.2f}"'.format(
+                wavelength.min(), wavelength.max()
+            ),
+            '_diffrn_radiation_wavelength_details  "time-of-flight Laue"',
+            "_diffrn_radiation_type               neutron",
+            '_diffrn_source                       "{}"'.format(
+                facility if facility is not None else "?"
+            ),
+            "_diffrn_measurement_device_type      {}".format(instrument),
+            '_diffrn_measurement_method           "time-of-flight Laue"',
+            "_diffrn_detector_area_resol_mean     ?",
+            "",
+            "_diffrn_reflns_theta_min             {:.3f}".format(theta.min()),
+            "_diffrn_reflns_theta_max             {:.3f}".format(theta.max()),
+            "_diffrn_reflns_min_d_Angs            {:.3f}".format(
+                d_spacing.min()
+            ),
+            "",
+            "_exptl_crystal_size_max              {}".format(
+                fmt_or_unknown(size_max)
+            ),
+            "_exptl_crystal_size_mid              {}".format(
+                fmt_or_unknown(size_mid)
+            ),
+            "_exptl_crystal_size_min              {}".format(
+                fmt_or_unknown(size_min)
+            ),
+            "_exptl_crystal_size_rad              {}".format(
+                fmt_or_unknown(size_rad)
+            ),
+            "",
+            "_exptl_absorpt_correction_type       {}".format(correction_type),
+            "_exptl_absorpt_coefficient_mu        {:.4f}".format(mu / 10.0),
+            "_exptl_absorpt_correction_T_min      {:.4f}".format(
+                transmission.min()
+            ),
+            "_exptl_absorpt_correction_T_max      {:.4f}".format(
+                transmission.max()
+            ),
+            "_exptl_absorpt_process_details",
+            ";",
+            absorpt_process_details,
+            ";",
+            "_exptl_absorpt_special_details",
+            ";",
+            absorpt_special_details,
+            ";",
+            "",
+            "_diffrn_reflns_number                {}".format(
+                mtd[peaks].getNumberPeaks()
+            ),
+            "_reflns_number_total                 {}".format(
+                stats["No. of Unique Reflections"]
+            ),
+            "_diffrn_reflns_av_R_equivalents      {:.4f}".format(
+                stats["Rmerge"] / 100.0
+            ),
+            "_diffrn_reflns_av_Rpim               {:.4f}".format(
+                stats["Rpim"] / 100.0
+            ),
+            "_diffrn_reflns_point_group           {}".format(self.point_group),
+            "",
+            '_computing_data_collection           "{}"'.format(
+                control_software if control_software is not None else "?"
+            ),
+            '_computing_cell_refinement           "garnet-tools (Mantid)"',
+            '_computing_data_reduction            "garnet-tools (Mantid)"',
+            "",
+        ]
+
+        with open(filename, "w") as f:
+            f.write("\n".join(lines))
+
+        return filename
 
     def resort_hkl(self, peaks, filename):
         ol = mtd[peaks].sample().getOrientedLattice()
@@ -1640,8 +1965,11 @@ def main():
     peaks = Peaks("peaks", args.filename, args.scale, args.pointgroup)
     peaks.load_peaks()
 
+    mu = 0.0
+    transmission = None
+    crystal_size = None
     if (np.array(args.parameters) > 0).all():
-        AbsorptionCorrection(
+        abs_correc = AbsorptionCorrection(
             "peaks",
             args.formula,
             args.zparameter,
@@ -1650,8 +1978,13 @@ def main():
             params=args.parameters,
             filename=args.filename,
         )
+        mu = abs_correc.mu
+        transmission = abs_correc.T
+        crystal_size = args.parameters
 
-    peaks.save_peaks()
+    peaks.save_peaks(
+        mu=mu, transmission=transmission, crystal_size=crystal_size
+    )
 
 
 if __name__ == "__main__":

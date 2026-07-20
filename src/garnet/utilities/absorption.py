@@ -91,11 +91,7 @@ class AbsorptionEllipsoid:
 
     def correction(self, coeffs, mu, ri_hat, sf_hat):
         """
-        Absorption factor and Tbar for every peak, given the ellipsoid
-        shape ``coeffs`` (alpha, beta, gamma, volume, ratio_b, ratio_c)
-        and per-peak linear absorption coefficient ``mu`` and
-        incident/scattered beam direction unit vectors ``ri_hat``,
-        ``sf_hat`` (sample frame).
+        Absorption factor and Tbar for every peak, given the ellipsoid..
 
         Returns
         -------

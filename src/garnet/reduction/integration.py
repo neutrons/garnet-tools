@@ -310,8 +310,6 @@ class Integration(PeakProjection):
             data.save_histograms(hist_file, "hist")
             data.delete_workspace("hist")
 
-            data.delete_workspace("md")
-
             res.fit()
 
             res_file = self.get_plot_file("run#{}_res".format(run))
@@ -347,6 +345,8 @@ class Integration(PeakProjection):
             )
 
             res.apply()
+
+            data.delete_workspace("md")
 
             ub = UBModel("peaks")
             self.P = ub.centering_matrix(centering)

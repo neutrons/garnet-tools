@@ -277,7 +277,7 @@ class PeakPlot(BasePlot):
         ax.minorticks_on()
         ax.set_aspect(1)
         ax.xaxis.set_ticklabels([])
-        ax.set_ylabel(r"$\Delta{Q}_1$ [$\AA^{-1}$]")
+        ax.set_ylabel(r"$Q_1$ [$\AA^{-1}$]")
 
         el = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
         sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
@@ -309,8 +309,8 @@ class PeakPlot(BasePlot):
 
         ax.minorticks_on()
         ax.set_aspect(1)
-        ax.set_xlabel(r"$|Q|$ [$\AA^{-1}$]")
-        ax.set_ylabel(r"$\Delta{Q}_1$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$Q_0$ [$\AA^{-1}$]")
+        ax.set_ylabel(r"$Q_1$ [$\AA^{-1}$]")
 
         el = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
         sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
@@ -342,7 +342,7 @@ class PeakPlot(BasePlot):
         ax.minorticks_on()
         ax.set_aspect(1)
         ax.xaxis.set_ticklabels([])
-        ax.set_ylabel(r"$\Delta{Q}_2$ [$\AA^{-1}$]")
+        ax.set_ylabel(r"$Q_2$ [$\AA^{-1}$]")
 
         el = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
         sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
@@ -374,8 +374,8 @@ class PeakPlot(BasePlot):
 
         ax.minorticks_on()
         ax.set_aspect(1)
-        ax.set_xlabel(r"$|Q|$ [$\AA^{-1}$]")
-        ax.set_ylabel(r"$\Delta{Q}_2$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$Q_0$ [$\AA^{-1}$]")
+        ax.set_ylabel(r"$Q_2$ [$\AA^{-1}$]")
 
         el = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
         sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
@@ -440,7 +440,7 @@ class PeakPlot(BasePlot):
 
         ax.minorticks_on()
         ax.set_aspect(1)
-        ax.set_xlabel(r"$\Delta{Q}_1$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$Q_1$ [$\AA^{-1}$]")
         ax.yaxis.set_ticklabels([])
         # ax.set_ylabel(r'$Q_z$ [$\AA^{-1}$]')
 
@@ -473,7 +473,7 @@ class PeakPlot(BasePlot):
         ax = self.fig.add_subplot(gs[0, 0])
 
         ax.minorticks_on()
-        ax.set_xlabel(r"$\Delta|Q|$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$Q_0$ [$\AA^{-1}$]")
 
         x = np.arange(10) - 5
         y = -2 * x**2 + 50
@@ -502,7 +502,7 @@ class PeakPlot(BasePlot):
         ax = self.fig.add_subplot(gs[0, :])
 
         ax.minorticks_on()
-        ax.set_xlabel(r"$|Q|$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$Q_0$ [$\AA^{-1}$]")
         # ax.yaxis.get_major_formatter().set_powerlimits((0, 0))
         # ax.yaxis.get_major_formatter().set_useMathText(True)
 
@@ -535,7 +535,7 @@ class PeakPlot(BasePlot):
         ax = self.fig.add_subplot(gs[1, :])
 
         ax.minorticks_on()
-        ax.set_xlabel(r"$\Delta{Q}_1$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$Q_1$ [$\AA^{-1}$]")
         # ax.yaxis.get_major_formatter().set_powerlimits((0, 0))
         # ax.yaxis.get_major_formatter().set_useMathText(True)
 
@@ -568,7 +568,7 @@ class PeakPlot(BasePlot):
         ax = self.fig.add_subplot(gs[2, :])
 
         ax.minorticks_on()
-        ax.set_xlabel(r"$\Delta{Q}_2$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$Q_2$ [$\AA^{-1}$]")
         # ax.yaxis.get_major_formatter().set_powerlimits((0, 0))
         # ax.yaxis.get_major_formatter().set_useMathText(True)
 
@@ -627,7 +627,7 @@ class PeakPlot(BasePlot):
         ax.minorticks_on()
         ax.set_aspect(1)
         ax.xaxis.set_ticklabels([])
-        ax.set_ylabel(r"$\Delta{Q}_1$ [$\AA^{-1}$]")
+        ax.set_ylabel(r"$Q_1$ [$\AA^{-1}$]")
 
         el = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
         sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
@@ -654,8 +654,8 @@ class PeakPlot(BasePlot):
 
         ax.minorticks_on()
         ax.set_aspect(1)
-        ax.set_xlabel(r"$|Q|$ [$\AA^{-1}$]")
-        ax.set_ylabel(r"$\Delta{Q}_1$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$Q_0$ [$\AA^{-1}$]")
+        ax.set_ylabel(r"$Q_1$ [$\AA^{-1}$]")
 
         el = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
         sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
@@ -682,7 +682,7 @@ class PeakPlot(BasePlot):
         ax.minorticks_on()
         ax.set_aspect(1)
         ax.xaxis.set_ticklabels([])
-        ax.set_ylabel(r"$\Delta{Q}_2$ [$\AA^{-1}$]")
+        ax.set_ylabel(r"$Q_2$ [$\AA^{-1}$]")
 
         el = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
         sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
@@ -709,8 +709,8 @@ class PeakPlot(BasePlot):
 
         ax.minorticks_on()
         ax.set_aspect(1)
-        ax.set_xlabel(r"$|Q|$ [$\AA^{-1}$]")
-        ax.set_ylabel(r"$\Delta{Q}_2$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$Q_0$ [$\AA^{-1}$]")
+        ax.set_ylabel(r"$Q_2$ [$\AA^{-1}$]")
 
         el = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
         sp = self._draw_ellipse(ax, 2.5, 3, 1, 1, 0, "r")
@@ -765,7 +765,7 @@ class PeakPlot(BasePlot):
 
         ax.minorticks_on()
         ax.set_aspect(1)
-        ax.set_xlabel(r"$\Delta{Q}_1$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$Q_1$ [$\AA^{-1}$]")
         ax.yaxis.set_ticklabels([])
         # ax.set_ylabel(r'$Q_z$ [$\AA^{-1}$]')
 
@@ -813,14 +813,14 @@ class PeakPlot(BasePlot):
         ax.minorticks_on()
         ax.set_aspect(1)
         # ax.xaxis.set_ticklabels([])
-        ax.set_ylabel(r"$\Delta{Q}_1$ [$\AA^{-1}$]")
+        ax.set_ylabel(r"$Q_1$ [$\AA^{-1}$]")
 
         [line] = ax.plot([], [], color="r")
         self.norm_pk.append(line)
         [line] = ax.plot([], [], color="r")
         self.norm_bkg.append(line)
 
-        ax.set_xlabel(r"$|Q|$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$Q_0$ [$\AA^{-1}$]")
 
         ax = self.fig.add_subplot(gs[0, 1])
 
@@ -839,14 +839,14 @@ class PeakPlot(BasePlot):
         ax.minorticks_on()
         ax.set_aspect(1)
         # ax.xaxis.set_ticklabels([])
-        ax.set_ylabel(r"$\Delta{Q}_2$ [$\AA^{-1}$]")
+        ax.set_ylabel(r"$Q_2$ [$\AA^{-1}$]")
 
         [line] = ax.plot([], [], color="r")
         self.norm_pk.append(line)
         [line] = ax.plot([], [], color="r")
         self.norm_bkg.append(line)
 
-        ax.set_xlabel(r"$|Q|$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$Q_0$ [$\AA^{-1}$]")
 
         ax = self.fig.add_subplot(gs[0, 2])
 
@@ -872,7 +872,7 @@ class PeakPlot(BasePlot):
         [line] = ax.plot([], [], color="r")
         self.norm_bkg.append(line)
 
-        ax.set_xlabel(r"$\Delta{Q}_1$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$Q_1$ [$\AA^{-1}$]")
 
         norm = Normalize(0, 29)
         im = ScalarMappable(norm=norm)

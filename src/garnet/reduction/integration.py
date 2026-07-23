@@ -258,8 +258,9 @@ class Integration(PeakProjection):
                 scan_plot.save_plot(scan_file)
 
                 opt = Optimization("peaks", tol=0.5 / np.cbrt(3))
-                opt.optimize_lattice("Fixed")
-                opt.optimize_lattice_only(cell)
+                for _ in range(3):
+                    opt.optimize_lattice("Fixed")
+                    opt.optimize_lattice_only(cell)
 
                 ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
                 ub_file = os.path.splitext(ub_file)[0] + ".mat"
@@ -320,8 +321,9 @@ class Integration(PeakProjection):
 
             if self.params["OptimizeUB"]:
                 opt = Optimization("peaks", tol=0.5 / np.cbrt(3))
-                opt.optimize_lattice("Fixed")
-                opt.optimize_lattice_only(cell)
+                for _ in range(3):
+                    opt.optimize_lattice("Fixed")
+                    opt.optimize_lattice_only(cell)
 
                 ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
                 ub_file = os.path.splitext(ub_file)[0] + ".mat"
@@ -594,13 +596,13 @@ class Integration(PeakProjection):
                 d,
                 n,
                 dQ,
-                Q,
                 shape,
                 projections,
                 c,
                 neighbors,
                 b,
                 m,
+                sigma_c,
             ) = data_info
 
             (
@@ -618,14 +620,14 @@ class Integration(PeakProjection):
 
             ellipsoid = PeakEllipsoid()
             ellipsoid.update_constraints(Q0, Q1, Q2, dQ)
-            ellipsoid.update_estimate(shape)
+            ellipsoid.update_estimate(shape, sigma_c)
 
-            args = (Q0, Q1, Q2, d, n, dQ, Q, weights)
+            args = (Q0, Q1, Q2, d, n, dQ, c, weights)
             fit_params = ellipsoid.fit(*args, b=b, m=m)
 
             intens_params = None
             if fit_params is not None:
-                intens_params = ellipsoid.extract_result(*fit_params, Q)
+                intens_params = ellipsoid.extract_result(*fit_params, c)
 
                 if intens_params is None:
                     result[key] = None
@@ -739,6 +741,8 @@ class Integration(PeakProjection):
 
         UB = peak.get_UB()
 
+        ub = UBModel(peaks_ws)
+
         peak_dict = {}
 
         indices = range(n_peak)
@@ -765,9 +769,9 @@ class Integration(PeakProjection):
 
             d_spacing = peak.get_d_spacing(i)
 
-            Q = 2 * np.pi / d_spacing
-
             hkl = peak.get_hkl(i)
+
+            sigma_c = ub.get_center_uncertainty(hkl)
 
             lamda = peak.get_wavelength(i)
 
@@ -838,13 +842,13 @@ class Integration(PeakProjection):
                 d,
                 n,
                 dQ,
-                Q,
                 params,
                 projections,
                 center,
                 neighbors,
                 b,
                 m,
+                sigma_c,
             )
 
             peak_file = self.get_plot_file(peak_name)

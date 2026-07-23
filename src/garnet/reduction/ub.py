@@ -56,6 +56,20 @@ centering_matrices = {
 }
 
 
+def _B_matrix(a, b, c, alpha, beta, gamma):
+    alpha, beta, gamma = np.deg2rad([alpha, beta, gamma])
+
+    G = np.array(
+        [
+            [a**2, a * b * np.cos(gamma), a * c * np.cos(beta)],
+            [b * a * np.cos(gamma), b**2, b * c * np.cos(alpha)],
+            [c * a * np.cos(beta), c * b * np.cos(alpha), c**2],
+        ]
+    )
+
+    return scipy.linalg.cholesky(np.linalg.inv(G), lower=False)
+
+
 class UBModel:
     def __init__(self, peaks):
         """
@@ -93,6 +107,94 @@ class UBModel:
                 self.alpha, self.beta, self.gamma = alpha, beta, gamma
 
                 return a, b, c, alpha, beta, gamma
+
+    def get_lattice_parameter_uncertanties(self):
+        """
+        Get the errors in the lattice constants from the oriented lattice.
+
+        Returns
+        -------
+        errors : list
+            List of errors in lattice constants.
+        """
+
+        if mtd.doesExist(self.peaks.getName()):
+            if hasattr(self.peaks, "sample"):
+                ol = self.peaks.sample().getOrientedLattice()
+
+                params = (
+                    ol.errora(),
+                    ol.errorb(),
+                    ol.errorc(),
+                    ol.erroralpha(),
+                    ol.errorbeta(),
+                    ol.errorgamma(),
+                )
+
+                params = np.array(params)
+                params[~np.isfinite(params)] = 0.0
+
+                return params.round(8).tolist()
+
+    def get_center_uncertainty(self, hkl, min_frac=0.01, max_frac=0.05):
+        """
+        Propagate lattice-parameter uncertainties to a peak's Q-space center uncertainty.
+
+        Each cell-parameter uncertainty
+        (`get_lattice_parameter_uncertanties`) is clipped to
+        [`min_frac`, `max_frac`] of its value: floored so an
+        over-confident (e.g. exact-looking) lattice fit doesn't
+        collapse the center prior to zero, and capped so a
+        poorly-determined fit can't blow it up. The clipped
+        uncertainties are then propagated through the B-matrix to this
+        peak's hkl via central finite differences, holding the
+        orientation U fixed.
+
+        Parameters
+        ----------
+        hkl : sequence of float
+            Miller indices of the peak.
+        min_frac : float, optional
+            Floor on each lattice-parameter uncertainty as a fraction of
+            its value. Default 0.01.
+        max_frac : float, optional
+            Cap on each lattice-parameter uncertainty as a fraction of
+            its value. Default 0.05.
+
+        Returns
+        -------
+        sigma_c : float
+            Norm of the propagated Q-space center uncertainty (inverse
+            angstroms), or 0.0 if lattice information is unavailable.
+        """
+        if not mtd.doesExist(self.peaks.getName()):
+            return 0.0
+        if not hasattr(self.peaks, "sample"):
+            return 0.0
+
+        ol = self.peaks.sample().getOrientedLattice()
+        U = ol.getU()
+
+        params = np.array(self.get_lattice_parameters())
+        errors = np.array(self.get_lattice_parameter_uncertanties())
+        sigma_params = np.clip(
+            errors, min_frac * np.abs(params), max_frac * np.abs(params)
+        )
+
+        hkl = np.asarray(hkl, dtype=float)
+
+        def Q(p):
+            return 2 * np.pi * U @ _B_matrix(*p) @ hkl
+
+        jac = np.zeros((3, 6))
+        for i in range(6):
+            delta = max(1e-8, 1e-4 * abs(params[i]))
+            p_plus, p_minus = params.copy(), params.copy()
+            p_plus[i] += delta
+            p_minus[i] -= delta
+            jac[:, i] = (Q(p_plus) - Q(p_minus)) / (2 * delta)
+
+        return float(np.linalg.norm(jac @ sigma_params))
 
     def get_max_d_spacing(self):
         """

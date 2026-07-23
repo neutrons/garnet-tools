@@ -1,11 +1,73 @@
 import numpy as np
 
+import scipy.optimize
+
 from garnet.reduction.plan import SubPlan
+
+
+def align_shape_axes(radii, axes, ref_axes):
+    """
+    Permute and sign-fix principal axes to best align with reference axes.
+
+    Eigenvectors are only defined up to sign, and up to permutation
+    when eigenvalues are close (near-spherical peaks), so without an
+    anchor the axes returned from one fit to the next can flip sign or
+    swap order on numerical noise alone. Assigns each reference axis
+    the shape axis it overlaps most with (via a linear-sum-assignment
+    matching on the pairwise dot products), flips signs so each match
+    is positive, then re-enforces a right-handed triple.
+
+    Parameters
+    ----------
+    radii : sequence of float
+        (r0, r1, r2) principal radii, matching the order of `axes`.
+    axes : sequence of 1d-array
+        (v0, v1, v2) principal axis vectors to reorder/sign-fix.
+    ref_axes : sequence of 1d-array
+        (n, u, v) reference directions; output axis j is the `axes`
+        entry closest aligned with `ref_axes[j]`.
+
+    Returns
+    -------
+    radii : tuple of float
+        Reordered to match the returned axes.
+    axes : tuple of 1d-array
+        Reordered and sign-fixed, right-handed.
+
+    """
+
+    V = np.column_stack(axes)
+    N = np.column_stack(ref_axes)
+
+    overlap = V.T @ N
+
+    row_ind, col_ind = scipy.optimize.linear_sum_assignment(-np.abs(overlap))
+
+    order = np.empty(3, dtype=int)
+    for i, j in zip(row_ind, col_ind):
+        order[j] = i
+
+    new_radii = tuple(radii[order[j]] for j in range(3))
+
+    new_axes = np.empty((3, 3))
+    for j in range(3):
+        i = order[j]
+        sign = np.sign(overlap[i, j])
+        new_axes[:, j] = (sign if sign != 0 else 1.0) * V[:, i]
+
+    if np.linalg.det(new_axes) < 0:
+        new_axes[:, 2] *= -1
+
+    return new_radii, (new_axes[:, 0], new_axes[:, 1], new_axes[:, 2])
 
 
 def bin_axes(R, two_theta, az_phi):
     """
-    Compute local Q-sample projection axes aligned to the scattering geometry.
+    Compute local Q-sample resolution axes aligned to the scattering geometry.
+
+    These are the axes the anisotropic Q-resolution model (see
+    `data.get_resolution_in_Q`) is defined along, not necessarily the
+    axes used to bin the data (see `bin_extent`).
 
     Parameters
     ----------
@@ -19,7 +81,7 @@ def bin_axes(R, two_theta, az_phi):
     Returns
     -------
     n, u, v : 1d-array
-        Orthogonal projection axes in Q-sample frame.
+        Orthogonal resolution axes in Q-sample frame.
 
     """
 
@@ -126,7 +188,7 @@ def transform_Q(Q0, Q1, Q2, projections):
 
 
 def bin_extent(
-    UB, hkl, lamda, R, two_theta, az_phi, shape, dQ, bin_min=21, bin_max=21
+    UB, hkl, lamda, R, two_theta, az_phi, shape, dQ, bin_min=19, bin_max=21
 ):
     """
     Compute bin extents and projection transform for one peak.
@@ -146,9 +208,12 @@ def bin_extent(
     az_phi : float
         Azimuthal angle in degrees.
     shape : tuple
-        Peak shape parameters (ci, ri, vi).
+        Peak shape parameters (ci, ri, vi). The peak's own principal axes
+        (vi) are used as the projection basis, so the projection frame
+        coincides with the ellipsoid's principal frame.
     dQ : array
-        Q-resolution (3-element).
+        Q-resolution (3-element), along the scattering-geometry axes
+        from `bin_axes` (not the projection frame).
     bin_min, bin_max : int
         Minimum and maximum bin count per dimension.
 
@@ -167,28 +232,31 @@ def bin_extent(
 
     """
 
+    _, _, _, r0, r1, r2, v0, v1, v2 = shape
+
     n, u, v = bin_axes(R, two_theta, az_phi)
-    projections = [n, u, v]
+    (r0, r1, r2), (v0, v1, v2) = align_shape_axes(
+        (r0, r1, r2), (v0, v1, v2), (n, u, v)
+    )
 
-    params = project_ellipsoid_parameters(shape, projections)
+    projections = [v0, v1, v2]
 
-    c0, c1, c2, r0, r1, r2, v0, v1, v2 = params
+    r_cut = 3 * np.array([r0, r1, r2])
 
-    U = np.column_stack([v0, v1, v2])
-    V = np.diag([r0**2, r1**2, r2**2])
-
-    S = np.dot(np.dot(U, V), U.T)
-    r_cut = 3 * np.sqrt(np.diag(S))
-
-    r_cut = np.where(r_cut < 3 * dQ, 3 * dQ, r_cut)
-
+    N = np.column_stack([n, u, v])
     W = np.column_stack(projections)
+
+    Sres = W.T @ (N @ np.diag(np.asarray(dQ) ** 2) @ N.T) @ W
+    dQ_proj = np.sqrt(np.diag(Sres))
+
+    r_cut = np.where(r_cut < 3 * dQ_proj, 3 * dQ_proj, r_cut)
+
     A = 2 * np.pi * (W.T @ UB)
 
     miller_half_width = 0.5 * np.sum(np.abs(A), axis=1)
     r_cut = np.minimum(r_cut, miller_half_width)
 
-    bins = np.clip(1 + np.floor(r_cut / dQ).astype(int), bin_min, bin_max)
+    bins = np.clip(1 + np.floor(r_cut / dQ_proj).astype(int), bin_min, bin_max)
 
     Wp = np.linalg.inv(W.T @ (2 * np.pi * UB)).T
     transform = Wp.tolist()
@@ -265,9 +333,6 @@ class PeakProjection(SubPlan):
     Base class providing shared geometry and binning utilities for
     integration workflows.
     """
-
-    def bin_axes(self, R, two_theta, az_phi):
-        return bin_axes(R, two_theta, az_phi)
 
     def project_ellipsoid_parameters(self, params, projections):
         return project_ellipsoid_parameters(params, projections)

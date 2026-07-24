@@ -225,18 +225,7 @@ class Integration(PeakProjection):
 
             data.convert_to_Q_sample("data" + app, "md", lorentz_corr=True)
 
-            peaks.predict_peaks(
-                "data",
-                "peaks",
-                centering,
-                d_min,
-                lamda_min,
-                lamda_max,
-            )
-
-            self.predict_add_satellite_peaks(
-                "peaks", "md", lamda_min, lamda_max
-            )
+            self.predict_all_peaks(centering, d_min, lamda_min, lamda_max)
 
             peak = PeakModel("peaks")
 
@@ -257,31 +246,9 @@ class Integration(PeakProjection):
                 scan_plot = ScanPlot(*result)
                 scan_plot.save_plot(scan_file)
 
-                opt = Optimization("peaks", tol=0.5 / np.cbrt(3))
-                for _ in range(3):
-                    opt.optimize_lattice("Fixed")
-                    opt.optimize_lattice_only(cell)
+                self.optimize_ub(data, "peaks", cell, run)
 
-                ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
-                ub_file = os.path.splitext(ub_file)[0] + ".mat"
-
-                ub = UBModel("peaks")
-                ub.save_UB(ub_file)
-
-                data.load_clear_UB(ub_file, "data", run)
-
-            peaks.predict_peaks(
-                "data",
-                "peaks",
-                centering,
-                d_min,
-                lamda_min,
-                lamda_max,
-            )
-
-            self.predict_add_satellite_peaks(
-                "peaks", "md", lamda_min, lamda_max
-            )
+            self.predict_all_peaks(centering, d_min, lamda_min, lamda_max)
 
             peaks.integrate_peaks(
                 "md",
@@ -320,31 +287,9 @@ class Integration(PeakProjection):
             peaks.save_peaks(pk_file, "peaks")
 
             if self.params["OptimizeUB"]:
-                opt = Optimization("peaks", tol=0.5 / np.cbrt(3))
-                for _ in range(3):
-                    opt.optimize_lattice("Fixed")
-                    opt.optimize_lattice_only(cell)
+                self.optimize_ub(data, "peaks", cell, run)
 
-                ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
-                ub_file = os.path.splitext(ub_file)[0] + ".mat"
-
-                ub = UBModel("peaks")
-                ub.save_UB(ub_file)
-
-                data.load_clear_UB(ub_file, "data", run)
-
-            peaks.predict_peaks(
-                "data",
-                "peaks",
-                centering,
-                d_min,
-                lamda_min,
-                lamda_max,
-            )
-
-            self.predict_add_satellite_peaks(
-                "peaks", "md", lamda_min, lamda_max
-            )
+            self.predict_all_peaks(centering, d_min, lamda_min, lamda_max)
 
             res.apply()
 
@@ -468,6 +413,28 @@ class Integration(PeakProjection):
                 self.params["MaxOrder"],
                 self.params["CrossTerms"],
             )
+
+    def predict_all_peaks(self, centering, d_min, lamda_min, lamda_max):
+        peaks = PeaksModel()
+        peaks.predict_peaks(
+            "data", "peaks", centering, d_min, lamda_min, lamda_max
+        )
+
+        self.predict_add_satellite_peaks("peaks", "md", lamda_min, lamda_max)
+
+    def optimize_ub(self, data, peaks_ws, cell, run):
+        opt = Optimization(peaks_ws, tol=0.5 / np.cbrt(3))
+        for _ in range(3):
+            opt.optimize_lattice("Fixed")
+            opt.optimize_lattice_only(cell)
+
+        ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
+        ub_file = os.path.splitext(ub_file)[0] + ".mat"
+
+        ub = UBModel(peaks_ws)
+        ub.save_UB(ub_file)
+
+        data.load_clear_UB(ub_file, "data", run)
 
     def get_file(self, file, ws=""):
         """

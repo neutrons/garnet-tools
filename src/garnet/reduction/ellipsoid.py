@@ -3819,6 +3819,201 @@ class PeakEllipsoid:
 
         return I, I_err, A, b
 
+    def profile_fit(
+        self,
+        d,
+        n,
+        kernel,
+        mask,
+        bkg_meas=None,
+        initial_intensity=None,
+        initial_background=None,
+        max_iterations=100,
+    ):
+        """
+        Properly weighted Poisson profile fit of intensity and background from a fixed kernel.
+
+        Maximizes the same Poisson log-likelihood as `matched_filter`
+        (mu = n*(I*kernel + background) + bkg_meas) via L-BFGS-B --
+        convex in (I, background), so unlike the reweighted-least-
+        squares approach this converges to the same optimum regardless
+        of the seed -- starting from `initial_intensity`/
+        `initial_background` (the summation-integration estimate) when
+        given, falling back to `matched_filter`'s percentile-based
+        guess otherwise.
+
+        Unlike `matched_filter`, this tracks the optimizer's iterate
+        trajectory and, at every iterate, the *joint* (not marginal)
+        Fisher-information uncertainty on I and background -- properly
+        accounting for their correlation, which matters most for weak
+        peaks -- so the fit's convergence can be inspected.
+
+        `kernel` (e.g. the un-normalized Gaussian density from
+        `peak_roi`) is used exactly as given: its absolute scale fixes
+        the units of `I`, so it must not be rescaled to sum to one, or
+        the recovered peak intensity would be wrong.
+
+        Parameters
+        ----------
+        d : ndarray
+            Raw observed event counts, 3D array.
+        n : ndarray
+            Normalization (monitor/solid-angle) counts, same shape as
+            `d`.
+        kernel : ndarray
+            Fixed peak profile, same shape as `d`, not renormalized.
+        mask : ndarray of bool
+            Voxels to include in the fit (peak plus background
+            region).
+        bkg_meas : ndarray, optional
+            Additional fixed measured background counts, same shape
+            as `d`, added to the model (as in `matched_filter`).
+        initial_intensity, initial_background : float, optional
+            Starting guess, e.g. from the summation-integration
+            estimate. Falls back to a percentile-based guess when
+            omitted or non-finite.
+        max_iterations : int
+            Maximum number of L-BFGS-B iterations.
+
+        Returns
+        -------
+        result : tuple
+            (intensity, sigma_intensity, background, sigma_background,
+            covariance, correlation, snr, iterations, converged).
+            Sigma values are inf if the information matrix is
+            non-positive at the optimum.
+        history : tuple
+            (iteration, intensity, sigma_intensity, background,
+            sigma_background) arrays tracing the optimizer's iterates
+            (including the seed as iteration 0), for diagnostic
+            plotting.
+        """
+        valid = (
+            mask
+            & np.isfinite(d)
+            & np.isfinite(n)
+            & (n > 0)
+            & np.isfinite(kernel)
+            & (np.asarray(kernel) >= 0)
+        )
+
+        d = np.asarray(d, dtype=float)
+        n = np.asarray(n, dtype=float)
+        k = np.asarray(kernel, dtype=float)
+
+        dv = d[valid]
+        nv = n[valid]
+        kv = k[valid]
+
+        bv = (
+            np.asarray(bkg_meas, dtype=float)[valid]
+            if bkg_meas is not None
+            else np.zeros_like(dv)
+        )
+
+        def empty():
+            history = (
+                np.array([0]),
+                np.array([0.0]),
+                np.array([np.inf]),
+                np.array([0.0]),
+                np.array([np.inf]),
+            )
+            return (0.0, np.inf, 0.0, np.inf, 0.0, 0.0, 0.0, 0, False), history
+
+        if dv.size < 2 or np.allclose(kv, kv[0]):
+            return empty()
+
+        if (
+            initial_intensity is not None
+            and initial_background is not None
+            and np.isfinite(initial_intensity)
+            and np.isfinite(initial_background)
+        ):
+            I0 = max(float(initial_intensity), 0.0)
+            b0 = max(float(initial_background), 0.0)
+        else:
+            yv = np.where(nv > 0, dv / nv, 0.0)
+            b0 = float(np.clip(np.nanpercentile(yv, 5), 0.0, None))
+            A0 = float(np.clip(np.nanpercentile(yv, 95) - b0, 0.0, None))
+            p_max = float(np.nanmax(kv)) if np.nanmax(kv) > 0 else 1.0
+            I0 = A0 / p_max
+
+        def neg_ll(params):
+            intensity, background = params
+            mu = np.clip(nv * (intensity * kv + background) + bv, 1e-10, None)
+            return float(np.sum(mu - dv * np.log(mu)))
+
+        def fisher(intensity, background):
+            mu = np.clip(nv * (intensity * kv + background) + bv, 1e-10, None)
+            w = nv**2 / mu
+            f_II = np.sum(w * kv**2)
+            f_Ib = np.sum(w * kv)
+            f_bb = np.sum(w)
+            return f_II, f_Ib, f_bb
+
+        def sigma_at(intensity, background):
+            f_II, f_Ib, f_bb = fisher(intensity, background)
+            determinant = f_II * f_bb - f_Ib**2
+            if determinant <= 0 or not np.isfinite(determinant):
+                return np.inf, np.inf, 0.0
+            return (
+                np.sqrt(f_bb / determinant),
+                np.sqrt(f_II / determinant),
+                -f_Ib / determinant,
+            )
+
+        iters = [0]
+        I_hist = [I0]
+        b_hist = [b0]
+        sig_I, sig_b, _ = sigma_at(I0, b0)
+        I_err_hist = [sig_I]
+        b_err_hist = [sig_b]
+
+        def callback(xk):
+            intensity, background = xk
+            sig_I, sig_b, _ = sigma_at(intensity, background)
+            iters.append(len(iters))
+            I_hist.append(intensity)
+            I_err_hist.append(sig_I)
+            b_hist.append(background)
+            b_err_hist.append(sig_b)
+
+        res = scipy.optimize.minimize(
+            neg_ll,
+            [I0, b0],
+            method="L-BFGS-B",
+            bounds=[(0.0, None), (0.0, None)],
+            callback=callback,
+            options={"maxiter": max_iterations},
+        )
+
+        intensity, background = res.x
+
+        sig_I, sig_b, cov = sigma_at(intensity, background)
+        corr = cov / (sig_I * sig_b) if sig_I > 0 and sig_b > 0 else 0.0
+        snr = intensity / sig_I if sig_I > 0 else float("nan")
+
+        result = (
+            float(intensity),
+            float(sig_I),
+            float(background),
+            float(sig_b),
+            float(cov),
+            float(corr),
+            float(snr),
+            int(res.nit),
+            bool(res.success),
+        )
+        history = (
+            np.array(iters),
+            np.array(I_hist),
+            np.array(I_err_hist),
+            np.array(b_hist),
+            np.array(b_err_hist),
+        )
+        return result, history
+
     def fitted_profile(
         self, x0, x1, x2, d, n, c, S, p=0.997, eta=0.5, bkg_meas=None
     ):
@@ -4001,14 +4196,14 @@ class PeakEllipsoid:
         volume-fraction correction, applied to the earlier 3D box-sum
         intensity), then computes and stores the normalization-aware
         box-sum estimator (`extract_intensity`, I_ell), the 1D
-        profile-fit estimator (`fitted_profile`, I_prof), a
-        chi-squared-inflated matched-filter estimator (`matched_filter`),
-        and a raw box-sum estimator for diagnostics. Populates
+        profile-fit estimator (`fitted_profile`, I_prof), a properly
+        weighted Poisson profile fit (`profile_fit`, I_fit) seeded from
+        I_ell, and a raw box-sum estimator for diagnostics. Populates
         `self.intensity`, `self.sigma`, `self.weights`,
         `self.data_norm_fit`, `self.peak_background_mask`,
-        `self.integral`, `self.filter`, and `self.info` (all intensity
-        estimators and their uncertainties, plus background/volume
-        diagnostics).
+        `self.integral`, `self.profile_iterations`, and `self.info`
+        (all intensity estimators and their uncertainties, plus
+        background/volume diagnostics).
 
         Parameters
         ----------
@@ -4030,8 +4225,8 @@ class PeakEllipsoid:
         Returns
         -------
         intens : float
-            Final normalization-aware box-sum intensity (I_ell), scaled
-            by voxel volume.
+            Final reported intensity: the weighted Poisson profile fit
+            (`profile_fit`, I_fit), seeded from the box-sum (I_ell).
         sig : float
             Uncertainty on `intens`; inf if not finite.
         """
@@ -4110,17 +4305,19 @@ class PeakEllipsoid:
 
         self.integral = x_prof, y_fit, y_prof, e_prof
 
-        result = self.matched_filter(d, n, kernel, pk | bkg, bkg_meas)
+        profile_result, profile_history = self.profile_fit(
+            d,
+            n,
+            kernel,
+            pk | bkg,
+            bkg_meas,
+            initial_intensity=intens,
+            initial_background=b,
+        )
 
-        I_filt, sig_filt, A_filt, b_filt = result
+        I_fit, s_fit, bkg_fit, s_bkg_fit = profile_result[:4]
 
-        chi2_3d = self.reddev[-1]
-
-        if np.isfinite(chi2_3d) and chi2_3d > 1:
-            sig_filt = sig_filt * np.sqrt(chi2_3d)
-            result = I_filt, sig_filt, A_filt, b_filt
-
-        self.filter = result
+        self.profile_iterations = profile_history
 
         self.intensity.append(I)
         self.sigma.append(I_err)
@@ -4161,6 +4358,10 @@ class PeakEllipsoid:
             "s_ell": self.sigma[3],
             "I_prof": self.intensity[4],
             "s_prof": self.sigma[4],
+            "I_fit": I_fit,
+            "s_fit": s_fit,
+            "bkg_fit": bkg_fit,
+            "s_bkg_fit": s_bkg_fit,
         }
 
-        return intens, sig
+        return I_fit, s_fit

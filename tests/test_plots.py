@@ -219,7 +219,7 @@ def test_peak_plot():
 
     plot.update_envelope(*ellipsoid.peak_background_mask)
 
-    plot.add_integral_fit(ellipsoid.integral)
+    plot.add_profile_iterations(ellipsoid.profile_iterations)
 
     file = os.path.join(filepath, "ellipsoid.png")
 

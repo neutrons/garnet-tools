@@ -624,8 +624,7 @@ class Integration(PeakProjection):
                 intensity = ellipsoid.intensity
                 sigma = ellipsoid.sigma
                 peak_background_mask = ellipsoid.peak_background_mask
-                integral = ellipsoid.integral
-                matched_filter = ellipsoid.filter
+                profile_iterations = ellipsoid.profile_iterations
                 estimated_fit = ellipsoid.estimated_fit
                 bkg_prof = ellipsoid.best_bkg_prof
 
@@ -652,9 +651,7 @@ class Integration(PeakProjection):
 
                     self.peak_plot.add_data_norm_fit(*data_norm_fit)
 
-                    self.peak_plot.add_integral_fit(integral)
-
-                    self.peak_plot.add_filter(matched_filter)
+                    self.peak_plot.add_profile_iterations(profile_iterations)
 
                     try:
                         self.peak_plot.save_plot(peak_file)

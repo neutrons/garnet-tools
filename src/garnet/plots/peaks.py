@@ -473,19 +473,25 @@ class PeakPlot(BasePlot):
         ax = self.fig.add_subplot(gs[0, 0])
 
         ax.minorticks_on()
-        ax.set_xlabel(r"$Q_0$ [$\AA^{-1}$]")
+        ax.set_xlabel("Iteration")
 
-        x = np.arange(10) - 5
-        y = -2 * x**2 + 50
-        e = np.sqrt(np.abs(y))
+        ax_bkg = ax.twinx()
+        ax_bkg.minorticks_on()
 
         self.int = ax
+        self.int_bkg = ax_bkg
 
-        error_cont = ax.errorbar(x, y, e, fmt="o", color="C0", zorder=1)
-        plot_line = ax.step(x, y, where="mid", color="C1", zorder=0)
+        x = np.arange(10)
+        y = -2 * (x - 5) ** 2 + 50
+        e = np.sqrt(np.abs(y))
+
+        error_cont = ax.errorbar(x, y, e, fmt="o-", color="C0", zorder=1)
+        bkg_error_cont = ax_bkg.errorbar(
+            x, y, e, fmt="s-", color="C1", zorder=1
+        )
 
         self.int_error.append(error_cont)
-        self.int_line.append(plot_line)
+        self.int_line.append(bkg_error_cont)
 
     def __init_profile(self):
         self.prof = []
@@ -884,35 +890,46 @@ class PeakPlot(BasePlot):
         # self.cb_norm.formatter.set_powerlimits((0, 0))
         # self.cb_norm.formatter.set_useMathText(True)
 
-    def add_integral_fit(self, xye_fit):
-        x, y_fit, y, e = xye_fit
+    def add_profile_iterations(self, result):
+        iteration, I, I_err, bkg, bkg_err = result
+
+        n = len(iteration)
 
         lines, caps, bars = self.int_error[0]
-        lines.set_data(x, y)
-
+        lines.set_data(iteration, I)
         (barsy,) = bars
-
-        yb, yt = y - e, y + e
-
-        n = len(x)
-
-        segments = [np.array([[x[i], yt[i]], [x[i], yb[i]]]) for i in range(n)]
-
+        yb, yt = I - I_err, I + I_err
+        segments = [
+            np.array([[iteration[i], yt[i]], [iteration[i], yb[i]]])
+            for i in range(n)
+        ]
         barsy.set_segments(segments)
 
-        self.int_line[0][0].set_data(x, y_fit)
+        lines_bkg, caps_bkg, bars_bkg = self.int_line[0]
+        lines_bkg.set_data(iteration, bkg)
+        (barsy_bkg,) = bars_bkg
+        yb_bkg, yt_bkg = bkg - bkg_err, bkg + bkg_err
+        segments_bkg = [
+            np.array([[iteration[i], yt_bkg[i]], [iteration[i], yb_bkg[i]]])
+            for i in range(n)
+        ]
+        barsy_bkg.set_segments(segments_bkg)
 
         self.int.relim()
         self.int.autoscale_view()
+        self.int_bkg.relim()
+        self.int_bkg.autoscale_view()
 
-    def add_filter(self, result):
-        I, sig, A, b = result
+        line = "$I={}$ | $I/\sigma={:.1f}$"
 
-        line = "$I = {:}$ | $I/\sigma={:.1f}$"
+        I_f, sig_f = I[-1], I_err[-1]
+        I_sig = I_f / sig_f if sig_f > 0 else np.nan
 
-        I_sig = I / sig if sig > 0 else np.nan
+        self.int.set_ylabel(line.format(self._sci_notation(I_f), I_sig))
 
-        self.int.set_ylabel(line.format(self._sci_notation(I), I_sig))
+        B = r"$B={}$"
+
+        self.int_bkg.set_ylabel(B.format(self._sci_notation(bkg[-1])))
 
     def add_profile_fit(self, xye_fit):
         x, y_fit, y, e = xye_fit[0]

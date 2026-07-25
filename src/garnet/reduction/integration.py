@@ -424,7 +424,7 @@ class Integration(PeakProjection):
 
     def optimize_ub(self, data, peaks_ws, cell, run):
         opt = Optimization(peaks_ws, tol=0.5 / np.cbrt(3))
-        for _ in range(3):
+        for _ in range(5):
             opt.optimize_lattice("Fixed")
             opt.optimize_lattice_only(cell)
 

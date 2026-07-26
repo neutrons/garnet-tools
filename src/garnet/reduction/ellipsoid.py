@@ -4291,7 +4291,9 @@ class PeakEllipsoid:
         if not np.isfinite(sig):
             sig = float("inf")
 
-        xye = (x0, x1, x2), (dx0, dx1, dx2), y, e
+        c0, c1, c2 = c
+
+        xye = (x0 - c0, x1 - c1, x2 - c2), (dx0, dx1, dx2), y, e
 
         params = (intens, sig, b, b_err)
 

@@ -11,7 +11,6 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 from scipy.spatial.transform import Rotation
 import scipy.optimize
-import scipy.linalg
 
 from mantid.simpleapi import (
     LoadNexus,
@@ -314,6 +313,7 @@ class Calibration:
         SCDCalibratePanels(
             PeakWorkspace="peaks",
             RecalculateUB=False,
+            WavelengthFromUB=True,
             Tolerance=0.2,
             a=self.a,
             b=self.b,
@@ -408,6 +408,7 @@ class Calibration:
         SCDCalibratePanels(
             PeakWorkspace="peaks",
             RecalculateUB=False,
+            WavelengthFromUB=True,
             Tolerance=0.2,
             a=self.a,
             b=self.b,
@@ -549,6 +550,7 @@ class Calibration:
         SCDCalibratePanels(
             PeakWorkspace="peaks",
             RecalculateUB=False,
+            WavelengthFromUB=True,
             Tolerance=0.2,
             a=self.a,
             b=self.b,

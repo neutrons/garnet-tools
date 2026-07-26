@@ -447,32 +447,39 @@ class Parametrization(SubPlan):
         data = DataModel(beamlines[self.plan["Instrument"]])
         data.update_raw_path(self.plan)
 
-        for ind, file in enumerate(files):
+        n_proc = self.plan.get("NProc")
+
+        data_files, norm_files = [], []
+        for file in files:
             data_file = self.get_file(file, "data")
             norm_file = self.get_file(file, "norm")
 
             if os.path.exists(data_file) and os.path.exists(norm_file):
-                data.load_histograms(data_file, "tmp_data")
-                data.load_histograms(norm_file, "tmp_norm")
+                data_files.append(data_file)
+                norm_files.append(norm_file)
 
-                data.combine_histograms("tmp_data", "data")
-                data.combine_histograms("tmp_norm", "norm")
+        if len(data_files) > 0:
+            data.combine_histogram_files(data_files, "data", n_proc)
+            data.combine_histogram_files(norm_files, "norm", n_proc)
 
-                os.remove(data_file)
-                os.remove(norm_file)
+            for file in data_files + norm_files:
+                os.remove(file)
 
+        bkg_data_files, bkg_norm_files = [], []
+        for file in files:
             bkg_data_file = self.get_file(file, "bkg_data")
             bkg_norm_file = self.get_file(file, "bkg_norm")
 
             if os.path.exists(bkg_data_file) and os.path.exists(bkg_norm_file):
-                data.load_histograms(bkg_data_file, "tmp_bkg_data")
-                data.load_histograms(bkg_norm_file, "tmp_bkg_norm")
+                bkg_data_files.append(bkg_data_file)
+                bkg_norm_files.append(bkg_norm_file)
 
-                data.combine_histograms("tmp_bkg_data", "bkg_data")
-                data.combine_histograms("tmp_bkg_norm", "bkg_norm")
+        if len(bkg_data_files) > 0:
+            data.combine_histogram_files(bkg_data_files, "bkg_data", n_proc)
+            data.combine_histogram_files(bkg_norm_files, "bkg_norm", n_proc)
 
-                os.remove(bkg_data_file)
-                os.remove(bkg_norm_file)
+            for file in bkg_data_files + bkg_norm_files:
+                os.remove(file)
 
         data_file = self.get_file(diag_file, "data")
         norm_file = self.get_file(diag_file, "norm")

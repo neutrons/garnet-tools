@@ -819,14 +819,14 @@ class PeakPlot(BasePlot):
         ax.minorticks_on()
         ax.set_aspect(1)
         # ax.xaxis.set_ticklabels([])
-        ax.set_ylabel(r"$Q_1$ [$\AA^{-1}$]")
+        ax.set_ylabel(r"$\Delta Q_1$ [$\AA^{-1}$]")
 
         [line] = ax.plot([], [], color="r")
         self.norm_pk.append(line)
         [line] = ax.plot([], [], color="r")
         self.norm_bkg.append(line)
 
-        ax.set_xlabel(r"$Q_0$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$\Delta Q_0$ [$\AA^{-1}$]")
 
         ax = self.fig.add_subplot(gs[0, 1])
 
@@ -845,14 +845,14 @@ class PeakPlot(BasePlot):
         ax.minorticks_on()
         ax.set_aspect(1)
         # ax.xaxis.set_ticklabels([])
-        ax.set_ylabel(r"$Q_2$ [$\AA^{-1}$]")
+        ax.set_ylabel(r"$\Delta Q_2$ [$\AA^{-1}$]")
 
         [line] = ax.plot([], [], color="r")
         self.norm_pk.append(line)
         [line] = ax.plot([], [], color="r")
         self.norm_bkg.append(line)
 
-        ax.set_xlabel(r"$Q_0$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$\Delta Q_0$ [$\AA^{-1}$]")
 
         ax = self.fig.add_subplot(gs[0, 2])
 
@@ -878,7 +878,7 @@ class PeakPlot(BasePlot):
         [line] = ax.plot([], [], color="r")
         self.norm_bkg.append(line)
 
-        ax.set_xlabel(r"$Q_1$ [$\AA^{-1}$]")
+        ax.set_xlabel(r"$\Delta Q_1$ [$\AA^{-1}$]")
 
         norm = Normalize(0, 29)
         im = ScalarMappable(norm=norm)
@@ -1768,14 +1768,6 @@ class PeakPlot(BasePlot):
         self.prof[2].set_ylabel(I_sig.format(intensity[1][2] / sigma[1][2]))
 
         self.cb_norm.ax.set_xlabel(I_sig.format(intensity[2] / sigma[2]))
-
-        label = r"$I={}$ | $I/\sigma={:.1f}$"
-
-        self.int.set_title(
-            label.format(
-                self._sci_notation(intensity[-1]), intensity[-1] / sigma[-1]
-            )
-        )
 
     def save_plot(self, filename):
         """Save the current peak figure without rebuilding it.

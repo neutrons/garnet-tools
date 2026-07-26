@@ -1,6 +1,8 @@
 import os
 import itertools
+from concurrent.futures import ProcessPoolExecutor
 
+import h5py
 import numpy as np
 
 from mantid.simpleapi import (
@@ -84,6 +86,37 @@ from mantid.kernel import FloatTimeSeriesProperty
 from mantid import config
 
 config["Q.convention"] = "Crystallography"
+
+
+def _read_signal_error_squared(filename):
+    """
+    Read the signal and error-squared arrays directly from a saved
+    MDHistoWorkspace nexus file with h5py, bypassing LoadMD.
+
+    SaveMD stores these arrays with their axes reversed relative to the
+    workspace's own getSignalArray/getErrorSquaredArray order, so the
+    arrays are transposed back before being returned.
+
+    Parameters
+    ----------
+    filename : str
+        Nexus filename to read the histogram arrays from.
+
+    Returns
+    -------
+    signal : array
+        Data signal.
+    error_sq : array
+        Squared data uncertainties.
+
+    """
+
+    with h5py.File(filename, "r") as f:
+        group = f["MDHistoWorkspace"]["data"]
+        signal = np.asarray(group["signal"]).T
+        error_sq = np.asarray(group["errors_squared"]).T
+
+    return signal, error_sq
 
 
 def DataModel(instrument_config):
@@ -738,6 +771,54 @@ class BaseDataModel:
         """
 
         LoadMD(Filename=filename, OutputWorkspace=ws, LoadHistory=False)
+
+    def combine_histogram_files(self, files, merge, n_proc=None):
+        """
+        Merge histogram files into a single accumulated workspace.
+
+        The first file is loaded as a full MDHistoWorkspace to provide the
+        bin geometry, sample logs, and experiment info for the merge. The
+        signal and error-squared arrays of the remaining files are read
+        directly with h5py instead of being loaded through Mantid, since
+        only those two arrays are needed for the sum, and are accumulated
+        onto the first workspace's arrays.
+
+        Parameters
+        ----------
+        files : list
+            Histogram filenames to combine. The first is used as the base.
+        merge : str
+            Name of the combined workspace to create.
+        n_proc : int, optional
+            Number of worker processes used to read the remaining files.
+            The default is None (serial reads).
+
+        """
+
+        self.load_histograms(files[0], merge)
+
+        rest = files[1:]
+
+        if len(rest) == 0:
+            return
+
+        signal = mtd[merge].getSignalArray().copy()
+        error_sq = mtd[merge].getErrorSquaredArray().copy()
+
+        if n_proc is None or n_proc <= 1 or len(rest) == 1:
+            arrays = [_read_signal_error_squared(file) for file in rest]
+        else:
+            with ProcessPoolExecutor(
+                max_workers=min(n_proc, len(rest))
+            ) as executor:
+                arrays = list(executor.map(_read_signal_error_squared, rest))
+
+        for sig, err_sq in arrays:
+            signal += sig
+            error_sq += err_sq
+
+        mtd[merge].setSignalArray(signal)
+        mtd[merge].setErrorSquaredArray(error_sq)
 
     def save_histograms(self, filename, ws, sample_logs=False):
         """

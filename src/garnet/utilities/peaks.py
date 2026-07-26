@@ -14,6 +14,7 @@ import scipy.optimize
 import scipy.interpolate
 
 import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
 
 from mantid.simpleapi import (
     Load,
@@ -35,7 +36,6 @@ from mantid.simpleapi import (
     FindUBUsingLatticeParameters,
     OptimizeLatticeForCellType,
     ConvertToMD,
-    PlusMD,
     SaveMD,
     LoadMD,
     ConvertQtoHKLMDHisto,
@@ -403,6 +403,7 @@ def _process_run(config, ipts, run, idx, tol):
 
 
 from garnet.config.instruments import beamlines
+from garnet.reduction.data import _read_signal_error_squared
 
 
 class Peaks:
@@ -607,24 +608,42 @@ class Peaks:
         with multiprocessing.Pool(processes=n_proc) as pool:
             pool.starmap(_process_run, args_list)
 
-    def finalize_and_save(self, tol=0.2):
+    def finalize_and_save(self, tol=0.2, n_proc=None):
         md_files = [
             os.path.join(self.output_folder, f)
             for f in os.listdir(self.output_folder)
             if f.startswith("mdhkl_") and f.endswith(".nxs")
         ]
 
-        for i, md in enumerate(md_files):
-            LoadMD(Filename=md, OutputWorkspace="tmp")
-            if i == 0:
-                CloneWorkspace(InputWorkspace="tmp", OutputWorkspace="merge")
-            else:
-                PlusMD(
-                    LHSWorkspace="tmp",
-                    RHSWorkspace="merge",
-                    OutputWorkspace="merge",
-                )
-            os.remove(md)
+        if len(md_files) > 0:
+            LoadMD(Filename=md_files[0], OutputWorkspace="merge")
+
+            rest = md_files[1:]
+
+            if len(rest) > 0:
+                signal = mtd["merge"].getSignalArray().copy()
+                error_sq = mtd["merge"].getErrorSquaredArray().copy()
+
+                if n_proc is None or n_proc <= 1 or len(rest) == 1:
+                    arrays = [_read_signal_error_squared(f) for f in rest]
+                else:
+                    ctx = multiprocessing.get_context("fork")
+                    with ProcessPoolExecutor(
+                        max_workers=min(n_proc, len(rest)), mp_context=ctx
+                    ) as executor:
+                        arrays = list(
+                            executor.map(_read_signal_error_squared, rest)
+                        )
+
+                for sig, err_sq in arrays:
+                    signal += sig
+                    error_sq += err_sq
+
+                mtd["merge"].setSignalArray(signal)
+                mtd["merge"].setErrorSquaredArray(error_sq)
+
+            for md in md_files:
+                os.remove(md)
 
         peak_files = [
             os.path.join(self.output_folder, f)
@@ -661,11 +680,11 @@ class Peaks:
         filename = os.path.join(self.output_folder, "peaks.mat")
         SaveIsawUB(InputWorkspace="peaks", Filename=filename)
 
-    def run(self):
+    def run(self, n_proc=10):
         self.load_instrument()
         self.calculate_limits()
-        self.load_convert_runs(self.ipts, self.nos)
-        self.finalize_and_save()
+        self.load_convert_runs(self.ipts, self.nos, n_proc=n_proc)
+        self.finalize_and_save(n_proc=n_proc)
 
 
 if __name__ == "__main__":

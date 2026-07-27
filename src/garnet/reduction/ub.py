@@ -1,3 +1,5 @@
+from garnet.reduction.search import FindUBFromConventionalCell
+
 from mantid.simpleapi import (
     SelectCellWithForm,
     SelectCellOfType,
@@ -11,7 +13,6 @@ from mantid.simpleapi import (
     OptimizeLatticeForCellType,
     CalculateUMatrix,
     HasUB,
-    SetUB,
     LoadIsawUB,
     SaveIsawUB,
     CopySample,
@@ -311,6 +312,29 @@ class UBModel:
             FixParameters=True,
             NumInitial=50,
             Iterations=5,
+        )
+
+    def determine_UB_from_conventional_cell(
+        self,
+        a,
+        b,
+        c,
+        alpha,
+        beta,
+        gamma,
+        centering="P",
+        tol=0.2,
+    ):
+        FindUBFromConventionalCell(
+            PeaksWorkspace=self.peaks,
+            a=a,
+            b=b,
+            c=c,
+            alpha=alpha,
+            beta=beta,
+            gamma=gamma,
+            Centering=centering,
+            IntegerTolerance=tol,
         )
 
     def convert_conventional_to_primitive(
@@ -1497,7 +1521,9 @@ class RefineSingleCrystalGoniometer:
 
 
 class Reorient:
-    def __init__(self, peaks, crystal_system="Triclinic", lattice_system=None):
+    def __init__(
+        self, peaks, UB_ref, crystal_system="Triclinic", lattice_system=None
+    ):
         if lattice_system is None:
             lattice_system = crystal_system
 
@@ -1505,15 +1531,8 @@ class Reorient:
 
         ol = mtd[self.peaks].sample().getOrientedLattice()
 
-        self.U = ol.getU().copy()
-        self.B = ol.getB().copy()
-
-        self.a = ol.a()
-        self.b = ol.b()
-        self.c = ol.c()
-        self.alpha = ol.alpha()
-        self.beta = ol.beta()
-        self.gamma = ol.gamma()
+        self.UB = ol.getUB().copy()
+        self.UB_ref = UB_ref.copy()
 
         transforms = self.cell_symmetry_matrices(
             crystal_system, lattice_system
@@ -1554,12 +1573,12 @@ class Reorient:
         return transforms
 
     def minimize(self, transforms, tol=0.12):
-        cost, T = -np.inf, np.eye(3)
+        cost, T = np.inf, np.eye(3)
         for order, M in transforms.items():
-            UBp = self.U @ self.B @ np.linalg.inv(M)
-            trace = np.trace(UBp)
-            if trace > cost:
-                cost = trace
+            UBp = self.UB @ np.linalg.inv(M)
+            fro = np.linalg.norm(UBp - self.UB_ref)
+            if fro < cost:
+                cost = fro
                 T = M.copy()
 
         hkl_trans = ",".join(9 * ["{}"]).format(*T.flatten())

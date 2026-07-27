@@ -18,7 +18,7 @@ os.environ["TBB_THREAD_ENABLED"] = "0"
 
 from garnet.plots.peaks import PeakPlot, ScanPlot
 from garnet.config.instruments import beamlines
-from garnet.reduction.ub import UBModel, Optimization, lattice_group
+from garnet.reduction.ub import UBModel, Optimization, Reorient, lattice_group
 from garnet.reduction.peaks import PeaksModel, PeakModel, centering_reflection
 from garnet.reduction.ellipsoid import PeakEllipsoid
 from garnet.reduction.resolution import ResolutionEllipsoid
@@ -237,7 +237,9 @@ class Integration(PeakProjection):
             if self.params["OptimizePeaks"]:
                 ub = UBModel("peaks")
 
-                Q_min, hkl_tol = ub.shortest_reciprocal_spacing(centering)
+                UB = ub.get_UB()
+
+                Q_min, _ = ub.shortest_reciprocal_spacing(centering)
 
                 result = peaks.scan_threshold("md", "peaks", Q_min)
 
@@ -246,7 +248,13 @@ class Integration(PeakProjection):
                 scan_plot = ScanPlot(*result)
                 scan_plot.save_plot(scan_file)
 
-                self.optimize_ub(data, "peaks", cell, run)
+                constants = peaks.get_lattice_parameters()
+
+                ub.determine_UB_from_conventional_cell(*constants, centering)
+
+                reorient = Reorient("peaks", UB, cell)
+
+                self.copy_UB("data")
 
             self.predict_all_peaks(centering, d_min, lamda_min, lamda_max)
 
@@ -425,8 +433,7 @@ class Integration(PeakProjection):
     def optimize_ub(self, data, peaks_ws, cell, run):
         opt = Optimization(peaks_ws, tol=0.5 / np.cbrt(3))
         for _ in range(5):
-            opt.optimize_lattice("Fixed")
-            opt.optimize_lattice_only(cell)
+            opt.optimize_lattice(cell)
 
         ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
         ub_file = os.path.splitext(ub_file)[0] + ".mat"

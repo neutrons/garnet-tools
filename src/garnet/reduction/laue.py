@@ -2,7 +2,6 @@ from mantid.api import (
     PythonAlgorithm,
     AlgorithmFactory,
     IPeaksWorkspaceProperty,
-    WorkspaceProperty,
 )
 from mantid.kernel import (
     Direction,
@@ -14,10 +13,15 @@ from mantid.dataobjects import TableWorkspaceProperty
 from mantid.simpleapi import CreateEmptyTableWorkspace, SetUB
 from mantid.geometry import UnitCell
 
+from concurrent.futures import ProcessPoolExecutor
+
 import numpy as np
 
+from scipy.optimize import differential_evolution
+from scipy.spatial.transform import Rotation
+from scipy.interpolate import interp1d
+
 from garnet.reduction.search import (
-    normalize,
     direct_basis_from_lattice,
     reciprocal_basis_from_direct_basis,
     conventional_to_primitive_lattice,
@@ -25,627 +29,672 @@ from garnet.reduction.search import (
 )
 
 
-def enumerate_reciprocal_directions(max_index):
+def prepare_peak_rays(kf_ki_dir):
     """
-    Enumerate primitive integer Miller index directions up to a cutoff.
+    Split raw Laue `kf - ki` vectors into direction and magnitude.
 
-    Every non-zero integer triple `(h, k, l)` with `max(|h|, |k|, |l|)`
-    at most `max_index` is included, except those sharing a common
-    factor (e.g. `(2, 0, 0)` is dropped since `(1, 0, 0)` already
-    covers that direction). Both a triple and its negation are kept,
-    since they point in opposite directions.
-
-    Parameters
-    ----------
-    max_index : int
-        Largest Miller index magnitude to enumerate.
-
-    Returns
-    -------
-    hkls : ndarray of shape (n_directions, 3)
-        Primitive integer Miller index triples.
-    """
-    grid = np.arange(-max_index, max_index + 1)
-    h, k, l = np.meshgrid(grid, grid, grid, indexing="ij")
-    hkls = np.column_stack([h.ravel(), k.ravel(), l.ravel()])
-
-    nonzero = np.any(hkls != 0, axis=1)
-    hkls = hkls[nonzero]
-
-    gcd = np.gcd.reduce(np.abs(hkls), axis=1)
-    primitive = gcd == 1
-
-    return hkls[primitive]
-
-
-def scattering_directions_from_kf_ki(kf_ki_dir):
-    """
-    Convert Laue `kf - ki` vectors to reciprocal-vector directions.
-
-    In this facility's Q convention, a peak's `kf_ki_dir` (from
-    `Peak.getDetectorDirectionSampleFrame() + getSourceDirectionSampleFrame()`)
-    relates to its true reflection by `kf_ki_dir = -wavelength * UB @ hkl`,
-    so the direction of `UB @ hkl` is `normalize(-kf_ki_dir)`.
+    In this facility's Q convention, `kf_ki_dir = -wavelength * UB @ hkl`
+    (see `garnet.reduction.search`), so the direction of `UB @ hkl` is
+    `normalize(-kf_ki_dir)`; its magnitude, `wavelength`-independent, is
+    `||kf_ki_dir|| = 2 * sin(theta)`.
 
     Parameters
     ----------
     kf_ki_dir : ndarray of shape (n_peaks, 3)
         Raw `kf - ki` vectors, as returned by
-        `extract_kf_ki_directions`.
+        `FindUBFromLauePeaks._extract_kf_ki_directions`.
 
     Returns
     -------
-    d_hat : ndarray of shape (n_peaks, 3)
+    qhat : ndarray of shape (n_peaks, 3)
         Unit vectors in the direction of each peak's true `UB @ hkl`.
+    m : ndarray of shape (n_peaks,)
+        Wavelength-independent ray magnitude, `2 * sin(theta)`.
     """
-    q_dir = -np.asarray(kf_ki_dir, dtype=float)
-    return q_dir / np.linalg.norm(q_dir, axis=1, keepdims=True)
+    kf_ki_dir = np.asarray(kf_ki_dir, dtype=float)
+    m = np.linalg.norm(kf_ki_dir, axis=1)
+    qhat = -kf_ki_dir / m[:, None]
+    return qhat, m
 
 
-def candidate_zone_axes(d_hat):
+def enumerate_reciprocal_rays(B, gmag_max, max_hkl_index=None):
     """
-    Build candidate zone-axis directions from every pair of observations.
+    Enumerate candidate integer reflections reachable within a length bound.
 
-    Two Laue reflections are in the same zone (coplanar with the
-    origin) when their directions are both perpendicular to a common
-    real-space zone-axis direction. The cross product of any two
-    observed directions is a candidate for that axis; genuine zones
-    with several members will have many pairs voting for nearly the
-    same candidate.
+    Every non-zero integer triple is included, along with its
+    reciprocal-space vector, length, and direction, provided its length
+    does not exceed `gmag_max`. This must cover the full range of
+    diffraction orders actually observable, which can be large for
+    large unit cells, so no primitive-only reduction is applied here;
+    each integer multiple is a physically distinct reflection at its
+    own wavelength.
 
     Parameters
     ----------
-    d_hat : ndarray of shape (n_peaks, 3)
-        Unit vectors, as returned by `scattering_directions_from_kf_ki`.
+    B : ndarray of shape (3, 3)
+        Reciprocal-lattice basis with a*, b*, c* as columns.
+    gmag_max : float
+        Largest reciprocal-vector length to include, in inverse
+        angstroms.
+    max_hkl_index : int, optional
+        Largest Miller index magnitude to consider. If omitted, it is
+        derived from `gmag_max` and the shortest reciprocal lattice
+        vector, with a small margin.
 
     Returns
     -------
-    z_candidates : ndarray of shape (n_pairs, 3)
-        Unit vectors, one per pair of observed directions whose cross
-        product is well-defined (excludes near-parallel pairs).
+    hkl : ndarray of shape (n_rays, 3)
+        Candidate integer Miller indices.
+    g : ndarray of shape (n_rays, 3)
+        Reciprocal-space vectors, `B @ hkl`.
+    gmag : ndarray of shape (n_rays,)
+        Lengths of `g`, in inverse angstroms.
+    ghat : ndarray of shape (n_rays, 3)
+        Unit directions of `g`.
     """
-    i_idx, j_idx = np.triu_indices(len(d_hat), k=1)
-    cross = np.cross(d_hat[i_idx], d_hat[j_idx])
-    norms = np.linalg.norm(cross, axis=1)
+    if max_hkl_index is None:
+        min_recip_length = np.min(np.linalg.norm(B, axis=0))
+        max_hkl_index = int(np.ceil(gmag_max / min_recip_length)) + 1
 
-    well_defined = norms > 1e-8
-    return cross[well_defined] / norms[well_defined, None]
+    grid = np.arange(-max_hkl_index, max_hkl_index + 1)
+    h, k, l = np.meshgrid(grid, grid, grid, indexing="ij")
+    hkl = np.column_stack([h.ravel(), k.ravel(), l.ravel()])
+    hkl = hkl[np.any(hkl != 0, axis=1)]
+
+    g = (B @ hkl.T).T
+    gmag = np.linalg.norm(g, axis=1)
+
+    within = gmag <= gmag_max
+    hkl, g, gmag = hkl[within], g[within], gmag[within]
+    ghat = g / gmag[:, None]
+
+    return hkl, g, gmag, ghat
 
 
-def zone_axis_scores(d_hat, z_candidates, tol_deg=1.0):
+def score_orientation_from_rays(
+    qhat, m, U, hkl, gmag, ghat, wavelength_range, tol_deg=1.0
+):
     """
-    Score candidate zone axes by how tightly observations hug their plane.
+    Score a trial orientation against every measured ray, gated by wavelength.
 
-    With tens of thousands of candidate axes (one per pair of observed
-    directions) tested against a modest peak count, a hard "within
-    tolerance" count is vulnerable to spurious candidates that
-    accumulate many barely-passing near-boundary matches, occasionally
-    outscoring a true zone with fewer but exactly-aligned members. A
-    Gaussian-weighted density in the deviation from exactly in-plane
-    (`dot == 0`) instead rewards exactness, so noise accumulated near
-    the tolerance boundary contributes far less than genuine, tightly
-    clustered zone members.
+    For each peak and each candidate reflection, the wavelength implied
+    by that assignment is `m_i / gmag_hkl` (see `prepare_peak_rays`);
+    candidates whose implied wavelength falls outside
+    `wavelength_range` are excluded before ranking by angular match, so
+    a peak is never assigned a reflection that would require an
+    unphysical wavelength.
 
     Parameters
     ----------
-    d_hat : ndarray of shape (n_peaks, 3)
-        Unit vectors, as returned by `scattering_directions_from_kf_ki`.
-    z_candidates : ndarray of shape (n_candidates, 3)
-        Candidate zone-axis unit vectors, as returned by
-        `candidate_zone_axes`.
-    tol_deg : float, optional
-        Angular tolerance, in degrees; deviations at this scale are
-        down-weighted well below deviations near zero.
-
-    Returns
-    -------
-    scores : ndarray of shape (n_candidates,)
-        Summed Gaussian weight of observed directions' closeness to
-        each candidate zone's great circle.
-    """
-    sigma = np.sin(np.deg2rad(tol_deg)) / 2.0
-    deviation = d_hat @ z_candidates.T
-    weight = np.exp(-0.5 * (deviation / sigma) ** 2)
-    return weight.sum(axis=0)
-
-
-def find_two_zone_axes(d_hat, tol_deg=1.0, min_separation_deg=15.0):
-    """
-    Find two well-separated, densely populated zone axes.
-
-    Builds candidate zone axes from every pair of observed directions
-    (see `candidate_zone_axes`), scores them by zone occupancy (see
-    `zone_axis_scores`), and picks the best-scoring candidate as the
-    first zone axis, then the highest-scoring remaining candidate at
-    least `min_separation_deg` away from it as the second.
-
-    Parameters
-    ----------
-    d_hat : ndarray of shape (n_peaks, 3)
-        Unit vectors, as returned by `scattering_directions_from_kf_ki`.
-    tol_deg : float, optional
-        Passed to `zone_axis_scores`.
-    min_separation_deg : float, optional
-        Minimum line-to-line angle, in degrees, between the two zone
-        axes.
-
-    Returns
-    -------
-    zone1_hat, zone2_hat : ndarray of shape (3,)
-        Directions of the two chosen zone axes.
-    zone1_score, zone2_score : float
-        Occupancy of the two chosen zone axes.
-    """
-    z_candidates = candidate_zone_axes(d_hat)
-    scores = zone_axis_scores(d_hat, z_candidates, tol_deg=tol_deg)
-
-    i1 = np.argmax(scores)
-    zone1_hat = z_candidates[i1]
-
-    cos_ang = np.abs(z_candidates @ zone1_hat)
-    far_enough = cos_ang <= np.cos(np.deg2rad(min_separation_deg))
-    if not np.any(far_enough):
-        raise ValueError(
-            "No second zone axis found beyond min_separation_deg; "
-            "try a smaller min_separation_deg."
-        )
-
-    i2 = np.arange(len(scores))[far_enough][np.argmax(scores[far_enough])]
-    zone2_hat = z_candidates[i2]
-
-    return zone1_hat, zone2_hat, scores[i1], scores[i2]
-
-
-def rotation_from_two_correspondences(lab1, lab2, crystal1, crystal2):
-    """
-    Build the rotation mapping two crystal-frame directions to two
-    lab-frame directions.
-
-    Constructs a right-handed orthonormal frame from each pair via
-    Gram-Schmidt, then returns the rotation between them. `lab2` and
-    `crystal2` need not be exactly reproduced if the two input pairs'
-    mutual angles don't exactly match; only their component
-    perpendicular to `lab1`/`crystal1` is used.
-
-    Parameters
-    ----------
-    lab1, lab2 : ndarray of shape (3,)
-        Two directions in the lab frame.
-    crystal1, crystal2 : ndarray of shape (3,)
-        Corresponding two directions in the crystal frame.
-
-    Returns
-    -------
-    R : ndarray of shape (3, 3)
-        Rotation matrix such that `R @ crystal1` is parallel to `lab1`
-        and `R @ crystal2` is close to `lab2`.
-    """
-
-    def _frame(e1, e2):
-        e1 = normalize(e1)
-        e2 = normalize(e2 - np.dot(e2, e1) * e1)
-        e3 = np.cross(e1, e2)
-        return np.column_stack([e1, e2, e3])
-
-    M_lab = _frame(lab1, lab2)
-    M_crystal = _frame(crystal1, crystal2)
-
-    return M_lab @ M_crystal.T
-
-
-def match_directions_to_lattice(d_hat, R, B, candidate_hkls):
-    """
-    Match observed directions to the closest candidate lattice direction.
-
-    Parameters
-    ----------
-    d_hat : ndarray of shape (n_peaks, 3)
-        Observed unit directions.
-    R : ndarray of shape (3, 3)
+    qhat : ndarray of shape (n_peaks, 3)
+        Unit vectors, as returned by `prepare_peak_rays`.
+    m : ndarray of shape (n_peaks,)
+        Ray magnitudes, as returned by `prepare_peak_rays`.
+    U : ndarray of shape (3, 3)
         Trial crystal-to-lab rotation.
-    B : ndarray of shape (3, 3)
-        Reciprocal-lattice basis with a*, b*, c* as columns.
-    candidate_hkls : ndarray of shape (n_directions, 3)
-        Candidate integer Miller index directions, as returned by
-        `enumerate_reciprocal_directions`.
-
-    Returns
-    -------
-    best_hkl : ndarray of shape (n_peaks, 3)
-        Best-matching candidate Miller indices for each peak.
-    best_cos : ndarray of shape (n_peaks,)
-        Cosine of the angle between each peak's observed direction and
-        its best-matching candidate direction.
-    """
-    lattice_dirs = (R @ B @ candidate_hkls.T).T
-    lattice_dirs = lattice_dirs / np.linalg.norm(
-        lattice_dirs, axis=1, keepdims=True
-    )
-
-    cos_ang = d_hat @ lattice_dirs.T
-    best_idx = np.argmax(cos_ang, axis=1)
-    rows = np.arange(len(d_hat))
-
-    return candidate_hkls[best_idx], cos_ang[rows, best_idx]
-
-
-def score_orientation(d_hat, R, B, candidate_hkls, tol_deg=1.0):
-    """
-    Score a trial orientation by how many observed directions it explains.
-
-    Parameters
-    ----------
-    d_hat : ndarray of shape (n_peaks, 3)
-        Observed unit directions.
-    R : ndarray of shape (3, 3)
-        Trial crystal-to-lab rotation.
-    B : ndarray of shape (3, 3)
-        Reciprocal-lattice basis with a*, b*, c* as columns.
-    candidate_hkls : ndarray of shape (n_directions, 3)
-        Candidate integer Miller index directions, as returned by
-        `enumerate_reciprocal_directions`.
-    tol_deg : float, optional
-        Angular tolerance, in degrees, for a match to count.
-
-    Returns
-    -------
-    n_matched : int
-        Number of peaks matched within `tol_deg`.
-    best_hkl : ndarray of shape (n_peaks, 3)
-        Best-matching candidate Miller indices for each peak.
-    best_cos : ndarray of shape (n_peaks,)
-        Cosine of the angle to each peak's best-matching direction.
-    """
-    best_hkl, best_cos = match_directions_to_lattice(
-        d_hat, R, B, candidate_hkls
-    )
-    n_matched = int(np.sum(best_cos >= np.cos(np.deg2rad(tol_deg))))
-    return n_matched, best_hkl, best_cos
-
-
-def index_zone_pair(
-    d_hat,
-    zone1_hat,
-    zone2_hat,
-    A,
-    B,
-    max_zone_index,
-    max_hkl_index,
-    zone_angle_tol_deg=1.0,
-    match_tol_deg=1.0,
-    max_candidate_pairs=300,
-):
-    """
-    Find the orientation best explaining two observed zone axes.
-
-    Enumerates candidate integer real-space directions up to
-    `max_zone_index`, finds pairs whose crystal-frame mutual angle
-    matches the observed angle between `zone1_hat` and `zone2_hat`,
-    builds the rotation implied by each such pair (see
-    `rotation_from_two_correspondences`), and keeps whichever rotation
-    explains the most observed reciprocal-space peak directions
-    overall (see `score_orientation`, using indices up to
-    `max_hkl_index`).
-
-    Real-space zone-axis indices are almost always small integers
-    regardless of unit cell size, while the observed diffraction
-    indices can be large for large unit cells; keeping `max_zone_index`
-    small is what keeps the pairwise angle comparison below tractable,
-    independently of how large `max_hkl_index` needs to be for scoring.
-
-    Parameters
-    ----------
-    d_hat : ndarray of shape (n_peaks, 3)
-        Observed unit directions (reciprocal-space).
-    zone1_hat, zone2_hat : ndarray of shape (3,)
-        Directions of the two zone axes to index, as returned by
-        `find_two_zone_axes`.
-    A : ndarray of shape (3, 3)
-        Direct-lattice basis with a, b, c as columns.
-    B : ndarray of shape (3, 3)
-        Reciprocal-lattice basis with a*, b*, c* as columns.
-    max_zone_index : int
-        Largest index magnitude to consider for either zone axis.
-    max_hkl_index : int
-        Largest Miller index magnitude to consider when scoring a
-        candidate rotation against the observed peaks.
-    zone_angle_tol_deg : float, optional
-        Tolerance, in degrees, for a candidate pair's crystal-frame
-        angle to match the observed angle between the two zone axes.
-    match_tol_deg : float, optional
-        Passed to `score_orientation` for ranking candidate rotations.
-    max_candidate_pairs : int, optional
-        Largest number of candidate index pairs to score. Symmetric
-        crystals can have very many pairs sharing the same
-        crystal-frame angle (e.g. cubic point-group equivalents); only
-        the closest-matching pairs are tried, which bounds the search
-        cost without favoring any one symmetry-equivalent solution.
-
-    Returns
-    -------
-    R : ndarray of shape (3, 3)
-        Best-scoring crystal-to-lab rotation.
-    uvw1, uvw2 : ndarray of shape (3,)
-        Real-space indices assigned to `zone1_hat` and `zone2_hat`.
-    n_matched : int
-        Number of peaks matched by the best rotation.
-    """
-    candidate_uvw = enumerate_reciprocal_directions(max_zone_index)
-    real_dirs = (A @ candidate_uvw.T).T
-    real_dirs = real_dirs / np.linalg.norm(real_dirs, axis=1, keepdims=True)
-
-    angle_obs = np.arccos(np.clip(np.dot(zone1_hat, zone2_hat), -1.0, 1.0))
-
-    cos_crystal = np.clip(real_dirs @ real_dirs.T, -1.0, 1.0)
-    angle_crystal = np.arccos(cos_crystal)
-
-    angle_tol = np.deg2rad(zone_angle_tol_deg)
-    angle_dev = np.abs(angle_crystal - angle_obs)
-    i_idx, j_idx = np.nonzero(angle_dev <= angle_tol)
-    same_direction = i_idx == j_idx
-    i_idx = i_idx[~same_direction]
-    j_idx = j_idx[~same_direction]
-
-    if len(i_idx) == 0:
-        raise ValueError(
-            "No candidate index pair matches the observed zone-axis "
-            "angle; try a larger max_zone_index or zone_angle_tol_deg."
-        )
-
-    # Symmetric crystals can have very many candidate pairs sharing the
-    # same crystal-frame angle (e.g. cubic point-group equivalents);
-    # trying only the closest-matching ones bounds the search cost
-    # without favoring any one symmetry-equivalent solution over another.
-    if len(i_idx) > max_candidate_pairs:
-        order = np.argsort(angle_dev[i_idx, j_idx])[:max_candidate_pairs]
-        i_idx, j_idx = i_idx[order], j_idx[order]
-
-    candidate_hkls = enumerate_reciprocal_directions(max_hkl_index)
-
-    best = None
-    for i, j in zip(i_idx, j_idx):
-        R = rotation_from_two_correspondences(
-            zone1_hat, zone2_hat, real_dirs[i], real_dirs[j]
-        )
-        n_matched, _, _ = score_orientation(
-            d_hat, R, B, candidate_hkls, tol_deg=match_tol_deg
-        )
-        if best is None or n_matched > best[0]:
-            best = (n_matched, R, candidate_uvw[i], candidate_uvw[j])
-
-    n_matched, R, uvw1, uvw2 = best
-    return R, uvw1, uvw2, n_matched
-
-
-def refine_orientation(d_hat, R0, B, candidate_hkls, tol_deg=1.0):
-    """
-    Refine a trial orientation using all matched peak directions.
-
-    Matches every observed direction to its closest candidate lattice
-    direction under `R0`, then finds the least-squares rotation (via
-    the Kabsch algorithm) mapping the matched crystal directions onto
-    the observed directions.
-
-    Parameters
-    ----------
-    d_hat : ndarray of shape (n_peaks, 3)
-        Observed unit directions.
-    R0 : ndarray of shape (3, 3)
-        Initial crystal-to-lab rotation.
-    B : ndarray of shape (3, 3)
-        Reciprocal-lattice basis with a*, b*, c* as columns.
-    candidate_hkls : ndarray of shape (n_directions, 3)
-        Candidate integer Miller index directions, as returned by
-        `enumerate_reciprocal_directions`.
-    tol_deg : float, optional
-        Angular tolerance, in degrees, for a match to be used in the
-        refinement.
-
-    Returns
-    -------
-    R : ndarray of shape (3, 3)
-        Refined crystal-to-lab rotation.
-    n_matched : int
-        Number of peaks used in the refinement.
-    """
-    best_hkl, best_cos = match_directions_to_lattice(
-        d_hat, R0, B, candidate_hkls
-    )
-    matched = best_cos >= np.cos(np.deg2rad(tol_deg))
-
-    if np.sum(matched) < 2:
-        return R0, int(np.sum(matched))
-
-    c_dirs = (B @ best_hkl[matched].T).T
-    c_dirs = c_dirs / np.linalg.norm(c_dirs, axis=1, keepdims=True)
-
-    H = c_dirs.T @ d_hat[matched]
-    U, _, Vt = np.linalg.svd(H)
-    D = np.diag([1.0, 1.0, np.linalg.det(Vt.T @ U.T)])
-    R = Vt.T @ D @ U.T
-
-    return R, int(np.sum(matched))
-
-
-def find_orientation_from_kf_ki(
-    kf_ki_dir,
-    A,
-    B,
-    max_zone_index,
-    max_hkl_index,
-    zone_tol_deg=1.0,
-    min_zone_separation_deg=15.0,
-    zone_angle_tol_deg=1.0,
-    match_tol_deg=1.0,
-    max_candidate_pairs=300,
-):
-    """
-    Find the crystal orientation from Laue `kf - ki` vectors alone.
-
-    Locates two well-separated zone axes in the observed directions
-    (see `find_two_zone_axes`), indexes them against the known lattice
-    metric (see `index_zone_pair`), then refines the resulting rotation
-    against all matched peaks (see `refine_orientation`). Wavelength is
-    never used — orientation is determined purely from directions,
-    since a Laue reflection's direction is independent of wavelength.
-
-    Parameters
-    ----------
-    kf_ki_dir : ndarray of shape (n_peaks, 3)
-        Raw `kf - ki` vectors, as returned by
-        `extract_kf_ki_directions`.
-    A : ndarray of shape (3, 3)
-        Direct-lattice basis with a, b, c as columns.
-    B : ndarray of shape (3, 3)
-        Reciprocal-lattice basis with a*, b*, c* as columns.
-    max_zone_index : int
-        Largest index magnitude to consider when indexing the two
-        zone axes. Real-space zone axes are almost always small
-        integers regardless of unit cell size, so this can stay small.
-    max_hkl_index : int
-        Largest Miller index magnitude to consider when scoring
-        candidate rotations and refining the final one. Must cover the
-        actual range of observed diffraction orders, which can be
-        large for large unit cells.
-    zone_tol_deg : float, optional
-        Passed to `find_two_zone_axes`.
-    min_zone_separation_deg : float, optional
-        Passed to `find_two_zone_axes`.
-    zone_angle_tol_deg : float, optional
-        Passed to `index_zone_pair`.
-    match_tol_deg : float, optional
-        Angular tolerance, in degrees, used both to rank candidate
-        rotations and to select peaks for the refinement step.
-    max_candidate_pairs : int, optional
-        Passed to `index_zone_pair`.
-
-    Returns
-    -------
-    R : ndarray of shape (3, 3)
-        Refined crystal-to-lab rotation.
-    info : dict
-        Diagnostics with keys "zone1_uvw", "zone2_uvw",
-        "n_matched_coarse", and "n_matched_refined".
-    """
-    d_hat = scattering_directions_from_kf_ki(kf_ki_dir)
-
-    zone1_hat, zone2_hat, _, _ = find_two_zone_axes(
-        d_hat,
-        tol_deg=zone_tol_deg,
-        min_separation_deg=min_zone_separation_deg,
-    )
-
-    R0, uvw1, uvw2, n_matched_coarse = index_zone_pair(
-        d_hat,
-        zone1_hat,
-        zone2_hat,
-        A,
-        B,
-        max_zone_index,
-        max_hkl_index,
-        zone_angle_tol_deg=zone_angle_tol_deg,
-        match_tol_deg=match_tol_deg,
-        max_candidate_pairs=max_candidate_pairs,
-    )
-
-    candidate_hkls = enumerate_reciprocal_directions(max_hkl_index)
-    R, n_matched_refined = refine_orientation(
-        d_hat, R0, B, candidate_hkls, tol_deg=match_tol_deg
-    )
-
-    return R, {
-        "zone1_uvw": uvw1,
-        "zone2_uvw": uvw2,
-        "n_matched_coarse": n_matched_coarse,
-        "n_matched_refined": n_matched_refined,
-    }
-
-
-def resolve_hkl_and_wavelength(
-    kf_ki_dir,
-    UB,
-    candidate_hkls,
-    wavelength_range,
-    tol_deg=1.0,
-    max_harmonic=20,
-):
-    """
-    Resolve each peak's Miller indices and wavelength from a known UB.
-
-    For each peak, finds the primitive candidate direction (see
-    `enumerate_reciprocal_directions`) that best matches its observed
-    direction. A Laue reflection's direction is shared by every integer
-    multiple of that primitive vector — different harmonics simply
-    diffract at different wavelengths — so every order up to
-    `max_harmonic` is checked, and the lowest order whose implied
-    wavelength falls within `wavelength_range` is assigned. A peak is
-    left unindexed if the best direction match falls outside `tol_deg`
-    or no harmonic's implied wavelength falls in range.
-
-    Parameters
-    ----------
-    kf_ki_dir : ndarray of shape (n_peaks, 3)
-        Raw `kf - ki` vectors, as returned by
-        `extract_kf_ki_directions`.
-    UB : ndarray of shape (3, 3)
-        UB matrix indexed on the conventional cell.
-    candidate_hkls : ndarray of shape (n_directions, 3)
-        Candidate primitive integer Miller index directions, as
-        returned by `enumerate_reciprocal_directions`.
+    hkl : ndarray of shape (n_rays, 3)
+        Candidate integer Miller indices, as returned by
+        `enumerate_reciprocal_rays`.
+    gmag : ndarray of shape (n_rays,)
+        Candidate reciprocal-vector lengths, as returned by
+        `enumerate_reciprocal_rays`.
+    ghat : ndarray of shape (n_rays, 3)
+        Candidate reciprocal-vector directions, as returned by
+        `enumerate_reciprocal_rays`.
     wavelength_range : tuple of float
         `(wavelength_min, wavelength_max)`, in angstroms.
     tol_deg : float, optional
-        Angular tolerance, in degrees, for a direction match to be
-        accepted.
-    max_harmonic : int, optional
-        Largest integer multiple of the matched primitive direction to
-        consider as a candidate order.
+        Angular tolerance, in degrees, for a match to be accepted.
 
     Returns
     -------
-    hkl : ndarray of shape (n_peaks, 3)
+    hkl_assigned : ndarray of shape (n_peaks, 3)
         Assigned Miller indices; `(0, 0, 0)` where unindexed.
     wavelength : ndarray of shape (n_peaks,)
         Resolved wavelength, in angstroms; `inf` where unindexed.
     indexed : ndarray of bool, shape (n_peaks,)
         True where a peak was successfully indexed.
+    info : dict
+        Diagnostics with keys "n_indexed", "indexed_fraction",
+        "n_unique_hkl", "median_angular_error_deg", and
+        "rms_angular_error_deg".
     """
-    kf_ki_dir = np.asarray(kf_ki_dir, dtype=float)
-    d_hat = scattering_directions_from_kf_ki(kf_ki_dir)
+    wl_min, wl_max = wavelength_range
 
-    lattice_vecs = (UB @ candidate_hkls.T).T
-    lattice_lengths = np.linalg.norm(lattice_vecs, axis=1)
-    lattice_dirs = lattice_vecs / lattice_lengths[:, None]
+    qhat_pred = (U @ ghat.T).T
+    lam = m[:, None] / gmag[None, :]
+    wavelength_ok = (lam >= wl_min) & (lam <= wl_max)
 
-    cos_ang = d_hat @ lattice_dirs.T
+    cos_ang = qhat @ qhat_pred.T
+    cos_ang = np.where(wavelength_ok, cos_ang, -2.0)
+
     best_idx = np.argmax(cos_ang, axis=1)
-    rows = np.arange(len(d_hat))
+    rows = np.arange(len(qhat))
     best_cos = cos_ang[rows, best_idx]
 
-    kf_ki_len = np.linalg.norm(kf_ki_dir, axis=1)
-    wavelength_order_1 = kf_ki_len / lattice_lengths[best_idx]
+    indexed = best_cos >= np.cos(np.deg2rad(tol_deg))
+
+    hkl_assigned = np.where(indexed[:, None], hkl[best_idx], 0).astype(float)
+    wavelength = np.where(indexed, lam[rows, best_idx], np.inf)
+
+    n_indexed = int(np.sum(indexed))
+    if n_indexed > 0:
+        theta_deg = np.rad2deg(
+            np.arccos(np.clip(best_cos[indexed], -1.0, 1.0))
+        )
+        n_unique_hkl = len(np.unique(hkl_assigned[indexed], axis=0))
+        median_angular_error_deg = float(np.median(theta_deg))
+        rms_angular_error_deg = float(np.sqrt(np.mean(theta_deg**2)))
+    else:
+        n_unique_hkl = 0
+        median_angular_error_deg = np.inf
+        rms_angular_error_deg = np.inf
+
+    info = {
+        "n_indexed": n_indexed,
+        "indexed_fraction": n_indexed / len(qhat),
+        "n_unique_hkl": n_unique_hkl,
+        "median_angular_error_deg": median_angular_error_deg,
+        "rms_angular_error_deg": rms_angular_error_deg,
+    }
+
+    return hkl_assigned, wavelength, indexed, info
+
+
+def refine_orientation_from_rays(
+    qhat, m, U0, B, hkl, gmag, ghat, wavelength_range, tol_deg=1.0, max_iter=10
+):
+    """
+    Iteratively refine a trial orientation by reassignment and refitting.
+
+    Alternates between assigning each peak to its best allowed
+    reflection under the current orientation (see
+    `score_orientation_from_rays`) and refitting the rotation from
+    those assignments (via the Kabsch algorithm), stopping once the
+    assignment and rotation both stabilize.
+
+    Parameters
+    ----------
+    qhat : ndarray of shape (n_peaks, 3)
+        Unit vectors, as returned by `prepare_peak_rays`.
+    m : ndarray of shape (n_peaks,)
+        Ray magnitudes, as returned by `prepare_peak_rays`.
+    U0 : ndarray of shape (3, 3)
+        Initial crystal-to-lab rotation.
+    B : ndarray of shape (3, 3)
+        Reciprocal-lattice basis with a*, b*, c* as columns.
+    hkl, gmag, ghat : ndarray
+        Candidate reflections, as returned by
+        `enumerate_reciprocal_rays`.
+    wavelength_range : tuple of float
+        `(wavelength_min, wavelength_max)`, in angstroms.
+    tol_deg : float, optional
+        Passed to `score_orientation_from_rays`.
+    max_iter : int, optional
+        Maximum number of reassign-refit iterations.
+
+    Returns
+    -------
+    U : ndarray of shape (3, 3)
+        Refined crystal-to-lab rotation.
+    hkl_assigned : ndarray of shape (n_peaks, 3)
+        Assigned Miller indices; `(0, 0, 0)` where unindexed.
+    wavelength : ndarray of shape (n_peaks,)
+        Resolved wavelength, in angstroms; `inf` where unindexed.
+    indexed : ndarray of bool, shape (n_peaks,)
+        True where a peak was successfully indexed.
+    info : dict
+        Diagnostics, as returned by `score_orientation_from_rays`.
+    """
+    U = U0.copy()
+    previous_hkl = None
+
+    for _ in range(max_iter):
+        hkl_assigned, wavelength, indexed, info = score_orientation_from_rays(
+            qhat, m, U, hkl, gmag, ghat, wavelength_range, tol_deg=tol_deg
+        )
+
+        if info["n_indexed"] < 2:
+            break
+
+        ghat_assigned = (B @ hkl_assigned[indexed].T).T
+        ghat_assigned = ghat_assigned / np.linalg.norm(
+            ghat_assigned, axis=1, keepdims=True
+        )
+
+        H = ghat_assigned.T @ qhat[indexed]
+        P, _, Vt = np.linalg.svd(H)
+        D = np.diag([1.0, 1.0, np.linalg.det(Vt.T @ P.T)])
+        U_new = Vt.T @ D @ P.T
+
+        converged = previous_hkl is not None and np.array_equal(
+            hkl_assigned, previous_hkl
+        )
+        previous_hkl = hkl_assigned
+        U = U_new
+
+        if converged:
+            break
+
+    hkl_assigned, wavelength, indexed, info = score_orientation_from_rays(
+        qhat, m, U, hkl, gmag, ghat, wavelength_range, tol_deg=tol_deg
+    )
+    return U, hkl_assigned, wavelength, indexed, info
+
+
+def build_omega_interpolator(n_samples=4096):
+    """
+    Build the inverse-CDF map from a uniform [0, 1] draw to a rotation angle.
+
+    Sampling a rotation uniformly over SO(3) via a uniformly-distributed
+    axis and an independently-uniform [0, 1] draw for the angle would
+    NOT give a uniform (Haar) measure over the rotation group: the
+    angle must instead be drawn with density `(1 - cos(omega)) / pi` on
+    `[0, pi]` to account for the group manifold's volume element. This
+    builds the inverse of that distribution's CDF, `(omega -
+    sin(omega)) / pi`, via linear interpolation, so a uniform [0, 1]
+    draw can be mapped to a correctly-distributed angle.
+
+    Parameters
+    ----------
+    n_samples : int, optional
+        Number of interpolation points spanning `[0, pi]`.
+
+    Returns
+    -------
+    omega_interp : callable
+        Maps a uniform [0, 1] value (or array of values) to a rotation
+        angle in `[0, pi]`, in radians.
+    """
+    omega = np.linspace(0.0, np.pi, n_samples)
+    cdf = (omega - np.sin(omega)) / np.pi
+    return interp1d(cdf, omega)
+
+
+def orientation_from_unit_cube(u, omega_interp):
+    """
+    Map a point in the unit cube to a uniformly-distributed rotation.
+
+    The three coordinates parametrize, respectively: the polar angle
+    of the rotation axis (via `arccos(1 - 2 * u0)`, uniform on the
+    sphere), the azimuthal angle of the rotation axis (`2 * pi * u1`),
+    and the rotation angle (via the inverse-CDF map from
+    `build_omega_interpolator`, uniform under the SO(3) Haar measure).
+    This gives `differential_evolution` a bounded, uniformly-weighted
+    search space that still covers every possible orientation.
+
+    Parameters
+    ----------
+    u : ndarray of shape (..., 3)
+        Points in `[0, 1]^3`.
+    omega_interp : callable
+        As returned by `build_omega_interpolator`.
+
+    Returns
+    -------
+    U : ndarray of shape (..., 3, 3)
+        Proper rotation matrices, one per leading index of `u`.
+    """
+    u = np.asarray(u, dtype=float)
+    u0, u1, u2 = u[..., 0], u[..., 1], u[..., 2]
+
+    theta = np.arccos(np.clip(1.0 - 2.0 * u0, -1.0, 1.0))
+    phi = 2.0 * np.pi * u1
+    omega = omega_interp(u2)
+
+    axis = np.stack(
+        [
+            np.sin(theta) * np.cos(phi),
+            np.sin(theta) * np.sin(phi),
+            np.cos(theta),
+        ],
+        axis=-1,
+    )
+    rotvec = omega[..., None] * axis
+    flat_rotvec = rotvec.reshape(-1, 3)
+    U = Rotation.from_rotvec(flat_rotvec).as_matrix()
+    return U.reshape(rotvec.shape[:-1] + (3, 3))
+
+
+def laue_orientation_cost(
+    x, kf_ki_dir, B, wavelength_range, omega_interp, n_wavelength_samples=100
+):
+    """
+    Smooth, wavelength-marginalized misfit of a trial orientation.
+
+    For each peak, the true wavelength is unknown, so for a trial
+    orientation this scans a grid of candidate wavelengths spanning
+    `wavelength_range`, converts each `(peak, wavelength)` pair to a
+    fractional Miller index, and measures its distance to the nearest
+    integer with the smooth proxy `sin(pi * hkl) / pi` (periodic,
+    zero at integers, avoiding the discontinuity of rounding). That
+    residual is transformed through the trial `UB` into Cartesian
+    reciprocal space before taking its norm, so errors along different
+    crystallographic directions are weighted by the actual reciprocal
+    metric rather than treated as equally "sized" in fractional-index
+    units. Each peak then contributes its best (minimum) distance over
+    the wavelength grid — a peak genuinely explained by this
+    orientation, at any in-band wavelength, contributes near zero. The
+    total cost is the sum over peaks, suitable as a
+    `differential_evolution` objective (lower is better).
+
+    Accepts either scipy's vectorized calling convention (`x` of shape
+    `(3, n_trials)`, one column per population member) or a single
+    trial (`x` of shape `(3,)`).
+
+    Parameters
+    ----------
+    x : ndarray of shape (3,) or (3, n_trials)
+        Unit-cube orientation parameters (see
+        `orientation_from_unit_cube`).
+    kf_ki_dir : ndarray of shape (n_peaks, 3)
+        Raw `kf - ki` vectors, as returned by
+        `FindUBFromLauePeaks._extract_kf_ki_directions`.
+    B : ndarray of shape (3, 3)
+        Reciprocal-lattice basis with a*, b*, c* as columns.
+    wavelength_range : tuple of float
+        `(wavelength_min, wavelength_max)`, in angstroms.
+    omega_interp : callable
+        As returned by `build_omega_interpolator`.
+    n_wavelength_samples : int, optional
+        Number of candidate wavelengths sampled per peak.
+
+    Returns
+    -------
+    cost : float or ndarray of shape (n_trials,)
+        Total misfit, matching the leading shape of `x`.
+    """
+    x = np.asarray(x, dtype=float)
+    scalar = x.ndim == 1
+    u = x[None, :] if scalar else x.T
+
+    U = orientation_from_unit_cube(u, omega_interp)
+    UB = U @ B[None, :, :]
+    UB_inv = np.linalg.inv(UB)
+
+    hkl_lambda = -np.einsum("sij,pj->spi", UB_inv, kf_ki_dir)
 
     wl_min, wl_max = wavelength_range
-    orders = np.arange(1, max_harmonic + 1)
-    wavelength_by_order = wavelength_order_1[:, None] / orders[None, :]
-    in_range = (wavelength_by_order >= wl_min) & (
-        wavelength_by_order <= wl_max
+    wavelengths = np.linspace(wl_min, wl_max, n_wavelength_samples)
+
+    hkl = hkl_lambda[:, :, None, :] / wavelengths[None, None, :, None]
+    diff = np.sin(np.pi * hkl) / np.pi
+    dist_vec = np.einsum("sij,spwj->spwi", UB, diff)
+    dist2 = np.sum(dist_vec**2, axis=-1)
+
+    cost = np.sum(np.min(dist2, axis=-1), axis=-1)
+    return cost[0] if scalar else cost
+
+
+def fit_orientation_differential_evolution(
+    kf_ki_dir,
+    B,
+    wavelength_range,
+    n_wavelength_samples=60,
+    popsize=60,
+    maxiter=200,
+    mutation=(0.5, 1.5),
+    recombination=0.7,
+    tol=1e-7,
+    rng=None,
+):
+    """
+    Globally search for the crystal orientation via differential evolution.
+
+    Minimizes `laue_orientation_cost` over the unit cube (see
+    `orientation_from_unit_cube`) using `scipy.optimize.
+    differential_evolution` in vectorized mode, so every population
+    member is scored in a single batched call per generation.
+
+    Parameters
+    ----------
+    kf_ki_dir : ndarray of shape (n_peaks, 3)
+        Raw `kf - ki` vectors, as returned by
+        `FindUBFromLauePeaks._extract_kf_ki_directions`.
+    B : ndarray of shape (3, 3)
+        Reciprocal-lattice basis with a*, b*, c* as columns.
+    wavelength_range : tuple of float
+        `(wavelength_min, wavelength_max)`, in angstroms.
+    n_wavelength_samples : int, optional
+        Passed to `laue_orientation_cost`.
+    popsize, maxiter, mutation, recombination, tol : optional
+        Passed to `scipy.optimize.differential_evolution`.
+    rng : numpy.random.Generator, optional
+        Random number generator for the optimizer.
+
+    Returns
+    -------
+    U : ndarray of shape (3, 3)
+        Best-found crystal-to-lab rotation.
+    result : scipy.optimize.OptimizeResult
+        Raw optimizer result, for diagnostics (`result.fun`,
+        `result.nit`, `result.nfev`).
+    """
+    omega_interp = build_omega_interpolator()
+
+    def objective(x):
+        return laue_orientation_cost(
+            x,
+            kf_ki_dir,
+            B,
+            wavelength_range,
+            omega_interp,
+            n_wavelength_samples=n_wavelength_samples,
+        )
+
+    result = differential_evolution(
+        objective,
+        bounds=[(0.0, 1.0)] * 3,
+        popsize=popsize,
+        maxiter=maxiter,
+        tol=tol,
+        mutation=mutation,
+        recombination=recombination,
+        polish=False,
+        vectorized=True,
+        rng=rng,
     )
 
-    has_valid_order = np.any(in_range, axis=1)
-    best_order_idx = np.argmax(in_range, axis=1)
-    best_order = orders[best_order_idx]
+    U = orientation_from_unit_cube(result.x, omega_interp)
+    return U, result
 
-    direction_ok = best_cos >= np.cos(np.deg2rad(tol_deg))
-    indexed = direction_ok & has_valid_order
 
-    wavelength = wavelength_by_order[rows, best_order_idx]
-    hkl = candidate_hkls[best_idx] * best_order[:, None]
+def _run_single_restart(
+    kf_ki_dir,
+    B,
+    wavelength_range,
+    qhat,
+    m,
+    hkl,
+    gmag,
+    ghat,
+    n_wavelength_samples,
+    popsize,
+    maxiter,
+    match_tol_deg,
+    max_refine_iter,
+    seed,
+):
+    """
+    Run one differential-evolution restart plus polish, given a seed.
 
-    hkl = np.where(indexed[:, None], hkl, 0).astype(float)
-    wavelength = np.where(indexed, wavelength, np.inf)
+    A module-level (picklable) helper so `estimate_orientation_from_rays`
+    can dispatch independent restarts to a `ProcessPoolExecutor` — each
+    restart shares no mutable state with any other, so this is
+    embarrassingly parallel.
 
-    return hkl, wavelength, indexed
+    Parameters
+    ----------
+    kf_ki_dir, B, wavelength_range, qhat, m, hkl, gmag, ghat :
+        As used by `fit_orientation_differential_evolution` and
+        `refine_orientation_from_rays`.
+    n_wavelength_samples, popsize, maxiter, match_tol_deg,
+    max_refine_iter :
+        Passed through to those functions.
+    seed : int
+        Seeds this restart's random number generator.
+
+    Returns
+    -------
+    candidate : dict
+        Keys "U", "UB", "hkl", "wavelength", "indexed", "de_cost",
+        "de_iterations", and the diagnostics from
+        `score_orientation_from_rays`.
+    """
+    rng = np.random.default_rng(seed)
+    U0, de_result = fit_orientation_differential_evolution(
+        kf_ki_dir,
+        B,
+        wavelength_range,
+        n_wavelength_samples=n_wavelength_samples,
+        popsize=popsize,
+        maxiter=maxiter,
+        rng=rng,
+    )
+
+    U, hkl_assigned, wavelength, indexed, info = refine_orientation_from_rays(
+        qhat,
+        m,
+        U0,
+        B,
+        hkl,
+        gmag,
+        ghat,
+        wavelength_range,
+        tol_deg=match_tol_deg,
+        max_iter=max_refine_iter,
+    )
+
+    return {
+        "U": U,
+        "UB": U @ B,
+        "hkl": hkl_assigned,
+        "wavelength": wavelength,
+        "indexed": indexed,
+        "de_cost": float(de_result.fun),
+        "de_iterations": int(de_result.nit),
+        **info,
+    }
+
+
+def estimate_orientation_from_rays(
+    kf_ki_dir,
+    A,
+    wavelength_range,
+    n_restarts=5,
+    n_wavelength_samples=60,
+    popsize=60,
+    maxiter=200,
+    match_tol_deg=1.0,
+    max_refine_iter=10,
+    rng=None,
+    n_workers=None,
+):
+    """
+    Estimate crystal orientation from Laue `kf - ki` vectors alone.
+
+    Each restart runs an independent global search over the full
+    rotation group via `fit_orientation_differential_evolution`
+    (following the wavelength-marginalized cost in
+    `laue_orientation_cost`), then polishes that estimate by iterative
+    reassignment against the full, wavelength-gated set of candidate
+    reflections (`refine_orientation_from_rays`).
+
+    Differential evolution's cost landscape can have a spurious
+    attractor competing with the true orientation — most pronounced
+    for low-symmetry (e.g. triclinic) cells, where no lattice symmetry
+    redundancy helps distinguish them — that a single restart
+    occasionally converges to instead. The iterative polish step
+    reliably completes a restart that is already close to the true
+    orientation, but cannot rescue one that converged to a genuinely
+    different attractor; running several independent restarts and
+    keeping whichever gives the most peaks indexed (see
+    `score_orientation_from_rays`) is what actually distinguishes a
+    true convergence from a spurious one. Higher-symmetry cells
+    typically converge on the first restart; harder, low-symmetry
+    cells may need more (see `n_restarts`).
+
+    Parameters
+    ----------
+    kf_ki_dir : ndarray of shape (n_peaks, 3)
+        Raw `kf - ki` vectors, as returned by
+        `FindUBFromLauePeaks._extract_kf_ki_directions`.
+    A : ndarray of shape (3, 3)
+        Direct-lattice basis with a, b, c as columns.
+    wavelength_range : tuple of float
+        `(wavelength_min, wavelength_max)`, in angstroms.
+    n_restarts : int, optional
+        Number of independent differential-evolution searches to run;
+        the best-indexing result across all restarts is kept.
+    n_wavelength_samples : int, optional
+        Passed to `fit_orientation_differential_evolution`.
+    popsize, maxiter : optional
+        Passed to `fit_orientation_differential_evolution`.
+    match_tol_deg : float, optional
+        Angular tolerance, in degrees, used to rank candidate
+        rotations and gate peak assignment.
+    max_refine_iter : int, optional
+        Passed to `refine_orientation_from_rays`.
+    rng : numpy.random.Generator, optional
+        Random number generator; used to derive one independent seed
+        per restart.
+    n_workers : int, optional
+        Number of restarts to run concurrently, via
+        `concurrent.futures.ProcessPoolExecutor`. Restarts share no
+        mutable state, so this parallelizes without changing results.
+        Defaults to `os.cpu_count()`.
+
+    Returns
+    -------
+    best : dict
+        The best-indexing orientation across all restarts, with keys
+        "U", "UB", "hkl", "wavelength", "indexed", "de_cost",
+        "de_iterations", and the diagnostics from
+        `score_orientation_from_rays`.
+    """
+    if rng is None:
+        rng = np.random.default_rng(1234)
+
+    B = reciprocal_basis_from_direct_basis(A)
+    qhat, m = prepare_peak_rays(kf_ki_dir)
+
+    wl_min, _ = wavelength_range
+    gmag_max = m.max() / wl_min
+    hkl, _, gmag, ghat = enumerate_reciprocal_rays(B, gmag_max)
+
+    seeds = rng.integers(0, 2**31 - 1, size=n_restarts)
+
+    with ProcessPoolExecutor(max_workers=n_workers) as executor:
+        futures = [
+            executor.submit(
+                _run_single_restart,
+                kf_ki_dir,
+                B,
+                wavelength_range,
+                qhat,
+                m,
+                hkl,
+                gmag,
+                ghat,
+                n_wavelength_samples,
+                popsize,
+                maxiter,
+                match_tol_deg,
+                max_refine_iter,
+                int(seed),
+            )
+            for seed in seeds
+        ]
+        candidates = [future.result() for future in futures]
+
+    candidates.sort(
+        key=lambda cand: (
+            cand["n_indexed"],
+            -cand["rms_angular_error_deg"],
+        ),
+        reverse=True,
+    )
+    return candidates[0]
 
 
 class FindUBFromLauePeaks(PythonAlgorithm):
@@ -653,13 +702,15 @@ class FindUBFromLauePeaks(PythonAlgorithm):
     Determine a UB matrix from unindexed Laue peaks and known
     conventional-cell lattice parameters.
 
-    Finds two well-separated zone axes directly from peak scattering
-    directions (which are independent of the unknown per-peak
-    wavelength), indexes them against the known lattice metric, and
-    refines the resulting orientation using every peak it explains.
-    Once a UB is found, each peak's Miller indices and wavelength are
-    resolved directly from its scattering direction and the
-    wavelength band, with no optimization required.
+    Searches for the crystal orientation via differential evolution
+    over the full rotation group, scored by a wavelength-marginalized
+    misfit against the observed scattering directions (the per-peak
+    wavelength is unknown, so every candidate wavelength within the
+    supplied band is considered), then polishes and finalizes each
+    peak's Miller indices and wavelength together by iterative
+    reassignment against the full set of candidate reflections. See
+    `estimate_orientation_from_rays` for why several independent
+    restarts are used.
     """
 
     def category(self):
@@ -701,14 +752,19 @@ class FindUBFromLauePeaks(PythonAlgorithm):
         self.declareProperty("WavelengthMin", 0.5, wavelength_positive)
         self.declareProperty("WavelengthMax", 4.0, wavelength_positive)
 
-        self.declareProperty("MaxZoneIndex", 8, IntBoundedValidator(lower=1))
-        self.declareProperty("MaxHklIndex", 25, IntBoundedValidator(lower=1))
-        self.declareProperty("ZoneAngleTolerance", 1.0)
-        self.declareProperty("MinZoneSeparation", 15.0)
-        self.declareProperty("IndexingTolerance", 1.0)
+        self.declareProperty("NumRestarts", 5, IntBoundedValidator(lower=1))
+        self.declareProperty("NumWorkers", 0, IntBoundedValidator(lower=0))
         self.declareProperty(
-            "MaxCandidatePairs", 300, IntBoundedValidator(lower=1)
+            "PopulationSize", 60, IntBoundedValidator(lower=4)
         )
+        self.declareProperty(
+            "MaxIterations", 200, IntBoundedValidator(lower=1)
+        )
+        self.declareProperty(
+            "NumWavelengthSamples", 60, IntBoundedValidator(lower=2)
+        )
+        self.declareProperty("IndexingTolerance", 1.0)
+        self.declareProperty("RandomSeed", 1234)
 
         self.declareProperty(
             TableWorkspaceProperty(
@@ -792,18 +848,17 @@ class FindUBFromLauePeaks(PythonAlgorithm):
         ol = sample.getOrientedLattice()
         ol.setUB(UB_conv)
 
-    def _make_diagnostic_table(self, info, n_total, n_indexed):
+    def _make_diagnostic_table(self, best, n_total):
         """
         Build a table workspace summarizing the fit diagnostics.
 
         Parameters
         ----------
-        info : dict
-            Diagnostics returned by `find_orientation_from_kf_ki`.
+        best : dict
+            Best orientation, as returned by
+            `estimate_orientation_from_rays`.
         n_total : int
             Total number of peaks in the workspace.
-        n_indexed : int
-            Number of peaks assigned Miller indices and a wavelength.
 
         Returns
         -------
@@ -816,15 +871,16 @@ class FindUBFromLauePeaks(PythonAlgorithm):
 
         rows = [
             ("n_total", float(n_total)),
-            ("n_indexed", float(n_indexed)),
-            ("n_matched_coarse", float(info["n_matched_coarse"])),
-            ("n_matched_refined", float(info["n_matched_refined"])),
-            ("zone1_u", float(info["zone1_uvw"][0])),
-            ("zone1_v", float(info["zone1_uvw"][1])),
-            ("zone1_w", float(info["zone1_uvw"][2])),
-            ("zone2_u", float(info["zone2_uvw"][0])),
-            ("zone2_v", float(info["zone2_uvw"][1])),
-            ("zone2_w", float(info["zone2_uvw"][2])),
+            ("n_indexed", float(best["n_indexed"])),
+            ("indexed_fraction", float(best["indexed_fraction"])),
+            ("n_unique_hkl", float(best["n_unique_hkl"])),
+            (
+                "median_angular_error_deg",
+                float(best["median_angular_error_deg"]),
+            ),
+            ("rms_angular_error_deg", float(best["rms_angular_error_deg"])),
+            ("de_cost", best["de_cost"]),
+            ("de_iterations", float(best["de_iterations"])),
         ]
 
         for metric, value in rows:
@@ -852,12 +908,13 @@ class FindUBFromLauePeaks(PythonAlgorithm):
 
         wl_min = self.getProperty("WavelengthMin").value
         wl_max = self.getProperty("WavelengthMax").value
-        max_zone_index = self.getProperty("MaxZoneIndex").value
-        max_hkl_index = self.getProperty("MaxHklIndex").value
-        zone_angle_tol = self.getProperty("ZoneAngleTolerance").value
-        min_zone_sep = self.getProperty("MinZoneSeparation").value
+        n_restarts = self.getProperty("NumRestarts").value
+        n_workers = self.getProperty("NumWorkers").value or None
+        popsize = self.getProperty("PopulationSize").value
+        maxiter = self.getProperty("MaxIterations").value
+        n_wl_samples = self.getProperty("NumWavelengthSamples").value
         index_tol = self.getProperty("IndexingTolerance").value
-        max_candidate_pairs = self.getProperty("MaxCandidatePairs").value
+        seed = self.getProperty("RandomSeed").value
 
         uc_conv = UnitCell(a, b, c, alpha_deg, beta_deg, gamma_deg)
         self.log().information(
@@ -880,47 +937,43 @@ class FindUBFromLauePeaks(PythonAlgorithm):
         A_p = direct_basis_from_lattice(
             a_p, b_p, c_p, alpha_p, beta_p, gamma_p
         )
-        B_p = reciprocal_basis_from_direct_basis(A_p)
 
         kf_ki_dir = self._extract_kf_ki_directions(peaks_ws)
 
-        R, info = find_orientation_from_kf_ki(
+        best = estimate_orientation_from_rays(
             kf_ki_dir,
             A_p,
-            B_p,
-            max_zone_index,
-            max_hkl_index,
-            zone_tol_deg=zone_angle_tol,
-            min_zone_separation_deg=min_zone_sep,
-            zone_angle_tol_deg=zone_angle_tol,
+            (wl_min, wl_max),
+            n_restarts=n_restarts,
+            n_wavelength_samples=n_wl_samples,
+            popsize=popsize,
+            maxiter=maxiter,
             match_tol_deg=index_tol,
-            max_candidate_pairs=max_candidate_pairs,
+            rng=np.random.default_rng(seed),
+            n_workers=n_workers,
         )
 
-        UB_p = R @ B_p
+        UB_p = best["UB"]
         UB_conv = primitive_ub_to_conventional_ub(UB_p, T_cp)
 
-        candidate_hkls = enumerate_reciprocal_directions(max_hkl_index)
-        hkl, wavelength, indexed = resolve_hkl_and_wavelength(
-            kf_ki_dir,
-            UB_conv,
-            candidate_hkls,
-            (wl_min, wl_max),
-            tol_deg=index_tol,
-        )
+        # Miller indices reindex as hkl_p = T_cp.T @ hkl_c (see
+        # garnet.reduction.search.primitive_ub_to_conventional_ub), so
+        # hkl_c = inv(T_cp.T) @ hkl_p.
+        T_cp_inv_T = np.linalg.inv(T_cp).T
+        hkl_conv = (T_cp_inv_T @ best["hkl"].T).T
 
         self._assign_ub_to_workspace(peaks_ws, UB_conv)
 
         for i in range(peaks_ws.getNumberPeaks()):
             pk = peaks_ws.getPeak(i)
-            if indexed[i]:
-                pk.setHKL(*hkl[i])
-                pk.setWavelength(float(wavelength[i]))
+            if best["indexed"][i]:
+                pk.setHKL(*hkl_conv[i])
+                pk.setWavelength(float(best["wavelength"][i]))
             else:
                 pk.setHKL(0.0, 0.0, 0.0)
 
         diag_table = self._make_diagnostic_table(
-            info, peaks_ws.getNumberPeaks(), int(np.sum(indexed))
+            best, peaks_ws.getNumberPeaks()
         )
         self.setProperty("DiagnosticTable", diag_table)
 

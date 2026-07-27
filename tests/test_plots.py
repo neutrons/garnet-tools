@@ -149,7 +149,7 @@ def test_peak_plot():
     Qx, Qy, Qz = np.meshgrid(Qx, Qy, Qz, indexing="ij")
 
     dQ = Qx[1, 0, 0] - Qx[0, 0, 0]
-    xmod = 0.0
+    xmod = (0.0, 0.0, 0.0)
 
     weights = np.ones_like(counts)
 

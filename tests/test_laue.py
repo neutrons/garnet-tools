@@ -1,11 +1,14 @@
+import os
 import unittest
 import numpy as np
 
-from mantid.simpleapi import CreatePeaksWorkspace, SetUB
+from mantid.simpleapi import CreatePeaksWorkspace, Load, SetUB
 from mantid.kernel import V3D
 from mantid.api import AlgorithmManager
 
 import garnet.reduction.laue  # noqa: F401
+
+MACRO_NXS_PATH = os.path.join(os.path.dirname(__file__), "data", "macro.nxs")
 
 
 def rotation_matrix_from_axis_angle(axis, angle_rad):
@@ -111,8 +114,6 @@ class FindUBFromLauePeaksTest(unittest.TestCase):
         alg.setProperty("Centering", "P")
         alg.setProperty("WavelengthMin", wl_min)
         alg.setProperty("WavelengthMax", wl_max)
-        alg.setProperty("MaxZoneIndex", max_hkl)
-        alg.setProperty("MaxHklIndex", max_hkl)
         alg.execute()
 
         ws_out = alg.getProperty("PeaksWorkspace").value
@@ -164,6 +165,53 @@ class FindUBFromLauePeaksTest(unittest.TestCase):
         self._run_case(
             5.5, 6.3, 7.1, 80.0, 95.0, 100.0, [2, -1, 1], 44.0, seed=4
         )
+
+
+@unittest.skipUnless(
+    os.path.exists(MACRO_NXS_PATH),
+    "tests/data/macro.nxs not available locally",
+)
+class FindUBFromLauePeaksRealDataTest(unittest.TestCase):
+    def test_macromolecular_orthorhombic_p(self):
+        ws = Load(Filename=MACRO_NXS_PATH, OutputWorkspace="macro_laue")
+
+        alg = AlgorithmManager.create("FindUBFromLauePeaks")
+        alg.initialize()
+        alg.setProperty("PeaksWorkspace", ws)
+        alg.setProperty("a", 85.2)
+        alg.setProperty("b", 89.6)
+        alg.setProperty("c", 110.9)
+        alg.setProperty("alpha", 90.0)
+        alg.setProperty("beta", 90.0)
+        alg.setProperty("gamma", 90.0)
+        alg.setProperty("Centering", "P")
+        alg.setProperty("WavelengthMin", 2.0)
+        alg.setProperty("WavelengthMax", 4.0)
+        alg.execute()
+
+        ws_out = alg.getProperty("PeaksWorkspace").value
+        ol = ws_out.sample().getOrientedLattice()
+
+        self.assertAlmostEqual(ol.a(), 85.2, delta=0.5)
+        self.assertAlmostEqual(ol.b(), 89.6, delta=0.5)
+        self.assertAlmostEqual(ol.c(), 110.9, delta=0.5)
+        self.assertAlmostEqual(ol.alpha(), 90.0, delta=1.0)
+        self.assertAlmostEqual(ol.beta(), 90.0, delta=1.0)
+        self.assertAlmostEqual(ol.gamma(), 90.0, delta=1.0)
+
+        diag = alg.getProperty("DiagnosticTable").value
+        metrics = {row["Metric"]: row["Value"] for row in diag}
+
+        # n_indexed requires both an angular match and a wavelength
+        # within band, so it's limited by genuine harmonic overlap (the
+        # same direction satisfying Bragg's law at more than one
+        # wavelength within this band) -- a physical ambiguity, not a
+        # defect in the orientation search -- as well as by orientation
+        # correctness. A wrong orientation indexes only a small handful
+        # of peaks by chance; this threshold is set well above that
+        # floor but below what harmonic overlap alone would allow.
+        self.assertGreaterEqual(metrics["indexed_fraction"], 0.3)
+        self.assertLess(metrics["rms_angular_error_deg"], 0.5)
 
 
 if __name__ == "__main__":

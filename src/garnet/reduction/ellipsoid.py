@@ -4299,7 +4299,7 @@ class PeakEllipsoid:
 
         self.data_norm_fit = xye, params
 
-        self.peak_background_mask = x0, x1, x2, pk, bkg
+        self.peak_background_mask = x0 - c0, x1 - c1, x2 - c2, pk, bkg
 
         result = self.fitted_profile(x0, x1, x2, d, n, c, S, bkg_meas=bkg_meas)
 

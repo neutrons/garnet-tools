@@ -1,4 +1,6 @@
-from garnet.reduction.search import FindUBFromConventionalCell
+import garnet.reduction.search  # noqa: F401  registers FindUBFromConventionalCell
+
+from mantid.api import AlgorithmManager
 
 from mantid.simpleapi import (
     SelectCellWithForm,
@@ -357,17 +359,18 @@ class UBModel:
             Indexing tolerance. The default is 0.1.
 
         """
-        FindUBFromConventionalCell(
-            PeaksWorkspace=self.peaks.getName(),
-            a=a,
-            b=b,
-            c=c,
-            alpha=alpha,
-            beta=beta,
-            gamma=gamma,
-            Centering=centering,
-            Tolerance=tol,
-        )
+        alg = AlgorithmManager.create("FindUBFromConventionalCell")
+        alg.initialize()
+        alg.setProperty("PeaksWorkspace", self.peaks)
+        alg.setProperty("a", a)
+        alg.setProperty("b", b)
+        alg.setProperty("c", c)
+        alg.setProperty("alpha", alpha)
+        alg.setProperty("beta", beta)
+        alg.setProperty("gamma", gamma)
+        alg.setProperty("Centering", centering)
+        alg.setProperty("Tolerance", tol)
+        alg.execute()
 
     def convert_conventional_to_primitive(
         self,

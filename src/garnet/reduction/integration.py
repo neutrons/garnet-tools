@@ -256,7 +256,9 @@ class Integration(PeakProjection):
 
                 Reorient("peaks", UB, cell)
 
-                self.copy_UB("data")
+                ub = UBModel("peaks")
+
+                ub.copy_UB("data")
 
             self.predict_all_peaks(centering, d_min, lamda_min, lamda_max)
 

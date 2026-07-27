@@ -85,6 +85,23 @@ class UBModel:
 
         self.peaks = mtd[peaks]
 
+    def get_UB(self):
+        """
+        Current UB matrux.
+
+        Returns
+        -------
+        UB : 2d-array
+            UB-matrix.
+
+        """
+
+        if mtd.doesExist(self.peaks.getName()):
+            if hasattr(self.peaks, "sample"):
+                ol = mtd[self.peaks].sample().getOrientedLattice()
+
+                return ol.getUB()
+
     def get_lattice_parameters(self):
         """
         Current lattice parameters.

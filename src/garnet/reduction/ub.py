@@ -342,8 +342,23 @@ class UBModel:
         centering="P",
         tol=0.2,
     ):
+        """
+        Determine UB with prior known lattice parameters.
+
+        Parameters
+        ----------
+        a, b, c : float
+            Lattice constants in angstroms.
+        alpha, beta, gamma : float
+            Lattice angles in degrees.
+        centering : str,
+            Conventional cell reflection condition.
+        tol : float, optional
+            Indexing tolerance. The default is 0.1.
+
+        """
         FindUBFromConventionalCell(
-            PeaksWorkspace=self.peaks,
+            PeaksWorkspace=self.peaks.getName(),
             a=a,
             b=b,
             c=c,
@@ -351,7 +366,7 @@ class UBModel:
             beta=beta,
             gamma=gamma,
             Centering=centering,
-            IntegerTolerance=tol,
+            Tolerance=tol,
         )
 
     def convert_conventional_to_primitive(

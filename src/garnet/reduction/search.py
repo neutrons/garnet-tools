@@ -1161,7 +1161,7 @@ class FindUBFromConventionalCell(PythonAlgorithm):
         self.declareProperty("CapSamples", 1000, IntBoundedValidator(lower=10))
         self.declareProperty("NumPsi", 720, IntBoundedValidator(lower=30))
         self.declareProperty("RandomSeed", 1234)
-        self.declareProperty("IntegerTolerance", 0.2)
+        self.declareProperty("Tolerance", 0.2)
         self.declareProperty("AxisDegeneracyTolerance", 0.05)
 
         self.declareProperty(
@@ -1433,7 +1433,7 @@ class FindUBFromConventionalCell(PythonAlgorithm):
         cap_samples = self.getProperty("CapSamples").value
         n_psi = self.getProperty("NumPsi").value
         seed = self.getProperty("RandomSeed").value
-        integer_tol = self.getProperty("IntegerTolerance").value
+        integer_tol = self.getProperty("Tolerance").value
         degeneracy_tol = self.getProperty("AxisDegeneracyTolerance").value
 
         # Mantid's "Inelastic" Q convention is Q = 2 * pi * UB @ hkl;

@@ -87,7 +87,7 @@ class UBModel:
 
     def get_UB(self):
         """
-        Current UB matrux.
+        Current UB matrix.
 
         Returns
         -------
@@ -98,7 +98,7 @@ class UBModel:
 
         if mtd.doesExist(self.peaks.getName()):
             if hasattr(self.peaks, "sample"):
-                ol = mtd[self.peaks].sample().getOrientedLattice()
+                ol = self.peaks.sample().getOrientedLattice()
 
                 return ol.getUB()
 

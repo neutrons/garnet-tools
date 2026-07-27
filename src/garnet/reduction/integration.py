@@ -239,6 +239,8 @@ class Integration(PeakProjection):
 
                 UB = ub.get_UB()
 
+                constants = ub.get_lattice_parameters()
+
                 Q_min, _ = ub.shortest_reciprocal_spacing(centering)
 
                 result = peaks.scan_threshold("md", "peaks", Q_min)
@@ -247,8 +249,6 @@ class Integration(PeakProjection):
 
                 scan_plot = ScanPlot(*result)
                 scan_plot.save_plot(scan_file)
-
-                constants = ub.get_lattice_parameters()
 
                 ub.determine_UB_from_conventional_cell(*constants, centering)
 

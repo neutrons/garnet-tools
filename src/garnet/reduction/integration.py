@@ -250,9 +250,11 @@ class Integration(PeakProjection):
                 scan_plot = ScanPlot(*result)
                 scan_plot.save_plot(scan_file)
 
+                ub = UBModel("peaks")
+
                 ub.determine_UB_from_conventional_cell(*constants, centering)
 
-                reorient = Reorient("peaks", UB, cell)
+                Reorient("peaks", UB, cell)
 
                 self.copy_UB("data")
 

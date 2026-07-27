@@ -248,7 +248,7 @@ class Integration(PeakProjection):
                 scan_plot = ScanPlot(*result)
                 scan_plot.save_plot(scan_file)
 
-                constants = peaks.get_lattice_parameters()
+                constants = ub.get_lattice_parameters()
 
                 ub.determine_UB_from_conventional_cell(*constants, centering)
 

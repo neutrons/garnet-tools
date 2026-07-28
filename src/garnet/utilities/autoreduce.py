@@ -372,7 +372,8 @@ class AutoReduce:
         )
         count_map, _, _ = np.histogram2d(gamma, nu, bins=[xedges, yedges])
 
-        img = sum_I / count_map
+        with np.errstate(invalid="ignore"):
+            img = sum_I / count_map
         img[count_map == 0] = np.nan
 
         x = 0.5 * (xedges[1:] + xedges[:-1])

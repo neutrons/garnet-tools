@@ -70,6 +70,15 @@ AUTOLITE = "/SNS/software/scd/lite/"
 
 
 class AutoReduce:
+    # Display-grid oversample for the interactive monitor plots, decoupled
+    # from the underlying MDNorm bin count (kept fine on disk for the
+    # accumulated data/norm nxs files). At oversample=1.0 the display grid
+    # tracks the source resolution 1:1, which for an 801x801 slice plus its
+    # 3x customdata channel made the combined monitor-page payload exceed
+    # livedata.sns.gov's upload size limit (HTTP 413). This keeps the
+    # display grid to roughly 1/5 the source resolution per axis.
+    MONITOR_OVERSAMPLE = 0.2
+
     def __init__(self, filename):
         self.filename = filename
 
@@ -385,23 +394,30 @@ class AutoReduce:
 
         return all(abs(np.dot(cols[i], cols[j])) < tol for i, j in pairs)
 
-    def _candidate_projections(self, aligned):
+    def _candidate_projections(self, UB, aligned):
         """
-        Default projection bases: hk0/h0l/0kl when axis-aligned, otherwise
-        both diagonal combinations of each axis pair (6 total).
+        Default projection bases: always hk0/h0l/0kl, plus one "main
+        equatorial" zone when the lattice isn't axis-aligned (4 total),
+        picked the same way application.py's FormModel.autoproj scores
+        its candidates: whichever thin/integrated axis (v2), transformed
+        into Cartesian lab space by UB, best aligns with the vertical lab
+        direction -- i.e. the zone whose in-plane (v0, v1) axes span the
+        horizontal/equatorial scattering plane.
 
         Each entry is (name, [v0, v1, v2]) where v2 is the thin/integrated
         axis and v0, v1 are the wide in-plane axes.
         """
 
-        if aligned:
-            return [
-                ("hk0", [[1, 0, 0], [0, 1, 0], [0, 0, 1]]),
-                ("h0l", [[1, 0, 0], [0, 0, 1], [0, 1, 0]]),
-                ("0kl", [[0, 1, 0], [0, 0, 1], [1, 0, 0]]),
-            ]
+        base = [
+            ("hk0", [[1, 0, 0], [0, 1, 0], [0, 0, 1]]),
+            ("h0l", [[1, 0, 0], [0, 0, 1], [0, 1, 0]]),
+            ("0kl", [[0, 1, 0], [0, 0, 1], [1, 0, 0]]),
+        ]
 
-        return [
+        if aligned:
+            return base
+
+        candidates = [
             ("hk_plus", [[1, 1, 0], [0, 0, 1], [-1, 1, 0]]),
             ("hk_minus", [[-1, 1, 0], [0, 0, 1], [1, 1, 0]]),
             ("hl_plus", [[1, 0, 1], [0, 1, 0], [-1, 0, 1]]),
@@ -410,12 +426,26 @@ class AutoReduce:
             ("kl_minus", [[0, -1, 1], [1, 0, 0], [0, 1, 1]]),
         ]
 
+        target_axis = np.array([0.0, 1.0, 0.0])
+
+        best_W, best_score = None, -np.inf
+
+        for _, W in candidates:
+            thin_cart = UB @ np.asarray(W[2], dtype=float)
+            thin_cart /= np.linalg.norm(thin_cart)
+            score = abs(np.dot(thin_cart, target_axis))
+
+            if score > best_score:
+                best_W, best_score = W, score
+
+        return base + [("equatorial", best_W)]
+
     def _projection_extents(self, UB, projections, d_min):
         """
         Wide in-plane extents from d_min (cube-corner-through-inv(UB@W),
         same technique as application.py's FormModel.autolim), fixed
         +/-0.1 integration on the thin (third) axis. Bins are fixed at
-        801x801x1.
+        NxNx1.
         """
 
         UB = np.asarray(UB, dtype=float)
@@ -622,7 +652,7 @@ class AutoReduce:
                 d.getMinimum() + width * (np.arange(d.getNBins()) + 0.5)
             )
 
-        titles = ["{} {}".format(d.getName(), d.getUnits()) for d in dims]
+        titles = ["{} {}".format(d.name, d.getUnits()) for d in dims]
 
         return axes, titles
 
@@ -646,7 +676,9 @@ class AutoReduce:
         norm[2] = 1
 
         plot = SlicePlot(UB, W)
-        plot.calculate_transforms(axes, titles, norm)
+        plot.calculate_transforms(
+            axes, titles, norm, oversample=self.MONITOR_OVERSAMPLE
+        )
         plot.make_slice(signal, 0.0)
 
         plot.fig.update_layout(
@@ -685,7 +717,7 @@ class AutoReduce:
 
         UB = mtd["data"].sample().getOrientedLattice().getUB()
         aligned = self._is_axis_aligned(UB)
-        projections = self._candidate_projections(aligned)
+        projections = self._candidate_projections(UB, aligned)
 
         self._load_solid_angle(config["VanadiumFile"])
         self._load_flux(config["FluxFile"])

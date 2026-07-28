@@ -51,13 +51,22 @@ def test_axis_aligned_triclinic():
 def test_candidate_projections_count():
     ar = make_autoreduce()
 
-    aligned = ar._candidate_projections(True)
-    not_aligned = ar._candidate_projections(False)
+    aligned_UB = orthorhombic_UB()
+    not_aligned_UB = triclinic_UB()
+
+    aligned = ar._candidate_projections(aligned_UB, True)
+    not_aligned = ar._candidate_projections(not_aligned_UB, False)
 
     assert len(aligned) == 3
     assert [name for name, _ in aligned] == ["hk0", "h0l", "0kl"]
 
-    assert len(not_aligned) == 6
+    assert len(not_aligned) == 4
+    assert [name for name, _ in not_aligned] == [
+        "hk0",
+        "h0l",
+        "0kl",
+        "equatorial",
+    ]
 
     for _, W in aligned + not_aligned:
         W = np.asarray(W, dtype=float)

@@ -63,9 +63,15 @@ QSettings.setPath(
     QSettings.Format.NativeFormat, QSettings.Scope.UserScope, _local_cfg
 )
 
-from qdarkstyle.light.palette import LightPalette
-from qdarkstyle.dark.palette import DarkPalette
-import qdarkstyle
+try:
+    from qdarkstyle.light.palette import LightPalette
+    from qdarkstyle.dark.palette import DarkPalette
+    import qdarkstyle
+
+    style = True
+except ImportError:
+    qdarkstyle = None
+    style = False
 import qtawesome as qta
 
 from garnet._version import __version__
@@ -805,11 +811,12 @@ class FormView(QWidget):
 
         is_dark = theme == "dark"
         app = QApplication.instance()
-        app.setStyleSheet(
-            qdarkstyle.load_stylesheet(
-                palette=DarkPalette if is_dark else LightPalette
+        if style:
+            app.setStyleSheet(
+                qdarkstyle.load_stylesheet(
+                    palette=DarkPalette if is_dark else LightPalette
+                )
             )
-        )
         app.setProperty("ui_dark", is_dark)
 
     @staticmethod
@@ -5541,10 +5548,11 @@ def gui():
     bg = app.palette().color(QPalette.Window)
     system_is_dark = bg.lightness() < 128
     app.setProperty("ui_dark", system_is_dark)
-    if system_is_dark:
-        app.setStyleSheet(qdarkstyle.load_stylesheet(palette=DarkPalette))
-    else:
-        app.setStyleSheet(qdarkstyle.load_stylesheet(palette=LightPalette))
+    if style:
+        if system_is_dark:
+            app.setStyleSheet(qdarkstyle.load_stylesheet(palette=DarkPalette))
+        else:
+            app.setStyleSheet(qdarkstyle.load_stylesheet(palette=LightPalette))
     window = Garnet()
     window.show()
     sys.exit(app.exec())

@@ -28,6 +28,14 @@ garnet.plots.crystal module
    :show-inheritance:
    :undoc-members:
 
+garnet.plots.monitor module
+---------------------------
+
+.. automodule:: garnet.plots.monitor
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 garnet.plots.peaks module
 -------------------------
 

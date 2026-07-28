@@ -100,7 +100,7 @@ class SlicePlot:
         self.ylabel = ylabel
         self.interpolation_method = interpolation
 
-        # Same 2x2 metric reduction as your Matplotlib code.
+        # Same 2x2 metric reduction as Matplotlib code.
         v = scipy.linalg.cholesky(self.V[np.ix_(ind, ind)], lower=False)
         v /= v[0, 0]
 
@@ -185,6 +185,13 @@ class SlicePlot:
         )
 
         self.fig.add_trace(self.im)
+
+        # add_trace clones the trace onto the figure rather than keeping
+        # it linked -- fig.data[0] is a different object from self.im at
+        # this point. Re-point self.im at the live trace so later
+        # mutations in make_slice() actually reach the figure that gets
+        # serialized, instead of updating an orphaned copy.
+        self.im = self.fig.data[0]
 
         self.fig.update_layout(
             margin=dict(l=70, r=90, b=60, t=60),

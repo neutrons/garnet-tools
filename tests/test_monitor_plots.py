@@ -23,6 +23,24 @@ def make_slice_plot():
     return plot
 
 
+def test_trace_stays_linked_to_figure():
+    # fig.add_trace() clones the trace it's given rather than keeping it
+    # linked -- self.im must be re-pointed at the live fig.data[0] object
+    # afterwards, or every later mutation in make_slice() updates an
+    # orphaned copy that never gets serialized (axes render, heatmap
+    # stays empty).
+    plot = make_slice_plot()
+
+    assert plot.im is plot.fig.data[0]
+
+    data = np.full((40, 50, 1), 5.0)
+    norm = np.full((40, 50, 1), 2.0)
+    plot.make_slice(data, norm, 0.0)
+
+    assert plot.im is plot.fig.data[0]
+    assert np.isfinite(plot.fig.data[0].z).any()
+
+
 def test_make_slice_no_runtime_warnings():
     plot = make_slice_plot()
 
@@ -44,7 +62,7 @@ def test_make_slice_no_runtime_warnings():
         warnings.simplefilter("error")
         plot.make_slice(data, norm, 0.0)
 
-    z = plot.im.z
+    z = plot.fig.data[0].z
     assert np.isfinite(z).any()
     assert not np.isinf(z).any()
 
@@ -62,10 +80,10 @@ def test_make_slice_zero_counts_are_not_masked():
     # log10(0) is masked for the log-color display (expected -- you can't
     # show zero on a log scale), but the customdata linear ratio must
     # still carry the true zero, not NaN, since it *was* validly sampled.
-    ratio = plot.im.customdata[..., 2]
+    ratio = plot.fig.data[0].customdata[..., 2]
     assert np.isfinite(ratio).all()
     assert np.all(ratio == 0.0)
-    assert np.isnan(plot.im.z).all()
+    assert np.isnan(plot.fig.data[0].z).all()
 
 
 def test_compute_clim_ignores_nonpositive_values():

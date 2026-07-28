@@ -1,5 +1,6 @@
 import os
 import sys
+import shutil
 import subprocess
 import tempfile
 import traceback
@@ -76,7 +77,7 @@ from garnet.config.atoms import (
     indexing as atom_indexing,
     groups as atom_groups,
 )
-from garnet.reduction.plan import ReductionPlan
+from garnet.reduction.plan import ReductionPlan, save_YAML
 from garnet.utilities.crystal import CrystalStructure
 from garnet.reduction.crystallography import (
     space_point,
@@ -671,6 +672,12 @@ class FormView(QWidget):
         self.load_button = QPushButton("Load", self)
         self.save_button = QPushButton("Save", self)
         self.save_as_button = QPushButton("Save As", self)
+        self.global_save_button = QPushButton("Save to Autoreduce", self)
+        self.global_save_button.setToolTip(
+            "Copy the UB file and write a trigger yaml (UBFile, "
+            "VanadiumFile, FluxFile) into IPTS-XXXX/shared/autoreduce/ "
+            "for the live auto-reduction slice preview"
+        )
         self.generate_button = QPushButton("Generate Output", self)
         self.generate_button.setIcon(qta.icon("fa6s.circle-play"))
         self.generate_button.setToolTip(
@@ -684,12 +691,14 @@ class FormView(QWidget):
         self.load_button.setIcon(qta.icon("fa6s.folder-open"))
         self.save_button.setIcon(qta.icon("fa6s.floppy-disk"))
         self.save_as_button.setIcon(qta.icon("fa6s.file-export"))
+        self.global_save_button.setIcon(qta.icon("fa6s.cloud-arrow-up"))
 
         load_save_layout.addWidget(name_label)
         load_save_layout.addWidget(self.output_line)
         load_save_layout.addWidget(self.load_button)
         load_save_layout.addWidget(self.save_button)
         load_save_layout.addWidget(self.save_as_button)
+        load_save_layout.addWidget(self.global_save_button)
 
         layout.addLayout(load_save_layout)
         layout.addWidget(self.plan_widget)
@@ -2549,6 +2558,9 @@ class FormView(QWidget):
     def connect_save_as_config(self, save_as_config):
         self.save_as_button.clicked.connect(save_as_config)
 
+    def connect_global_save(self, global_save_config):
+        self.global_save_button.clicked.connect(global_save_config)
+
     def connect_switch_instrument(self, switch_instrument):
         self.instrument_combo.activated.connect(switch_instrument)
 
@@ -3842,6 +3854,7 @@ class FormPresenter:
         self.view.connect_load_config(self.load_config)
         self.view.connect_save_config(self.save_config)
         self.view.connect_save_as_config(self.save_config_as)
+        self.view.connect_global_save(self.global_save_config)
 
         self.view.connect_int_run_button(self.run_integration)
         self.view.connect_param_run_button(self.run_parametrization)
@@ -4333,6 +4346,19 @@ class FormPresenter:
         if filename and valid:
             self.view.set_config(filename)
             self.save_config()
+
+    def global_save_config(self):
+        ipts = self.view.get_IPTS()
+        ub = self.view.get_UB()
+
+        if not ipts or not ub or not os.path.isfile(ub):
+            self.view.show_error(
+                "IPTS and a valid UB file are required to save to "
+                "autoreduce"
+            )
+            return
+
+        self.model.save_autoreduce_config(ipts, ub)
 
     def generate_output(self):
         self.save_config()
@@ -5318,6 +5344,47 @@ class FormModel:
             "shared",
             "Vanadium",
         )
+
+    def get_autoreduce_file_path(self, ipts):
+        return os.path.join(
+            "/",
+            self.beamline["Facility"],
+            self.beamline["InstrumentName"],
+            "IPTS-{}".format(ipts),
+            "shared",
+            "autoreduce",
+        )
+
+    def save_autoreduce_config(self, ipts, ub_file):
+        """
+        Copy the UB file and write a trigger yaml into
+        IPTS-XXXX/shared/autoreduce/ for the live autoreduce slice
+        preview, referencing the plan's already-configured vanadium
+        solid-angle/flux files (not copied, they stay in their canonical
+        shared/Vanadium/... location).
+        """
+
+        target_dir = self.get_autoreduce_file_path(ipts)
+
+        os.makedirs(target_dir, exist_ok=True)
+
+        shutil.copy(ub_file, target_dir)
+        ub_target = os.path.join(target_dir, os.path.basename(ub_file))
+
+        config = {
+            "UBFile": ub_target,
+            "VanadiumFile": self.get_vanadium(),
+            "FluxFile": self.get_flux(),
+        }
+
+        instrument = self.get_instrument() or self.beamline["InstrumentName"]
+        yaml_target = os.path.join(
+            target_dir, "{}_autoreduce.yaml".format(instrument)
+        )
+
+        save_YAML(config, yaml_target)
+
+        return yaml_target
 
     def load_UB_matrix(self, filename, beam=2, up=1, back=0):
         UB = np.zeros((3, 3), dtype=float)

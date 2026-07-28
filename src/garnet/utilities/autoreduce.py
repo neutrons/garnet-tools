@@ -43,7 +43,6 @@ from mantid.simpleapi import (
     LoadMD,
     SaveMD,
     PlusMD,
-    DivideMD,
     CopySample,
     CreateSingleValuedWorkspace,
     AddSampleLog,
@@ -242,12 +241,19 @@ class AutoReduce:
             Filename=output,
         )
 
-    def _heatmap_div(self, x, y, z, x_title="", y_title="", title=""):
+    def _heatmap_div(
+        self, x, y, z, x_title="", y_title="", title="", aspect=None
+    ):
         """
         Build a Plotly heatmap HTML div, mirroring plot_publisher's
         plot_heatmap layout style exactly (so publish_plot's Plotly-div
         detection/version-injection still applies), without requiring
         that optional package to be installed just to render a plot.
+
+        aspect : float, optional
+            If given, locks the y-axis to this data-unit ratio relative
+            to x (e.g. 1 for equal x/y scaling), like matplotlib's
+            set_aspect.
         """
 
         axis_style = dict(
@@ -260,6 +266,10 @@ class AutoReduce:
             ticks="inside",
         )
 
+        yaxis = dict(title=y_title, **axis_style)
+        if aspect is not None:
+            yaxis.update(scaleanchor="x", scaleratio=aspect)
+
         layout = go.Layout(
             showlegend=False,
             autosize=True,
@@ -269,7 +279,7 @@ class AutoReduce:
             hovermode="closest",
             bargap=0,
             xaxis=dict(title=x_title, **axis_style),
-            yaxis=dict(title=y_title, **axis_style),
+            yaxis=yaxis,
             title=title,
         )
 
@@ -323,7 +333,13 @@ class AutoReduce:
         run_title = os.path.basename(self.filename.replace(".nxs.h5", out))
 
         div = self._heatmap_div(
-            x, y, img.T, x_title="γ [°]", y_title="ν [°]", title=run_title
+            x,
+            y,
+            img.T,
+            x_title="γ [°]",
+            y_title="ν [°]",
+            title=run_title,
+            aspect=1,
         )
 
         self.plot_html += "<div>{}</div>\n".format(div)
@@ -656,21 +672,26 @@ class AutoReduce:
 
         return axes, titles
 
-    def _plot_slice(self, ws, base):
+    def _plot_slice(self, data_ws, norm_ws, base):
         """
         Render a 2D slice (thin axis is always index 2) as an
         interactive Plotly heatmap (resampled onto a rectangular
         display grid, see garnet.plots.monitor.SlicePlot) and append
         it to the shared monitor-page HTML.
+
+        Counts and normalization are resampled separately and divided
+        by SlicePlot.make_slice, rather than dividing the MD workspaces
+        (DivideMD) before resampling -- see garnet.plots.monitor for why.
         """
 
-        signal = mtd[ws].getSignalArray().copy()
+        data_signal = mtd[data_ws].getSignalArray().copy()
+        norm_signal = mtd[norm_ws].getSignalArray().copy()
 
-        ei = mtd[ws].getExperimentInfo(0)
+        ei = mtd[data_ws].getExperimentInfo(0)
         UB = ei.sample().getOrientedLattice().getUB()
         W = np.array(ei.run().getProperty("W_MATRIX").value).reshape(3, 3)
 
-        axes, titles = self._bin_center_axes(ws)
+        axes, titles = self._bin_center_axes(data_ws)
 
         norm = np.zeros(3, dtype=int)
         norm[2] = 1
@@ -679,7 +700,7 @@ class AutoReduce:
         plot.calculate_transforms(
             axes, titles, norm, oversample=self.MONITOR_OVERSAMPLE
         )
-        plot.make_slice(signal, 0.0)
+        plot.make_slice(data_signal, norm_signal, 0.0)
 
         plot.fig.update_layout(
             title="{}: {}".format(base, plot.fig.layout.title.text)
@@ -730,9 +751,7 @@ class AutoReduce:
         for name, W in projections:
             extents, bins = self._projection_extents(UB, W, d_min)
 
-            data_ws, norm_ws, result_ws = self._run_mdnorm(
-                "raw_md", W, extents, bins
-            )
+            data_ws, norm_ws, _ = self._run_mdnorm("raw_md", W, extents, bins)
 
             base = "{}_{}_{}".format(self.instrument, safe_key, name)
             data_file = os.path.join(self.autoreduce_dir, base + "_data.nxs")
@@ -776,14 +795,7 @@ class AutoReduce:
                 SaveLogs=False,
             )
 
-            DivideMD(
-                LHSWorkspace=data_ws,
-                RHSWorkspace=norm_ws,
-                OutputWorkspace=result_ws,
-            )
-            self._attach_ub_w(result_ws, config["UBFile"], W)
-
-            self._plot_slice(result_ws, base)
+            self._plot_slice(data_ws, norm_ws, base)
 
     def publish_plots(self):
         if webmonplot:

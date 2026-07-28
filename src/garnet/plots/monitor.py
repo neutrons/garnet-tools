@@ -221,7 +221,7 @@ class SlicePlot:
         """
         Compute robust lower and upper bounds for log coloring.
         """
-        finite = data[np.isfinite(data)]
+        finite = data[np.isfinite(data) & (data > 0)]
 
         if finite.size == 0:
             return 0.01, 1.0
@@ -236,14 +236,50 @@ class SlicePlot:
 
         return vmin, vmax
 
-    def make_slice(self, signal, value):
+    def _interpolate(self, signal_2d, mask_zero):
+        """
+        Resample one 2D array (counts or normalization) onto the display
+        grid via the same (y, x) -> (u, v) mapping for every array, so
+        counts and normalization interpolate consistently and can be
+        divided afterwards on the display grid.
+
+        mask_zero : bool
+            Also treat zero/negative values as invalid (for the
+            normalization array, where zero means no coverage) rather
+            than a genuine value (for raw counts, where zero is valid).
+        """
+        valid = np.isfinite(signal_2d)
+        if mask_zero:
+            valid &= signal_2d > 0
+
+        masked = np.where(valid, signal_2d, np.nan)
+
+        interpolator = RegularGridInterpolator(
+            (self.y, self.x),
+            masked,
+            method=self.interpolation_method,
+            bounds_error=False,
+            fill_value=np.nan,
+        )
+
+        return interpolator(self.sample_points).reshape(self.Y_source.shape)
+
+    def make_slice(self, data_signal, norm_signal, value):
         """
         Update the figure to show the slice nearest the requested value.
 
+        Counts and normalization are resampled onto the display grid
+        separately, then divided -- resampling their ratio directly
+        produces artifacts near masked/zero-exposure bins, since a
+        single missing/zero normalization value would otherwise corrupt
+        the interpolated ratio in its whole interpolation neighborhood.
+
         Parameters
         ----------
-        signal : ndarray, shape (n0, n1, n2)
-            3D signal array.
+        data_signal : ndarray, shape (n0, n1, n2)
+            3D raw-counts signal array.
+        norm_signal : ndarray, shape (n0, n1, n2)
+            3D normalization signal array, matching data_signal's shape.
         value : float
             Requested slice coordinate.
         """
@@ -254,25 +290,14 @@ class SlicePlot:
 
         i = np.argmin(np.abs(self.z - value))
 
-        data = self._extract_slice(signal, i)
+        data_2d = self._extract_slice(data_signal, i)
+        norm_2d = self._extract_slice(norm_signal, i)
 
-        # Match the original behavior: invalid and non-positive values
-        # are hidden and excluded from log scaling.
-        valid_data = np.where(
-            np.isfinite(data) & (data > 0),
-            data,
-            np.nan,
-        )
+        sampled_data = self._interpolate(data_2d, mask_zero=False)
+        sampled_norm = self._interpolate(norm_2d, mask_zero=True)
 
-        interpolator = RegularGridInterpolator(
-            (self.y, self.x),
-            valid_data,
-            method=self.interpolation_method,
-            bounds_error=False,
-            fill_value=np.nan,
-        )
-
-        sampled = interpolator(self.sample_points).reshape(self.Y_source.shape)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            sampled = sampled_data / sampled_norm
 
         vmin, vmax = self._compute_clim(sampled)
 

@@ -31,11 +31,9 @@ from mantid.simpleapi import (
     ClearUB,
     LoadIsawUB,
     SetGoniometer,
-    ConvertUnits,
-    ConvertToHistogram,
-    RebinToWorkspace,
-    RemoveLogs,
     MaskDetectorsIf,
+    MaskDetectors,
+    ExtractMask,
     ConvertToMD,
     RecalculateTrajectoriesExtents,
     MDNorm,
@@ -445,49 +443,16 @@ class AutoReduce:
 
     def _load_solid_angle(self, vanadium_file):
         """
-        Build the "sa" solid-angle workspace matching "data"'s raw (1x1,
-        ungrouped) spectra, filled with the vanadium file's counts.
-
-        Simplified from DataModel.load_generate_normalization: since this
-        workflow always runs at full detector resolution, the pixel-grouping
-        ratio/pattern-matching machinery there isn't needed here.
+        Load the solid-angle workspace directly: it already matches the
+        raw data's per-pixel geometry, no rebinning/matching needed.
+        Extract a mask from its non-finite pixels for apply_mask-style
+        use (see slice_workflow).
         """
 
         if mtd.doesExist("sa"):
             return
 
-        LoadNexus(Filename=vanadium_file, OutputWorkspace="sa_van")
-
-        RemoveLogs(Workspace="sa_van")
-
-        MaskDetectorsIf(
-            InputWorkspace="sa_van",
-            Mode="DeselectIf",
-            Operator="NotFinite",
-            OutputWorkspace="sa_van",
-        )
-
-        ConvertUnits(
-            InputWorkspace="data", Target="Momentum", OutputWorkspace="sa"
-        )
-
-        RebinToWorkspace(
-            WorkspaceToRebin="sa",
-            WorkspaceToMatch="sa_van",
-            OutputWorkspace="sa",
-            PreserveEvents=False,
-        )
-
-        ys = mtd["sa_van"].extractY()
-
-        for i, y in enumerate(ys):
-            mtd["sa"].setY(i, y)
-
-        for i, y in enumerate(mtd["sa"].extractY()):
-            if np.isclose(np.sum(y), 0):
-                mtd["sa"].setY(i, y * np.inf)
-
-        DeleteWorkspace(Workspace="sa_van")
+        LoadNexus(Filename=vanadium_file, OutputWorkspace="sa")
 
         MaskDetectorsIf(
             InputWorkspace="sa",
@@ -496,72 +461,24 @@ class AutoReduce:
             OutputWorkspace="sa",
         )
 
+        ExtractMask(
+            InputWorkspace="sa",
+            UngroupDetectors=True,
+            OutputWorkspace="sa_mask",
+        )
+
     def _load_flux(self, flux_file):
         """
-        Build the "flux" workspace matching "data"'s raw spectra, filled
-        with the flux file's counts. Simplified analogue of
-        DataModel.load_generate_normalization for the same reason as
-        _load_solid_angle.
+        Load the flux workspace directly. Flux is defined per-bank (not
+        per-pixel/spectrum) and MDNorm resolves each detector's flux by
+        bank internally, so no expansion to the raw data's per-pixel
+        spectra is needed.
         """
 
         if mtd.doesExist("flux"):
             return
 
-        LoadNexus(Filename=flux_file, OutputWorkspace="flux_van")
-
-        RemoveLogs(Workspace="flux_van")
-
-        ys = mtd["flux_van"].extractY()
-
-        if ys.shape[0] > 1:
-            MaskDetectorsIf(
-                InputWorkspace="flux_van",
-                Mode="DeselectIf",
-                Operator="NotFinite",
-                OutputWorkspace="flux_van",
-            )
-
-        ConvertToHistogram(InputWorkspace="data", OutputWorkspace="flux")
-        ConvertToHistogram(
-            InputWorkspace="flux_van", OutputWorkspace="flux_van"
-        )
-
-        ConvertUnits(
-            InputWorkspace="flux", Target="Momentum", OutputWorkspace="flux"
-        )
-
-        RebinToWorkspace(
-            WorkspaceToRebin="flux",
-            WorkspaceToMatch="flux_van",
-            OutputWorkspace="flux",
-            PreserveEvents=False,
-        )
-
-        ys = mtd["flux_van"].extractY()
-        nos = mtd["flux"].getSpectrumNumbers()
-
-        if ys.shape[0] == 1:
-            y = ys[0]
-            for i in range(len(nos)):
-                mtd["flux"].setY(i, y)
-        else:
-            van_nos = mtd["flux_van"].getSpectrumNumbers()
-            index_map = {spec: i for i, spec in enumerate(nos)}
-            for spec, y in zip(van_nos, ys):
-                mtd["flux"].setY(index_map[spec], y)
-
-        for i, y in enumerate(mtd["flux"].extractY()):
-            if np.isclose(np.sum(y), 0):
-                mtd["flux"].setY(i, y * np.inf)
-
-        DeleteWorkspace(Workspace="flux_van")
-
-        MaskDetectorsIf(
-            InputWorkspace="flux",
-            Mode="SelectIf",
-            Operator="NotFinite",
-            OutputWorkspace="flux",
-        )
+        LoadNexus(Filename=flux_file, OutputWorkspace="flux")
 
     def _convert_to_Q_sample(self, d_min):
         """
@@ -744,6 +661,10 @@ class AutoReduce:
 
         self._load_solid_angle(config["VanadiumFile"])
         self._load_flux(config["FluxFile"])
+
+        if mtd.doesExist("sa_mask"):
+            MaskDetectors(Workspace="data", MaskedWorkspace="sa_mask")
+
         self._convert_to_Q_sample(d_min)
 
         for name, W in projections:

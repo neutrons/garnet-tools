@@ -72,7 +72,15 @@ try:
 except ImportError:
     qdarkstyle = None
     style = False
-import qtawesome as qta
+try:
+    import qtawesome as qta
+except ImportError:
+    qta = None
+
+
+def _qicon(name, **kwargs):
+    return qta.icon(name, **kwargs) if qta is not None else QIcon()
+
 
 from garnet._version import __version__
 
@@ -229,22 +237,22 @@ class FormView(QWidget):
         self._save_button.setToolTip(
             "Save a screenshot of the current 3D view."
         )
-        self._save_button.setIcon(qta.icon("fa6s.floppy-disk"))
+        self._save_button.setIcon(_qicon("fa6s.floppy-disk"))
         self._save_button.clicked.connect(self._on_save_screenshot)
 
         self._reset_view_button = QPushButton("Reset View", self)
         self._reset_view_button.setToolTip("Reset to isometric view")
-        self._reset_view_button.setIcon(qta.icon("fa6s.house"))
+        self._reset_view_button.setIcon(_qicon("fa6s.house"))
         self._reset_view_button.clicked.connect(self._on_reset_view)
 
         self._camera_button = QPushButton("Reset Camera", self)
         self._camera_button.setToolTip("Reset camera (fit to scene)")
-        self._camera_button.setIcon(qta.icon("fa6s.camera"))
+        self._camera_button.setIcon(_qicon("fa6s.camera"))
         self._camera_button.clicked.connect(self._on_reset_camera)
 
         self._plot_button = QPushButton("Replot Preview", self)
         self._plot_button.setToolTip("Replot the current view")
-        self._plot_button.setIcon(qta.icon("fa6s.rotate"))
+        self._plot_button.setIcon(_qicon("fa6s.rotate"))
 
         self._theme_combo = QComboBox(self)
         self._theme_combo.addItem("default")
@@ -319,7 +327,7 @@ class FormView(QWidget):
         ]:
             button = QPushButton(label, directions_widget)
             button.setToolTip(tip)
-            button.setIcon(qta.icon("fa6s.right-long"))
+            button.setIcon(_qicon("fa6s.right-long"))
             button.clicked.connect(slot)
             directions_layout.addWidget(button, row, col)
 
@@ -375,7 +383,7 @@ class FormView(QWidget):
         ]:
             button = QPushButton(label, directions_widget)
             button.setToolTip(tip)
-            button.setIcon(qta.icon("fa6s.right-long", color=color))
+            button.setIcon(_qicon("fa6s.right-long", color=color))
             button.clicked.connect(slot)
             directions_layout.addWidget(button, row, col)
 
@@ -447,14 +455,14 @@ class FormView(QWidget):
         self._manual_button.setToolTip(
             "Set the view direction using the specified axis components."
         )
-        self._manual_button.setIcon(qta.icon("fa6s.right-long"))
+        self._manual_button.setIcon(_qicon("fa6s.right-long"))
         self._manual_button.clicked.connect(self._on_manual_view)
 
         self._manualup_button = QPushButton("View Up Axis", self)
         self._manualup_button.setToolTip(
             "Set the up direction using the specified axis components."
         )
-        self._manualup_button.setIcon(qta.icon("fa6s.up-long"))
+        self._manualup_button.setIcon(_qicon("fa6s.up-long"))
         self._manualup_button.clicked.connect(self._on_manual_up_view)
 
         manual_layout.addWidget(self._axis1_label, 0, 0, Qt.AlignCenter)
@@ -504,27 +512,27 @@ class FormView(QWidget):
         )
 
         self._roll_ccw_button = QPushButton("Roll CCW", self)
-        self._roll_ccw_button.setIcon(qta.icon("fa6s.rotate-left"))
+        self._roll_ccw_button.setIcon(_qicon("fa6s.rotate-left"))
         self._roll_ccw_button.clicked.connect(self._on_roll_ccw)
 
         self._roll_cw_button = QPushButton("Roll CW", self)
-        self._roll_cw_button.setIcon(qta.icon("fa6s.rotate-right"))
+        self._roll_cw_button.setIcon(_qicon("fa6s.rotate-right"))
         self._roll_cw_button.clicked.connect(self._on_roll_cw)
 
         self._elev_up_button = QPushButton("Elevate Up", self)
-        self._elev_up_button.setIcon(qta.icon("fa6s.arrow-up"))
+        self._elev_up_button.setIcon(_qicon("fa6s.arrow-up"))
         self._elev_up_button.clicked.connect(self._on_elev_up)
 
         self._elev_down_button = QPushButton("Elevate Down", self)
-        self._elev_down_button.setIcon(qta.icon("fa6s.arrow-down"))
+        self._elev_down_button.setIcon(_qicon("fa6s.arrow-down"))
         self._elev_down_button.clicked.connect(self._on_elev_down)
 
         self._az_left_button = QPushButton("Azimuth Left", self)
-        self._az_left_button.setIcon(qta.icon("fa6s.arrow-left"))
+        self._az_left_button.setIcon(_qicon("fa6s.arrow-left"))
         self._az_left_button.clicked.connect(self._on_az_left)
 
         self._az_right_button = QPushButton("Azimuth Right", self)
-        self._az_right_button.setIcon(qta.icon("fa6s.arrow-right"))
+        self._az_right_button.setIcon(_qicon("fa6s.arrow-right"))
         self._az_right_button.clicked.connect(self._on_az_right)
 
         rotate_layout.addWidget(self._roll_ccw_button, 0, 0)
@@ -685,19 +693,19 @@ class FormView(QWidget):
             "for the live auto-reduction slice preview"
         )
         self.generate_button = QPushButton("Generate Output", self)
-        self.generate_button.setIcon(qta.icon("fa6s.circle-play"))
+        self.generate_button.setIcon(_qicon("fa6s.circle-play"))
         self.generate_button.setToolTip(
             "Save config and run view.py (Normalization/Parametrization) "
             "or structure.py (Integration)"
         )
 
         self.stop_button = QPushButton("Stop Process", self)
-        self.stop_button.setIcon(qta.icon("fa6s.stop"))
+        self.stop_button.setIcon(_qicon("fa6s.stop"))
 
-        self.load_button.setIcon(qta.icon("fa6s.folder-open"))
-        self.save_button.setIcon(qta.icon("fa6s.floppy-disk"))
-        self.save_as_button.setIcon(qta.icon("fa6s.file-export"))
-        self.global_save_button.setIcon(qta.icon("fa6s.cloud-arrow-up"))
+        self.load_button.setIcon(_qicon("fa6s.folder-open"))
+        self.save_button.setIcon(_qicon("fa6s.floppy-disk"))
+        self.save_as_button.setIcon(_qicon("fa6s.file-export"))
+        self.global_save_button.setIcon(_qicon("fa6s.cloud-arrow-up"))
 
         load_save_layout.addWidget(name_label)
         load_save_layout.addWidget(self.output_line)
@@ -889,7 +897,7 @@ class FormView(QWidget):
         mat_layout = QVBoxLayout()
 
         self.load_cif_button = QPushButton("Load CIF", self)
-        self.load_cif_button.setIcon(qta.icon("fa6s.folder-open"))
+        self.load_cif_button.setIcon(_qicon("fa6s.folder-open"))
 
         notation = QDoubleValidator.StandardNotation
 
@@ -903,9 +911,9 @@ class FormView(QWidget):
         sg_layout.addStretch(1)
 
         self.add_site_button = QPushButton("Add", self)
-        self.add_site_button.setIcon(qta.icon("fa6s.plus"))
+        self.add_site_button.setIcon(_qicon("fa6s.plus"))
         self.del_site_button = QPushButton("Delete", self)
-        self.del_site_button.setIcon(qta.icon("fa6s.minus"))
+        self.del_site_button.setIcon(_qicon("fa6s.minus"))
 
         sg_layout.addWidget(self.add_site_button)
         sg_layout.addWidget(self.del_site_button)
@@ -970,7 +978,7 @@ class FormView(QWidget):
 
         mat_ctrl_layout = QHBoxLayout()
         self.show_crystal_button = QPushButton("Show Crystal", self)
-        self.show_crystal_button.setIcon(qta.icon("fa6s.eye"))
+        self.show_crystal_button.setIcon(_qicon("fa6s.eye"))
         mat_ctrl_layout.addWidget(self.load_cif_button)
         mat_ctrl_layout.addWidget(self.show_crystal_button)
         mat_ctrl_layout.addStretch(1)
@@ -1050,7 +1058,7 @@ class FormView(QWidget):
             "Write Refine: true to YAML for shape/orientation refinement."
         )
         self.show_sample_button = QPushButton("Show Sample", self)
-        self.show_sample_button.setIcon(qta.icon("fa6s.eye"))
+        self.show_sample_button.setIcon(_qicon("fa6s.eye"))
         samp_ctrl_layout.addWidget(self.refine_shape_box)
         samp_ctrl_layout.addStretch(1)
         samp_ctrl_layout.addWidget(self.show_sample_button)
@@ -1233,7 +1241,7 @@ class FormView(QWidget):
         int_layout.addWidget(self.quick_integration_box, 4, 2)
 
         self.int_run_button = QPushButton("Run Integration", self)
-        self.int_run_button.setIcon(qta.icon("fa6s.play"))
+        self.int_run_button.setIcon(_qicon("fa6s.play"))
 
         profile_layout.addStretch(1)
         profile_layout.addWidget(self.int_run_button)
@@ -1268,21 +1276,21 @@ class FormView(QWidget):
 
         for i in range(combo.count()):
             text = combo.itemText(i)
-            icon = qta.icon("fa6s.hashtag" if digit else "fa6s.minus")
+            icon = _qicon("fa6s.hashtag" if digit else "fa6s.minus")
             if text == "TOPAZ":
-                icon = qta.icon("fa6s.gem")
+                icon = _qicon("fa6s.gem")
             elif text == "CORELLI":
-                icon = qta.icon("fa6s.scissors")
+                icon = _qicon("fa6s.scissors")
             elif text == "MANDI":
-                icon = qta.icon("fa6s.dna")
+                icon = _qicon("fa6s.dna")
             elif text == "WAND²":
-                icon = qta.icon("fa6s.wand-magic")
+                icon = _qicon("fa6s.wand-magic")
             elif text == "DEMAND":
-                icon = qta.icon("fa6s.magnet")
+                icon = _qicon("fa6s.magnet")
             elif text == "SNAP":
-                icon = qta.icon("fa6s.weight-scale")
+                icon = _qicon("fa6s.weight-scale")
             elif text == "IMAGINE":
-                icon = qta.icon("fa6s.lightbulb")
+                icon = _qicon("fa6s.lightbulb")
             elif text in keys:
                 no = str(space_number[text])
                 pixmap = QPixmap(64, 64)
@@ -1782,7 +1790,7 @@ class FormView(QWidget):
         self.miller_l_line.setValidator(validator)
 
         self.param_run_button = QPushButton("Run Parametrization", self)
-        self.param_run_button.setIcon(qta.icon("fa6s.play"))
+        self.param_run_button.setIcon(_qicon("fa6s.play"))
 
         miller_layout.addWidget(self.miller_box)
         miller_layout.addWidget(miller_h_label)
@@ -2159,7 +2167,7 @@ class FormView(QWidget):
         self.symmetry_options_combo = QComboBox(self)
 
         self.norm_run_button = QPushButton("Run Normalization", self)
-        self.norm_run_button.setIcon(qta.icon("fa6s.play"))
+        self.norm_run_button.setIcon(_qicon("fa6s.play"))
 
         self.auto_proj_button = QPushButton("Auto Project", self)
         self.auto_bin_button = QPushButton("Auto Bin", self)
@@ -2457,7 +2465,7 @@ class FormView(QWidget):
         self.mask_browse_button = QPushButton("Mask", self)
         self.gonio_browse_button = QPushButton("Goniometer", self)
 
-        browse_icon = qta.icon("fa6s.folder-open")
+        browse_icon = _qicon("fa6s.folder-open")
         self.ub_browse_button.setIcon(browse_icon)
         self.bkg_browse_button.setIcon(browse_icon)
         self.van_browse_button.setIcon(browse_icon)

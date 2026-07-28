@@ -301,7 +301,8 @@ class SlicePlot:
 
         vmin, vmax = self._compute_clim(sampled)
 
-        log_sampled = np.where(sampled > 0, np.log10(sampled), np.nan)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            log_sampled = np.where(sampled > 0, np.log10(sampled), np.nan)
         log_min = np.log10(vmin)
         log_max = np.log10(vmax)
 

@@ -187,7 +187,7 @@ class PeaksModel:
             OutputWorkspace=peaks,
         )
 
-    def scan_threshold(self, md, peaks, min_Q):
+    def scan_threshold(self, md, peaks, min_Q, min_found=50, max_found=200):
         """
         Scan peak density threshold from predicted peaks and minimum Q.
 
@@ -199,12 +199,18 @@ class PeaksModel:
             Name of predicted peaks table.
         min_Q : float
             Minimum Q-spacing enforcing lower limit of peak spacing.
+        min_found : int, optional
+            Minimum number of found peaks desired for UB determination.
+            The default is 50.
+        max_found : int, optional
+            Maximum number of found peaks desired for UB determination.
+            The default is 200.
 
         """
 
         predict_peaks = mtd[peaks].getNumberPeaks()
 
-        thresholds = np.logspace(1, 5, 50)
+        thresholds = np.logspace(1, 6, 50)
         found = []
         indexed = []
 
@@ -224,11 +230,56 @@ class PeaksModel:
         ave_ind = 0.5 * (max_ind + min_ind)
 
         i_best = np.nanargmin(np.abs(indexed - ave_ind))
-        threshold = thresholds[i_best]
+
+        # refine with a narrow scan bracketing the coarse best threshold,
+        # targeting a found peak count suitable for UB determination
+        lo = thresholds[max(i_best - 1, 0)]
+        hi = thresholds[min(i_best + 1, len(thresholds) - 1)]
+
+        fine_thresholds = np.logspace(np.log10(lo), np.log10(hi), 25)
+        fine_found = []
+        fine_indexed = []
+
+        for threshold in fine_thresholds:
+            self.find_peaks(md, peaks, min_Q, threshold, predict_peaks)
+            self.index_peaks(peaks)
+            fine_found.append(mtd[peaks].getNumberPeaks())
+            self.remove_unindexed_peaks(peaks)
+            fine_indexed.append(mtd[peaks].getNumberPeaks())
+
+        fine_found = np.array(fine_found)
+        fine_indexed = np.array(fine_indexed)
+
+        in_range = (fine_found >= min_found) & (fine_found <= max_found)
+
+        if np.any(in_range):
+            candidates = np.where(in_range)[0]
+            # prefer the candidate with the most found peaks within the band
+            i_fine = candidates[np.argmax(fine_found[candidates])]
+        elif np.any(fine_found >= min_found):
+            # none within the band but some meet the minimum: get closest
+            candidates = np.where(fine_found >= min_found)[0]
+            i_fine = candidates[
+                np.nanargmin(np.abs(fine_found[candidates] - max_found))
+            ]
+        else:
+            # nothing meets the minimum: take whatever gives the most peaks
+            i_fine = np.nanargmax(fine_found)
+
+        threshold = fine_thresholds[i_fine]
 
         self.find_peaks(md, peaks, min_Q, threshold, predict_peaks)
         self.index_peaks(peaks)
         self.remove_unindexed_peaks(peaks)
+
+        thresholds = np.concatenate([thresholds, fine_thresholds])
+        found = np.concatenate([found, fine_found])
+        indexed = np.concatenate([indexed, fine_indexed])
+
+        order = np.argsort(thresholds)
+        thresholds = thresholds[order]
+        found = found[order]
+        indexed = indexed[order]
 
         return thresholds, found, indexed, threshold
 

@@ -31,6 +31,9 @@ from mantid.simpleapi import (
     ClearUB,
     LoadIsawUB,
     SetGoniometer,
+    ConvertUnits,
+    CropWorkspaceForMDNorm,
+    Rebin,
     MaskDetectorsIf,
     MaskDetectors,
     ExtractMask,
@@ -479,6 +482,9 @@ class AutoReduce:
             return
 
         LoadNexus(Filename=flux_file, OutputWorkspace="flux")
+
+        self.k_min = mtd["flux"].getXDimension().getMinimum()
+        self.k_max = mtd["flux"].getXDimension().getMaximum()
 
     def _convert_to_Q_sample(self, d_min):
         """

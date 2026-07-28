@@ -492,6 +492,28 @@ class AutoReduce:
         ("raw_md"), bounded by a generous +/-2*pi/d_min box on each axis.
         """
 
+        ConvertUnits(
+            InputWorkspace="data", OutputWorkspace="data", Target="Momentum"
+        )
+
+        CropWorkspaceForMDNorm(
+            InputWorkspace="data",
+            XMin=self.k_min,
+            XMax=self.k_max,
+            OutputWorkspace="data",
+        )
+
+        Rebin(
+            InputWorkspace="data",
+            Params=[self.k_min, self.k_max, self.k_max],
+            OutputWorkspace="data",
+            PreserveEvents=True,
+        )
+
+        CompressEvents(
+            InputWorkspace="data", OutputWorkspace="data", Tolerance=1e-2
+        )
+
         PreprocessDetectorsToMD(
             InputWorkspace="data", OutputWorkspace="slice_detectors"
         )

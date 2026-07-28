@@ -241,8 +241,50 @@ class AutoReduce:
             Filename=output,
         )
 
+    def _sigma_clim(self, data, n_sigma=3.0):
+        """
+        +/-n_sigma clip color limits, mirroring NeuXtalViz's default
+        "normal" calculate_clim (models/ub_tools.py): mean/std are
+        computed excluding non-finite and near-zero values, then the
+        +/-n_sigma spread is clipped to the actual (non-excluded) data
+        range.
+        """
+
+        trans = np.asarray(data, dtype=float).copy()
+        trans[~np.isfinite(trans)] = np.nan
+        trans[np.isclose(trans, 0)] = np.nan
+
+        if np.all(np.isnan(trans)):
+            return 0.0, 1.0
+
+        vmin, vmax = np.nanmin(trans), np.nanmax(trans)
+
+        mu, sigma = np.nanmean(trans), np.nanstd(trans)
+        spread = n_sigma * sigma
+        cmin, cmax = mu - spread, mu + spread
+
+        if np.isclose(cmin, cmax) or cmax < cmin:
+            cmin, cmax = vmin, vmax
+
+        zmin = max(cmin, vmin)
+        zmax = min(cmax, vmax)
+
+        if np.isclose(zmin, zmax):
+            return 0.0, 1.0
+
+        return float(zmin), float(zmax)
+
     def _heatmap_div(
-        self, x, y, z, x_title="", y_title="", title="", aspect=None
+        self,
+        x,
+        y,
+        z,
+        x_title="",
+        y_title="",
+        title="",
+        aspect=None,
+        zmin=None,
+        zmax=None,
     ):
         """
         Build a Plotly heatmap HTML div, mirroring plot_publisher's
@@ -254,6 +296,8 @@ class AutoReduce:
             If given, locks the y-axis to this data-unit ratio relative
             to x (e.g. 1 for equal x/y scaling), like matplotlib's
             set_aspect.
+        zmin, zmax : float, optional
+            Color limits; if omitted, Plotly auto-ranges from the data.
         """
 
         axis_style = dict(
@@ -284,7 +328,12 @@ class AutoReduce:
         )
 
         fig = go.Figure(
-            data=[go.Heatmap(z=z, x=x, y=y, colorscale="Jet")], layout=layout
+            data=[
+                go.Heatmap(
+                    z=z, x=x, y=y, colorscale="Jet", zmin=zmin, zmax=zmax
+                )
+            ],
+            layout=layout,
         )
 
         return plotly_plot(
@@ -332,12 +381,16 @@ class AutoReduce:
         out = "_elastic" if self.cc else ""
         run_title = os.path.basename(self.filename.replace(".nxs.h5", out))
 
+        zmin, zmax = self._sigma_clim(img)
+
         div = self._heatmap_div(
             x,
             y,
             img.T,
             x_title="γ [°]",
             y_title="ν [°]",
+            zmin=zmin,
+            zmax=zmax,
             title=run_title,
             aspect=1,
         )

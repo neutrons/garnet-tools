@@ -105,3 +105,29 @@ def test_heatmap_div_is_plotly_content():
 
     assert "plotly-graph-div" in div
     assert "Plotly.newPlot" in div
+
+
+def test_sigma_clim_clips_outliers_to_data_range():
+    ar = make_autoreduce()
+
+    rng = np.random.default_rng(0)
+    img = rng.normal(loc=100, scale=10, size=(50, 50))
+    img[0, 0] = 1e6  # outlier
+    img[1, 1] = np.nan  # masked
+    img[2, 2] = 0.0  # near-zero, excluded from mean/std like NeuXtalViz
+
+    zmin, zmax = ar._sigma_clim(img)
+
+    assert zmin > 0
+    assert zmin < zmax
+    # Never wider than the actual (finite) data range.
+    finite = img[np.isfinite(img)]
+    assert zmin >= finite.min()
+    assert zmax <= finite.max()
+
+
+def test_sigma_clim_all_invalid_falls_back():
+    ar = make_autoreduce()
+
+    assert ar._sigma_clim(np.full((5, 5), np.nan)) == (0.0, 1.0)
+    assert ar._sigma_clim(np.zeros((5, 5))) == (0.0, 1.0)

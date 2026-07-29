@@ -602,6 +602,55 @@ def cone_pair_from_anchor(anchor_hat, ang1, ang2, mutual_ang, psi):
     return x_dirs, y_dirs_plus, y_dirs_minus
 
 
+def right_handed_dirs2(
+    anchor_hat, name_anchor, name1, name2, dirs1, dirs2_plus, dirs2_minus
+):
+    """
+    Pick whichever of `dirs2_plus`/`dirs2_minus` gives a right-handed
+    (a, b, c) frame together with `anchor_hat` and `dirs1`.
+
+    `cone_pair_from_anchor`'s `+delta`/`-delta` branches are exact
+    mirror images of each other (through the plane containing
+    `anchor_hat` and the azimuth-`psi` rotation axis), so both satisfy
+    the requested inter-axial angles equally well -- mirroring
+    preserves every pairwise angle and length. Only their handedness
+    differs, and a rotation about `anchor_hat` (varying `psi`) can't
+    change chirality, so each branch's handedness is constant across
+    the whole `psi` sweep. This only needs checking once, at a single
+    `psi` (index 0), not per-candidate -- and letting the periodicity
+    score alone pick between the branches (as opposed to filtering by
+    handedness first) is exactly what let this search return a
+    left-handed UB roughly as often as a right-handed one.
+
+    Parameters
+    ----------
+    anchor_hat : ndarray of shape (3,)
+        Anchor axis direction.
+    name_anchor, name1, name2 : str
+        Names ("a", "b", or "c") of the anchor axis and the two
+        candidate axes described by `dirs1` and `dirs2_plus`/
+        `dirs2_minus` respectively.
+    dirs1 : ndarray of shape (n_psi, 3)
+        Candidate directions for `name1`.
+    dirs2_plus, dirs2_minus : ndarray of shape (n_psi, 3)
+        Candidate directions for `name2`, for each azimuthal-offset
+        branch.
+
+    Returns
+    -------
+    dirs2 : ndarray of shape (n_psi, 3)
+        Whichever of `dirs2_plus`/`dirs2_minus` is right-handed.
+    branch : int
+        +1 if `dirs2_plus` was right-handed, -1 if `dirs2_minus` was.
+    """
+    hats = {name_anchor: anchor_hat, name1: dirs1[0], name2: dirs2_plus[0]}
+    M = np.column_stack([hats["a"], hats["b"], hats["c"]])
+
+    if np.linalg.det(M) > 0:
+        return dirs2_plus, +1
+    return dirs2_minus, -1
+
+
 def joint_pair_search_from_anchor(
     q_vectors, anchor_hat, name_anchor, a, b, c, alpha, beta, gamma, n_psi=720
 ):
@@ -610,9 +659,10 @@ def joint_pair_search_from_anchor(
 
     Scans the azimuthal angle around the anchor axis over the full
     circle and, at each value, scores candidate directions for the two
-    remaining lattice axes using `cone_pair_from_anchor`. Both
-    azimuthal-offset branches (`+delta` and `-delta`) are tried and the
-    higher-scoring one is returned.
+    remaining lattice axes using `cone_pair_from_anchor`. Of its two
+    azimuthal-offset branches (`+delta` and `-delta`), only the one
+    that keeps (a, b, c) right-handed is searched -- see
+    `right_handed_dirs2`.
 
     Parameters
     ----------
@@ -638,7 +688,8 @@ def joint_pair_search_from_anchor(
     joint_score : float
         Combined score of `vec1` and `vec2`.
     branch : int
-        +1 if the `+delta` azimuthal offset won, -1 if `-delta` won.
+        +1 if the `+delta` azimuthal offset was the right-handed (and
+        hence searched) branch, -1 if `-delta` was.
     """
     psi = np.linspace(0.0, 2.0 * np.pi, n_psi, endpoint=False)
 
@@ -659,39 +710,21 @@ def joint_pair_search_from_anchor(
         anchor_hat, ang1, ang2, mutual, psi
     )
 
+    dirs2, branch = right_handed_dirs2(
+        anchor_hat, name_anchor, name1, name2, dirs1, dirs2_plus, dirs2_minus
+    )
+
     R1 = periodic_alignment_score(
         project_reflections_onto_directions(q_vectors, dirs1), d1
     )
-    R2_plus = periodic_alignment_score(
-        project_reflections_onto_directions(q_vectors, dirs2_plus), d2
-    )
-    R2_minus = periodic_alignment_score(
-        project_reflections_onto_directions(q_vectors, dirs2_minus), d2
+    R2 = periodic_alignment_score(
+        project_reflections_onto_directions(q_vectors, dirs2), d2
     )
 
-    joint_plus = R1 * R2_plus
-    joint_minus = R1 * R2_minus
+    joint = R1 * R2
+    i_best = np.argmax(joint)
 
-    i_plus = np.argmax(joint_plus)
-    i_minus = np.argmax(joint_minus)
-
-    if joint_plus[i_plus] >= joint_minus[i_minus]:
-        return (
-            name1,
-            name2,
-            dirs1[i_plus],
-            dirs2_plus[i_plus],
-            joint_plus[i_plus],
-            +1,
-        )
-    return (
-        name1,
-        name2,
-        dirs1[i_minus],
-        dirs2_minus[i_minus],
-        joint_minus[i_minus],
-        -1,
-    )
+    return name1, name2, dirs1[i_best], dirs2[i_best], joint[i_best], branch
 
 
 def refine_pair_from_anchor_local(
@@ -710,6 +743,10 @@ def refine_pair_from_anchor_local(
 ):
     """
     Refine `joint_pair_search_from_anchor` within a narrow azimuthal window.
+
+    Of `cone_pair_from_anchor`'s two azimuthal-offset branches
+    (`+delta` and `-delta`), only the one that keeps (a, b, c)
+    right-handed is searched -- see `right_handed_dirs2`.
 
     Parameters
     ----------
@@ -741,7 +778,8 @@ def refine_pair_from_anchor_local(
     psi_best : float
         Azimuthal angle, in radians, that gave `joint_score`.
     branch : int
-        +1 if the `+delta` azimuthal offset won, -1 if `-delta` won.
+        +1 if the `+delta` azimuthal offset was the right-handed (and
+        hence searched) branch, -1 if `-delta` was.
     """
     psi_half_width = np.deg2rad(psi_half_width_deg)
     psi = np.linspace(
@@ -768,40 +806,28 @@ def refine_pair_from_anchor_local(
         anchor_hat, ang1, ang2, mutual, psi
     )
 
+    dirs2, branch = right_handed_dirs2(
+        anchor_hat, name_anchor, name1, name2, dirs1, dirs2_plus, dirs2_minus
+    )
+
     R1 = periodic_alignment_score(
         project_reflections_onto_directions(q_vectors, dirs1), d1
     )
-    R2_plus = periodic_alignment_score(
-        project_reflections_onto_directions(q_vectors, dirs2_plus), d2
-    )
-    R2_minus = periodic_alignment_score(
-        project_reflections_onto_directions(q_vectors, dirs2_minus), d2
+    R2 = periodic_alignment_score(
+        project_reflections_onto_directions(q_vectors, dirs2), d2
     )
 
-    joint_plus = R1 * R2_plus
-    joint_minus = R1 * R2_minus
+    joint = R1 * R2
+    i_best = np.argmax(joint)
 
-    i_plus = np.argmax(joint_plus)
-    i_minus = np.argmax(joint_minus)
-
-    if joint_plus[i_plus] >= joint_minus[i_minus]:
-        return (
-            name1,
-            name2,
-            dirs1[i_plus],
-            dirs2_plus[i_plus],
-            joint_plus[i_plus],
-            psi[i_plus],
-            +1,
-        )
     return (
         name1,
         name2,
-        dirs1[i_minus],
-        dirs2_minus[i_minus],
-        joint_minus[i_minus],
-        psi[i_minus],
-        -1,
+        dirs1[i_best],
+        dirs2[i_best],
+        joint[i_best],
+        psi[i_best],
+        branch,
     )
 
 
@@ -1007,8 +1033,16 @@ def resolve_axis_length_degeneracy(
     candidates = [("none", hats)]
     for x, y in (("a", "b"), ("a", "c"), ("b", "c")):
         if abs(lengths[x] - lengths[y]) <= tol * max(lengths[x], lengths[y]):
+            (z,) = [ax for ax in ("a", "b", "c") if ax not in (x, y)]
             swapped = dict(hats)
             swapped[x], swapped[y] = hats[y], hats[x]
+            # Swapping two axes alone is an odd permutation (flips the
+            # frame left-handed); negating the third axis compensates
+            # -- exact for the orthorhombic-or-higher-symmetry case this
+            # degeneracy check mainly targets, since 90 degree angles are
+            # unchanged by negating one axis (self-complementary under
+            # angle -> 180 - angle).
+            swapped[z] = -hats[z]
             candidates.append((x + y, swapped))
 
     best = None

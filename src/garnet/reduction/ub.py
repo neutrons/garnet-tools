@@ -19,6 +19,8 @@ from mantid.simpleapi import (
     SaveIsawUB,
     CopySample,
     CreateEmptyTableWorkspace,
+    CreateSingleValuedWorkspace,
+    SetUB,
     FilterPeaks,
     DeleteWorkspace,
     mtd,
@@ -28,7 +30,7 @@ from mantid.geometry import PointGroupFactory, UnitCell
 
 import json
 
-from itertools import product
+from itertools import product, permutations
 
 import numpy as np
 
@@ -85,7 +87,7 @@ class UBModel:
 
         """
 
-        self.peaks = mtd[peaks]
+        self.peaks = peaks
 
     def get_UB(self):
         """
@@ -98,11 +100,10 @@ class UBModel:
 
         """
 
-        if mtd.doesExist(self.peaks.getName()):
-            if hasattr(self.peaks, "sample"):
-                ol = self.peaks.sample().getOrientedLattice()
+        if mtd.doesExist(self.peaks):
+            ol = mtd[self.peaks].sample().getOrientedLattice()
 
-                return ol.getUB()
+            return ol.getUB()
 
     def get_lattice_parameters(self):
         """
@@ -117,16 +118,15 @@ class UBModel:
 
         """
 
-        if mtd.doesExist(self.peaks.getName()):
-            if hasattr(self.peaks, "sample"):
-                ol = self.peaks.sample().getOrientedLattice()
-                a, b, c = ol.a(), ol.b(), ol.c()
-                alpha, beta, gamma = ol.alpha(), ol.beta(), ol.gamma()
+        if mtd.doesExist(self.peaks):
+            ol = mtd[self.peaks].sample().getOrientedLattice()
+            a, b, c = ol.a(), ol.b(), ol.c()
+            alpha, beta, gamma = ol.alpha(), ol.beta(), ol.gamma()
 
-                self.a, self.b, self.c = a, b, c
-                self.alpha, self.beta, self.gamma = alpha, beta, gamma
+            self.a, self.b, self.c = a, b, c
+            self.alpha, self.beta, self.gamma = alpha, beta, gamma
 
-                return a, b, c, alpha, beta, gamma
+            return a, b, c, alpha, beta, gamma
 
     def get_lattice_parameter_uncertanties(self):
         """
@@ -138,23 +138,22 @@ class UBModel:
             List of errors in lattice constants.
         """
 
-        if mtd.doesExist(self.peaks.getName()):
-            if hasattr(self.peaks, "sample"):
-                ol = self.peaks.sample().getOrientedLattice()
+        if mtd.doesExist(self.peaks):
+            ol = mtd[self.peaks].sample().getOrientedLattice()
 
-                params = (
-                    ol.errora(),
-                    ol.errorb(),
-                    ol.errorc(),
-                    ol.erroralpha(),
-                    ol.errorbeta(),
-                    ol.errorgamma(),
-                )
+            params = (
+                ol.errora(),
+                ol.errorb(),
+                ol.errorc(),
+                ol.erroralpha(),
+                ol.errorbeta(),
+                ol.errorgamma(),
+            )
 
-                params = np.array(params)
-                params[~np.isfinite(params)] = 0.0
+            params = np.array(params)
+            params[~np.isfinite(params)] = 0.0
 
-                return params.round(8).tolist()
+            return params.round(8).tolist()
 
     def get_center_uncertainty(self, hkl, min_frac=0.01, max_frac=0.05):
         """
@@ -187,12 +186,10 @@ class UBModel:
             Norm of the propagated Q-space center uncertainty (inverse
             angstroms), or 0.0 if lattice information is unavailable.
         """
-        if not mtd.doesExist(self.peaks.getName()):
-            return 0.0
-        if not hasattr(self.peaks, "sample"):
+        if not mtd.doesExist(self.peaks):
             return 0.0
 
-        ol = self.peaks.sample().getOrientedLattice()
+        ol = mtd[self.peaks].sample().getOrientedLattice()
         U = ol.getU()
 
         params = np.array(self.get_lattice_parameters())
@@ -228,8 +225,7 @@ class UBModel:
         """
 
         if HasUB(Workspace=self.peaks):
-            if hasattr(self.peaks, "sample"):
-                ol = self.peaks.sample().getOrientedLattice()
+            ol = mtd[self.peaks].sample().getOrientedLattice()
 
             return 1 / min([ol.astar(), ol.bstar(), ol.cstar()])
 
@@ -292,7 +288,8 @@ class UBModel:
             MinD=min_d,
             MaxD=max_d,
             Tolerance=tol,
-            DegreesPerStep=1,
+            Iterations=20,
+            DegreesPerStep=0.4,
         )
 
     def determine_UB_with_lattice_parameters(
@@ -708,7 +705,7 @@ class UBModel:
 
         self.transform_conventional_to_primitive(centering)
 
-        UB_prim = self.peaks.sample().getOrientedLattice().getUB().copy()
+        UB_prim = mtd[self.peaks].sample().getOrientedLattice().getUB().copy()
 
         for dhkl in product(range(-max_index, max_index + 1), repeat=3):
             dhkl = np.asarray(dhkl, dtype=float)
@@ -833,7 +830,15 @@ class Optimization:
 
             val, vec = np.linalg.eig(U)
 
-            ux, uy, uz = vec[:, np.argwhere(np.isclose(val, 1))[0][0]].real
+            i_axis = np.argmin(np.abs(val - 1))
+            if not np.isclose(val[i_axis], 1, atol=1e-3):
+                raise ValueError(
+                    "Orientation matrix U is not a proper rotation "
+                    "(closest eigenvalue to +1 is {}); "
+                    "the current UB is degenerate.".format(val[i_axis])
+                )
+
+            ux, uy, uz = vec[:, i_axis].real
 
             theta = np.arccos(uz)
             phi = np.arctan2(uy, ux)
@@ -1309,7 +1314,15 @@ class RefineSingleCrystalGoniometer:
 
         val, vec = np.linalg.eig(self.U)
 
-        ux, uy, uz = vec[:, np.argwhere(np.isclose(val, 1))[0][0]].real
+        i_axis = np.argmin(np.abs(val - 1))
+        if not np.isclose(val[i_axis], 1, atol=1e-3):
+            raise ValueError(
+                "Orientation matrix U is not a proper rotation "
+                "(closest eigenvalue to +1 is {}); "
+                "the current UB is degenerate.".format(val[i_axis])
+            )
+
+        ux, uy, uz = vec[:, i_axis].real
 
         theta = np.arccos(uz)
         phi = np.arctan2(uy, ux)
@@ -1569,11 +1582,106 @@ class Reorient:
         self.UB = ol.getUB().copy()
         self.UB_ref = UB_ref.copy()
 
+        # Triclinic/Monoclinic/Orthorhombic have no two axes constrained
+        # equal by symmetry, so a from-scratch UB determination has no way
+        # to know which physical direction the reference calls a/b/c --
+        # e.g. an orthorhombic cell can come back as (c, a, b). Resolve
+        # that axis-labeling ambiguity first; for the other systems this
+        # is already covered by the point group itself (its rotations
+        # already permute the symmetry-equal axes), so it's a no-op.
+        P = self.resolve_axis_ambiguity(crystal_system)
+
         transforms = self.cell_symmetry_matrices(
             crystal_system, lattice_system
         )
 
-        self.minimize(transforms)
+        self.minimize(transforms, P)
+
+    def _lattice_parameters(self, UB):
+        """
+        a, b, c, alpha, beta, gamma for an arbitrary UB matrix, via a
+        scratch workspace so this reuses Mantid's own UB<->lattice
+        parameter convention instead of re-deriving the metric tensor.
+        """
+
+        name = "_reorient_lattice_params"
+
+        CreateSingleValuedWorkspace(OutputWorkspace=name)
+        SetUB(Workspace=name, UB=UB)
+
+        ol = mtd[name].sample().getOrientedLattice()
+        params = np.array(
+            [ol.a(), ol.b(), ol.c(), ol.alpha(), ol.beta(), ol.gamma()]
+        )
+
+        DeleteWorkspace(Workspace=name)
+
+        return params
+
+    def resolve_axis_ambiguity(self, crystal_system):
+        """
+        Find the axis permutation (plus, if needed, a compensating single
+        axis flip) of self.UB whose (a, b, c, alpha, beta, gamma) best
+        matches self.UB_ref's, independent of crystal system (this is a
+        general permutation-and-compare search, not specific cell-type
+        logic). Only Triclinic/Monoclinic/Orthorhombic actually need it
+        -- see __init__.
+
+        A plain axis permutation is improper (det < 0) for an odd
+        permutation (e.g. a single a<->b swap) -- left uncorrected, that
+        would flip the resulting UB left-handed. Real UB determinations
+        are always right-handed, so an odd permutation is only ever
+        realistic paired with a compensating sign flip on one axis; which
+        axis is tried explicitly (flipping changes 2 of the 3 angles, not
+        just a sign, so the wrong choice would fail the angle match) and
+        only kept if it actually restores det > 0.
+
+        Returns
+        -------
+        P : ndarray, shape (3, 3)
+            Proper (det > 0) axis-permutation/sign-flip matrix.
+        """
+
+        if crystal_system not in (
+            "Triclinic",
+            "Monoclinic",
+            "Orthorhombic",
+        ):
+            return np.eye(3)
+
+        ref_params = self._lattice_parameters(self.UB_ref)
+
+        best_P, best_cost = np.eye(3), np.inf
+
+        for perm in permutations(range(3)):
+            perm_P = np.eye(3)[:, perm]
+
+            if np.linalg.det(perm_P) > 0:
+                candidates = [perm_P]
+            else:
+                candidates = [
+                    np.diag(signs).astype(float) @ perm_P
+                    for signs in ([-1, 1, 1], [1, -1, 1], [1, 1, -1])
+                ]
+
+            for P in candidates:
+                if np.linalg.det(P) <= 0:
+                    continue
+
+                params = self._lattice_parameters(self.UB @ np.linalg.inv(P))
+
+                length_cost = np.sum(
+                    ((params[:3] - ref_params[:3]) / ref_params[:3]) ** 2
+                )
+                angle_cost = np.sum(
+                    ((params[3:] - ref_params[3:]) / 180.0) ** 2
+                )
+                cost = length_cost + angle_cost
+
+                if cost < best_cost:
+                    best_cost, best_P = cost, P
+
+        return best_P
 
     def cell_symmetry_matrices(self, crystal_system, lattice_system):
         if crystal_system == "Cubic":
@@ -1601,22 +1709,42 @@ class Reorient:
         transforms = {}
         for symop in pg.getSymmetryOperations():
             T = np.column_stack([symop.transformHKL(vec) for vec in coords])
-            if np.linalg.det(T) > 0:
-                name = "{}: ".format(symop.getOrder()) + symop.getIdentifier()
-                transforms[name] = T
+            name = "{}: ".format(symop.getOrder()) + symop.getIdentifier()
+            transforms[name] = T
 
         return transforms
 
-    def minimize(self, transforms, tol=0.12):
-        cost, T = np.inf, np.eye(3)
-        for order, M in transforms.items():
-            UBp = self.UB @ np.linalg.inv(M)
+    def minimize(self, transforms, P, tol=0.12):
+        """
+        Search the crystal system's full point group (proper and
+        improper) composed with the axis-permutation P, keeping only
+        the combinations that stay a valid, proper (det > 0) transform,
+        for whichever best matches UB_ref.
+
+        P alone may be improper (an odd permutation, det = -1, e.g. a
+        plain swap of two axes) -- composing it with the point group's
+        *proper* rotations only would then always stay improper, since
+        proper x proper = proper and proper x improper = improper. Point
+        group elements are filtered by the combined transform's
+        determinant here (not on their own beforehand) so the correct
+        subset -- proper or improper -- is used in either case.
+        """
+
+        cost, T_best = np.inf, P.copy()
+
+        for _, M in transforms.items():
+            T = M @ P
+
+            if np.linalg.det(T) <= 0:
+                continue
+
+            UBp = self.UB @ np.linalg.inv(T)
             fro = np.linalg.norm(UBp - self.UB_ref)
             if fro < cost:
                 cost = fro
-                T = M.copy()
+                T_best = T
 
-        hkl_trans = ",".join(9 * ["{}"]).format(*T.flatten())
+        hkl_trans = ",".join(9 * ["{}"]).format(*T_best.flatten())
 
         TransformHKL(
             PeaksWorkspace=self.peaks,

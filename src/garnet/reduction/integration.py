@@ -252,13 +252,26 @@ class Integration(PeakProjection):
 
                 ub = UBModel("peaks")
 
-                ub.determine_UB_from_conventional_cell(*constants, centering)
+                ub.determine_UB_from_conventional_cell(
+                    *constants, centering, 0.5 / np.cbrt(3)
+                )
+
+                ub = UBModel("peaks")
+
+                ub.index_peaks(0.5 / np.cbrt(3))
+
+                ub.refine_UB_with_constraints(cell, 0.5 / np.cbrt(3))
 
                 Reorient("peaks", UB, cell)
 
                 ub = UBModel("peaks")
 
                 ub.copy_UB("data")
+
+                ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
+                ub_file = os.path.splitext(ub_file)[0] + ".mat"
+
+                ub.save_UB(ub_file)
 
             self.predict_all_peaks(centering, d_min, lamda_min, lamda_max)
 

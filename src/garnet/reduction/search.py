@@ -1158,8 +1158,10 @@ class FindUBFromConventionalCell(PythonAlgorithm):
         self.declareProperty("NumAzimuth", 240, IntBoundedValidator(lower=8))
         self.declareProperty("NumPolar", 120, IntBoundedValidator(lower=8))
         self.declareProperty("CapAngleDeg", 10.0)
-        self.declareProperty("CapSamples", 1000, IntBoundedValidator(lower=10))
-        self.declareProperty("NumPsi", 720, IntBoundedValidator(lower=30))
+        self.declareProperty(
+            "CapSamples", 100000, IntBoundedValidator(lower=10)
+        )
+        self.declareProperty("NumPsi", 144000, IntBoundedValidator(lower=30))
         self.declareProperty("RandomSeed", 1234)
         self.declareProperty("Tolerance", 0.2)
         self.declareProperty("AxisDegeneracyTolerance", 0.05)

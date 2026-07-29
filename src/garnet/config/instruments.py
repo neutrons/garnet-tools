@@ -24,7 +24,7 @@ beamlines = {
         "MaskBanks": [],
         "Banks": 18,
         "DeltaTheta": 0.0375,
-        "Processes": 8,
+        "Processes": 4,
     },
     "CORELLI": {
         "Facility": "SNS",
@@ -56,7 +56,7 @@ beamlines = {
         "MaskLost": [[58, [13, 16], [80, 130]], [59, [1, 4], [80, 130]]],
         "Banks": 91,
         "DeltaTheta": 0.16,
-        "Processes": 16,
+        "Processes": 12,
     },
     "TOPAZ": {
         "Facility": "SNS",
@@ -87,7 +87,7 @@ beamlines = {
         "MaskBanks": [],
         "Banks": 25,
         "DeltaTheta": 0.044,
-        "Processes": 8,
+        "Processes": 4,
     },
     "MANDI": {
         "Facility": "SNS",
@@ -123,7 +123,7 @@ beamlines = {
         "MaskBanks": [],
         "Banks": 42,
         "DeltaTheta": 0.0420,
-        "Processes": 8,
+        "Processes": 4,
     },
     "IMAGINE": {
         "Facility": "HFIR",
@@ -159,7 +159,7 @@ beamlines = {
         "MaskBanks": [],
         "Banks": 80,
         "DeltaTheta": 0.0420,
-        "Processes": 8,
+        "Processes": 4,
     },
     "WAND²": {
         "Facility": "HFIR",

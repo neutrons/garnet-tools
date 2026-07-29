@@ -187,7 +187,7 @@ class PeaksModel:
             OutputWorkspace=peaks,
         )
 
-    def scan_threshold(self, md, peaks, min_Q, min_found=50, max_found=200):
+    def scan_threshold(self, md, peaks, min_Q, min_found=150, max_found=500):
         """
         Scan peak density threshold from predicted peaks and minimum Q.
 
@@ -201,10 +201,10 @@ class PeaksModel:
             Minimum Q-spacing enforcing lower limit of peak spacing.
         min_found : int, optional
             Minimum number of found peaks desired for UB determination.
-            The default is 50.
+            The default is 150.
         max_found : int, optional
             Maximum number of found peaks desired for UB determination.
-            The default is 200.
+            The default is 500.
 
         """
 
@@ -250,36 +250,39 @@ class PeaksModel:
         fine_found = np.array(fine_found)
         fine_indexed = np.array(fine_indexed)
 
-        in_range = (fine_found >= min_found) & (fine_found <= max_found)
+        # select over the combined coarse+fine pool so a degenerate narrow
+        # bracket (e.g. i_best near an edge of the coarse scan) can never
+        # do worse than the coarse scan alone would have
+        all_thresholds = np.concatenate([thresholds, fine_thresholds])
+        all_found = np.concatenate([found, fine_found])
+        all_indexed = np.concatenate([indexed, fine_indexed])
+
+        in_range = (all_found >= min_found) & (all_found <= max_found)
 
         if np.any(in_range):
             candidates = np.where(in_range)[0]
             # prefer the candidate with the most found peaks within the band
-            i_fine = candidates[np.argmax(fine_found[candidates])]
-        elif np.any(fine_found >= min_found):
+            i_best = candidates[np.argmax(all_found[candidates])]
+        elif np.any(all_found >= min_found):
             # none within the band but some meet the minimum: get closest
-            candidates = np.where(fine_found >= min_found)[0]
-            i_fine = candidates[
-                np.nanargmin(np.abs(fine_found[candidates] - max_found))
+            candidates = np.where(all_found >= min_found)[0]
+            i_best = candidates[
+                np.nanargmin(np.abs(all_found[candidates] - max_found))
             ]
         else:
             # nothing meets the minimum: take whatever gives the most peaks
-            i_fine = np.nanargmax(fine_found)
+            i_best = np.nanargmax(all_found)
 
-        threshold = fine_thresholds[i_fine]
+        threshold = all_thresholds[i_best]
 
         self.find_peaks(md, peaks, min_Q, threshold, predict_peaks)
         self.index_peaks(peaks)
         self.remove_unindexed_peaks(peaks)
 
-        thresholds = np.concatenate([thresholds, fine_thresholds])
-        found = np.concatenate([found, fine_found])
-        indexed = np.concatenate([indexed, fine_indexed])
-
-        order = np.argsort(thresholds)
-        thresholds = thresholds[order]
-        found = found[order]
-        indexed = indexed[order]
+        order = np.argsort(all_thresholds)
+        thresholds = all_thresholds[order]
+        found = all_found[order]
+        indexed = all_indexed[order]
 
         return thresholds, found, indexed, threshold
 

@@ -521,7 +521,10 @@ class Vanadium:
 
         AbsorptionCorrection(
             InputWorkspace="vanadium",
-            ElementSize=self.r / 10,
+            NumberOfWavelengthPoints=20,
+            ExpMethod="FastApprox",
+            ScatterFrom="Sample",
+            ElementSize=self.r / 5,
             OutputWorkspace="correction",
         )
 
@@ -530,7 +533,7 @@ class Vanadium:
                 InputWorkspace="vanadium",
                 NumberOfWavelengthPoints=20,
                 Method="SampleOnly",
-                ElementSize=self.r / 20,
+                ElementSize=self.r / 5,
                 OutputWorkspace="factor",
             )
 

@@ -674,7 +674,7 @@ class BaseDataModel:
 
         det = np.linalg.det(2 * np.pi * UB @ W)
 
-        assert np.isclose(det, 1)
+        assert np.isclose(det, 1), "Volume not preserved: det={}".format(det)
 
     def delete_workspace(self, ws):
         """
@@ -2072,6 +2072,13 @@ class LaueData(BaseDataModel):
                 SplitInto=2,
                 MaxRecursionDepth=10,
             )
+
+    def convert_to_TOF(self, event_name):
+        ConvertUnits(
+            InputWorkspace=event_name,
+            OutputWorkspace=event_name,
+            Target="TOF",
+        )
 
     def absorption_correction(self, event_name, shapestl, angles, material):
         if shapestl is not None:

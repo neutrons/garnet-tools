@@ -2505,6 +2505,9 @@ class PeakEllipsoid:
 
         V, W = np.linalg.eigh(S)
 
+        if np.linalg.det(W) < 0:
+            W[:, -1] *= -1
+
         c0mod, c1mod, c2mod = xmod
 
         c0, c1, c2 = c

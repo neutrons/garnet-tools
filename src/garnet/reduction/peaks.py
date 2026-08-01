@@ -5,6 +5,7 @@ from mantid.simpleapi import (
     PredictSatellitePeaks,
     CentroidPeaksMD,
     IntegratePeaksMD,
+    IntegrateEllipsoidsTwoStep,
     BinMD,
     PeakIntensityVsRadius,
     FilterPeaks,
@@ -187,7 +188,7 @@ class PeaksModel:
             OutputWorkspace=peaks,
         )
 
-    def scan_threshold(self, md, peaks, min_Q, min_found=150, max_found=500):
+    def scan_threshold(self, md, peaks, min_Q, min_found=50):
         """
         Scan peak density threshold from predicted peaks and minimum Q.
 
@@ -201,10 +202,7 @@ class PeaksModel:
             Minimum Q-spacing enforcing lower limit of peak spacing.
         min_found : int, optional
             Minimum number of found peaks desired for UB determination.
-            The default is 150.
-        max_found : int, optional
-            Maximum number of found peaks desired for UB determination.
-            The default is 500.
+            The default is 50.
 
         """
 
@@ -224,69 +222,26 @@ class PeaksModel:
         found = np.array(found)
         indexed = np.array(indexed)
 
-        max_ind = np.nanmax(indexed)
-        min_ind = np.nanmin(indexed)
+        i_max = np.where(indexed == np.nanmax(indexed))[0]
+        thr_at_max = thresholds[i_max[-1]]
 
-        ave_ind = 0.5 * (max_ind + min_ind)
+        meets_min = np.where(indexed <= min_found)[0]
+        thr_at_min = (
+            thresholds[meets_min[0]] if meets_min.size else thresholds[-1]
+        )
 
-        i_best = np.nanargmin(np.abs(indexed - ave_ind))
+        target_threshold = np.sqrt(thr_at_max * thr_at_min)
 
-        # refine with a narrow scan bracketing the coarse best threshold,
-        # targeting a found peak count suitable for UB determination
-        lo = thresholds[max(i_best - 1, 0)]
-        hi = thresholds[min(i_best + 1, len(thresholds) - 1)]
-
-        fine_thresholds = np.logspace(np.log10(lo), np.log10(hi), 25)
-        fine_found = []
-        fine_indexed = []
-
-        for threshold in fine_thresholds:
-            self.find_peaks(md, peaks, min_Q, threshold, predict_peaks)
-            self.index_peaks(peaks)
-            fine_found.append(mtd[peaks].getNumberPeaks())
-            self.remove_unindexed_peaks(peaks)
-            fine_indexed.append(mtd[peaks].getNumberPeaks())
-
-        fine_found = np.array(fine_found)
-        fine_indexed = np.array(fine_indexed)
-
-        # select over the combined coarse+fine pool so a degenerate narrow
-        # bracket (e.g. i_best near an edge of the coarse scan) can never
-        # do worse than the coarse scan alone would have
-        all_thresholds = np.concatenate([thresholds, fine_thresholds])
-        all_found = np.concatenate([found, fine_found])
-        all_indexed = np.concatenate([indexed, fine_indexed])
-
-        in_range = (all_found >= min_found) & (all_found <= max_found)
-
-        if np.any(in_range):
-            candidates = np.where(in_range)[0]
-            # prefer the candidate with the most found peaks within the band
-            i_best = candidates[np.argmax(all_found[candidates])]
-        elif np.any(all_found >= min_found):
-            # none within the band but some meet the minimum: get closest
-            candidates = np.where(all_found >= min_found)[0]
-            i_best = candidates[
-                np.nanargmin(np.abs(all_found[candidates] - max_found))
-            ]
-        else:
-            # nothing meets the minimum: take whatever gives the most peaks
-            i_best = np.nanargmax(all_found)
-
-        threshold = all_thresholds[i_best]
+        i_best = np.nanargmin(np.abs(thresholds - target_threshold))
+        threshold = thresholds[i_best]
 
         self.find_peaks(md, peaks, min_Q, threshold, predict_peaks)
         self.index_peaks(peaks)
         self.remove_unindexed_peaks(peaks)
 
-        order = np.argsort(all_thresholds)
-        thresholds = all_thresholds[order]
-        found = all_found[order]
-        indexed = all_indexed[order]
-
         return thresholds, found, indexed, threshold
 
-    def index_peaks(self, peaks, tol=0.5 / np.cbrt(3)):
+    def index_peaks(self, peaks, tol=0.15):
         IndexPeaks(
             PeaksWorkspace=peaks,
             Tolerance=tol,
@@ -401,7 +356,7 @@ class PeaksModel:
             FixQAxis=False,
             FixMajorAxisLength=False,
             UseCentroid=centroid,
-            MaxIterations=5,
+            MaxIterations=10,
             ReplaceIntensity=True,
             IntegrateIfOnEdge=True,
             AdaptiveQBackground=adaptive,
@@ -433,6 +388,42 @@ class PeaksModel:
 
                     if -4 * np.pi * Qz / np.linalg.norm(Q) ** 2 > 0:
                         peak.setQSampleFrame(V3D(Q0, Q1, Q2))
+
+    def integrate_ellipsoids(
+        self,
+        data,
+        peaks,
+        peak_radius,
+        cutoff=10,
+    ):
+        """
+        Integrate peaks using ellipsoidal regions.
+        Ellipsoid integration adapts itself to the peak distribution.
+
+        Parameters
+        ----------
+        data : str
+            Name of event workspace.
+        peaks : str
+            Name of peaks table.
+        peak_radius : float
+            Integration region radius.
+        cutoff : float
+            Weak peak threshold. Default is 10.
+        """
+
+        IntegrateEllipsoidsTwoStep(
+            InputWorkspace=data,
+            PeaksWorkspace=peaks,
+            RegionRadius=peak_radius,
+            SpecifySize=False,
+            UseOnePercentBackgroundCorrection=True,
+            IntegrateIfOnEdge=True,
+            AdaptiveQBackground=False,
+            AdaptiveQMultiplier=0,
+            WeakPeakThreshold=cutoff,
+            OutputWorkspace=peaks,
+        )
 
     def integrate_peaks_with_radii(
         self,
@@ -1672,7 +1663,7 @@ class PeakModel:
 
         """
 
-        return mtd[self.peaks].sample().getOrientedLattice().getUB()
+        return mtd[self.peaks].sample().getOrientedLattice().getUB().copy()
 
     def get_peak_intensity(self, no):
         """
@@ -2137,6 +2128,26 @@ class PeakModel:
                 v0 = [float(val) for val in shape["direction0"].split(" ")]
                 v1 = [float(val) for val in shape["direction1"].split(" ")]
                 v2 = [float(val) for val in shape["direction2"].split(" ")]
+
+                # direction0/1/2 round-tripped through PeakShapeEllipsoid's
+                # string-based JSON serialization, which can leave them not
+                # quite unit length or not quite mutually orthogonal --
+                # project onto the nearest proper rotation (orthogonal
+                # Procrustes solution) rather than just sign-fixing, so
+                # column_stack([v0,v1,v2]) is a true rotation matrix (this
+                # is what downstream volume-preservation checks rely on).
+                V = np.column_stack([v0, v1, v2])
+                U, _, Vt = np.linalg.svd(V)
+                V = U @ Vt
+
+                if np.linalg.det(V) < 0:
+                    V[:, -1] *= -1
+
+                v0, v1, v2 = (
+                    V[:, 0].tolist(),
+                    V[:, 1].tolist(),
+                    V[:, 2].tolist(),
+                )
 
                 r0 = shape["radius0"]
                 r1 = shape["radius1"]

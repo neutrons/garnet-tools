@@ -103,7 +103,7 @@ class UBModel:
         if mtd.doesExist(self.peaks):
             ol = mtd[self.peaks].sample().getOrientedLattice()
 
-            return ol.getUB()
+            return ol.getUB().copy()
 
     def get_lattice_parameters(self):
         """
@@ -157,17 +157,8 @@ class UBModel:
 
     def get_center_uncertainty(self, hkl, min_frac=0.01, max_frac=0.05):
         """
-        Propagate lattice-parameter uncertainties to a peak's Q-space center uncertainty.
-
-        Each cell-parameter uncertainty
-        (`get_lattice_parameter_uncertanties`) is clipped to
-        [`min_frac`, `max_frac`] of its value: floored so an
-        over-confident (e.g. exact-looking) lattice fit doesn't
-        collapse the center prior to zero, and capped so a
-        poorly-determined fit can't blow it up. The clipped
-        uncertainties are then propagated through the B-matrix to this
-        peak's hkl via central finite differences, holding the
-        orientation U fixed.
+        Propagate lattice-parameter uncertainties to a peak's Q-space
+        center uncertainty.
 
         Parameters
         ----------
@@ -782,7 +773,7 @@ class Optimization:
         if mtd.doesExist(self.peaks):
             ol = mtd[self.peaks].sample().getOrientedLattice()
 
-            return ol.getUB()
+            return ol.getUB().copy()
 
     def get_lattice_parameters(self):
         """

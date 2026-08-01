@@ -21,6 +21,7 @@ from mantid.simpleapi import (
     SetGoniometer,
     SetSample,
     LoadSampleShape,
+    TransformHKL,
     mtd,
 )
 
@@ -553,7 +554,14 @@ class AbsorptionCorrection:
 
 
 class Peaks:
-    def __init__(self, peaks, filename, scale=None, point_group=None):
+    def __init__(
+        self,
+        peaks,
+        filename,
+        scale=None,
+        point_group=None,
+        HKLTransform=None,
+    ):
         self.peaks = peaks
 
         if filename is not None:
@@ -568,6 +576,14 @@ class Peaks:
 
         self.scale = scale
 
+        if HKLTransform is None:
+            HKLTransform = np.eye(3)
+        else:
+            HKLTransform = np.asarray(HKLTransform, dtype=float)
+            assert HKLTransform.shape == (3, 3)
+
+        self.HKLTransform = HKLTransform
+
         if point_group is not None:
             assert point_group in point_group_dict.keys()
             point_groups = [point_group]
@@ -581,12 +597,13 @@ class Peaks:
         self.modHKL = np.zeros((3, 3))
 
     def refine_ellipsoids(self, peaks):
-        filename = os.path.splitext(self.filename)[0] + "_res.pdf"
+        filename = os.path.splitext(self.filename)[0]
 
         res = ResolutionEllipsoid(peaks, r_cut=np.inf)
 
         res.fit()
-        res.plot_diagnostics(filename)
+        res.plot_diagnostics(filename + "_res.pdf")
+        res.write_resolution_parameters(filename + "_res.txt")
 
     def refine_UB(self, peaks):
         opt = Optimization(peaks)
@@ -852,6 +869,29 @@ class Peaks:
             if info["vol_frac"] < cutoff:
                 peak.setSigmaIntensity(float("-inf"))
 
+    def transform_hkl(self, peaks=None, tol=0.15):
+        """
+        Apply ``self.HKLTransform`` to correct an indexing/setting
+        error discovered after integration, without re-integrating.
+        A no-op when the transform is the identity (the default).
+        """
+        if peaks is None:
+            peaks = self.peaks
+
+        if np.allclose(self.HKLTransform, np.eye(3)):
+            return
+
+        hkl_trans = ",".join(
+            "{},{},{}".format(*row) for row in self.HKLTransform
+        )
+
+        TransformHKL(
+            PeaksWorkspace=peaks,
+            Tolerance=tol,
+            HKLTransform=hkl_trans,
+            FindError=False,
+        )
+
     def load_spectrum(self, filename, instrument):
         LoadIsawSpectrum(
             SpectraFile=filename,
@@ -949,6 +989,10 @@ class Peaks:
 
         if os.path.exists(ub_file):
             LoadIsawUB(Filename=ub_file, InputWorkspace=self.peaks)
+
+        self.transform_hkl(self.peaks)
+        if mtd.doesExist(self.peaks + "_merge"):
+            self.transform_hkl(self.peaks + "_merge")
 
         self.filename = re.sub(
             r"(_\([-+]?\d*\.?\d+,\s*[-+]?\d*\.?\d+,\s*[-+]?\d*\.?\d+\))+",
@@ -1960,9 +2004,30 @@ def main():
         "-c", "--scale", type=float, default=None, help="Scale factor"
     )
 
+    parser.add_argument(
+        "-t",
+        "--hkltransform",
+        nargs=9,
+        type=float,
+        default=None,
+        help="HKL transform matrix, row-major (default: identity)",
+    )
+
     args = parser.parse_args()
 
-    peaks = Peaks("peaks", args.filename, args.scale, args.pointgroup)
+    hkl_transform = (
+        None
+        if args.hkltransform is None
+        else np.array(args.hkltransform).reshape(3, 3)
+    )
+
+    peaks = Peaks(
+        "peaks",
+        args.filename,
+        args.scale,
+        args.pointgroup,
+        HKLTransform=hkl_transform,
+    )
     peaks.load_peaks()
 
     mu = 0.0

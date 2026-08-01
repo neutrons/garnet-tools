@@ -21,7 +21,10 @@ from garnet.config.instruments import beamlines
 from garnet.reduction.ub import UBModel, Optimization, Reorient, lattice_group
 from garnet.reduction.peaks import PeaksModel, PeakModel, centering_reflection
 from garnet.reduction.ellipsoid import PeakEllipsoid
-from garnet.reduction.resolution import ResolutionEllipsoid
+from garnet.reduction.resolution import (
+    ResolutionEllipsoid,
+    _plot_peak_shape_diagnostics,
+)
 from garnet.reduction.data import DataModel
 from garnet.reduction.projection import PeakProjection
 
@@ -126,7 +129,11 @@ class Integration(PeakProjection):
 
         for file in files:
             os.remove(file)
-            os.remove(os.path.splitext(file)[0] + ".mat")
+
+            mat_file = os.path.splitext(file)[0] + ".mat"
+
+            if os.path.exists(mat_file):
+                os.remove(mat_file)
 
         peaks.reset_satellites("combine")
 
@@ -225,7 +232,15 @@ class Integration(PeakProjection):
 
             data.convert_to_Q_sample("data" + app, "md", lorentz_corr=True)
 
-            self.predict_all_peaks(centering, d_min, lamda_min, lamda_max)
+            self.predict_all_peaks(
+                "data" + app,
+                "md",
+                "peaks",
+                centering,
+                d_min,
+                lamda_min,
+                lamda_max,
+            )
 
             peak = PeakModel("peaks")
 
@@ -235,66 +250,40 @@ class Integration(PeakProjection):
             }
 
             if self.params["OptimizePeaks"]:
-                ub = UBModel("peaks")
-
-                UB = ub.get_UB()
-
-                constants = ub.get_lattice_parameters()
-
-                Q_min, _ = ub.shortest_reciprocal_spacing(centering)
-
-                result = peaks.scan_threshold("md", "peaks", Q_min)
-
-                scan_file = self.get_plot_file("run#{}_scan".format(run))
-
-                scan_plot = ScanPlot(*result)
-                scan_plot.save_plot(scan_file)
-
-                ub = UBModel("peaks")
-
-                ub.determine_UB_from_conventional_cell(
-                    *constants, centering, 0.5 / np.cbrt(3)
+                self.optimize_peaks(
+                    "data" + app, "md", "peaks", centering, cell, run
                 )
 
-                ub = UBModel("peaks")
+            # md_file = self.get_diagnostic_file("run#{}_data".format(run))
+            # data.save_histograms(md_file, "md")
 
-                ub.index_peaks(0.5 / np.cbrt(3))
-
-                ub.refine_UB_with_constraints(cell, 0.5 / np.cbrt(3))
-
-                Reorient("peaks", UB, cell)
-
-                ub = UBModel("peaks")
-
-                ub.copy_UB("data")
-
-                ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
-                ub_file = os.path.splitext(ub_file)[0] + ".mat"
-
-                ub.save_UB(ub_file)
-
-            self.predict_all_peaks(centering, d_min, lamda_min, lamda_max)
+            self.data = data
 
             peaks.integrate_peaks(
                 "md",
                 "peaks",
                 r_cut / np.cbrt(3),
-                method="ellipsoid",
                 centroid=True,
                 update=True,
             )
 
-            res = ResolutionEllipsoid("peaks", r_cut=r_cut)
+            res = ResolutionEllipsoid("peaks", r_cut=r_cut, mosaic="isotropic")
             res.fit()
 
-            radii = res.renumber_by_size(5)
+            if res.model is not None:
+                res_file = self.get_plot_file("run#{}_res".format(run))
+                res.plot_diagnostics(res_file)
 
-            peaks.integrate_peaks_with_radii(
+                self.plot_peak_shape_diagnostics("peaks", res, r_cut, 21)
+
+            self.predict_all_peaks(
+                "data" + app,
                 "md",
                 "peaks",
-                radii,
-                centroid=True,
-                update=True,
+                centering,
+                d_min,
+                lamda_min,
+                lamda_max,
             )
 
             data.bin_Q_sample_to_hkl("md", "peaks", "hist", d_min=d_min)
@@ -303,20 +292,24 @@ class Integration(PeakProjection):
             data.save_histograms(hist_file, "hist")
             data.delete_workspace("hist")
 
-            res.fit()
-
-            res_file = self.get_plot_file("run#{}_res".format(run))
-            res.plot_diagnostics(res_file)
-
             pk_file = self.get_diagnostic_file("run#{}_peaks".format(run))
             peaks.save_peaks(pk_file, "peaks")
 
             if self.params["OptimizeUB"]:
-                self.optimize_ub(data, "peaks", cell, run)
+                self.optimize_ub("data" + app, "md", "peaks", cell, run)
 
-            self.predict_all_peaks(centering, d_min, lamda_min, lamda_max)
+            self.predict_all_peaks(
+                "data" + app,
+                "md",
+                "peaks",
+                centering,
+                d_min,
+                lamda_min,
+                lamda_max,
+            )
 
-            res.apply()
+            if res.model is not None:
+                res.apply()
 
             data.delete_workspace("md")
 
@@ -328,6 +321,10 @@ class Integration(PeakProjection):
 
             if self.params["ProfileFit"]:
                 banks = peaks.get_bank_names("peaks")
+
+                ub = UBModel("peaks")
+
+                ub.copy_UB("data")
 
                 for bank in banks:
                     if self.make_plot:
@@ -360,9 +357,7 @@ class Integration(PeakProjection):
                     if self.make_plot:
                         self.peak_plot.close()
             else:
-                data.convert_to_Q_sample(
-                    "data" + app, "md", lorentz_corr=False
-                )
+                data.convert_to_Q_sample("data", "md", lorentz_corr=False)
 
                 peaks.stash_run_number("peaks")
 
@@ -403,15 +398,6 @@ class Integration(PeakProjection):
 
         # ---
 
-        if data.workspace_exists("combine"):
-            opt = Optimization("combine")
-            opt.optimize_lattice(cell)
-
-            ub_file = os.path.splitext(result_file)[0] + ".mat"
-
-            ub = UBModel("combine")
-            ub.save_UB(ub_file)
-
         mtd.clear()
 
         return result_file
@@ -439,16 +425,18 @@ class Integration(PeakProjection):
                 self.params["CrossTerms"],
             )
 
-    def predict_all_peaks(self, centering, d_min, lamda_min, lamda_max):
+    def predict_all_peaks(
+        self, data, md, peaks_ws, centering, d_min, lamda_min, lamda_max
+    ):
         peaks = PeaksModel()
         peaks.predict_peaks(
-            "data", "peaks", centering, d_min, lamda_min, lamda_max
+            data, peaks_ws, centering, d_min, lamda_min, lamda_max
         )
 
-        self.predict_add_satellite_peaks("peaks", "md", lamda_min, lamda_max)
+        self.predict_add_satellite_peaks(peaks_ws, md, lamda_min, lamda_max)
 
-    def optimize_ub(self, data, peaks_ws, cell, run):
-        opt = Optimization(peaks_ws, tol=0.5 / np.cbrt(3))
+    def optimize_ub(self, data, md, peaks_ws, cell, run):
+        opt = Optimization(peaks_ws, tol=0.15)
         for _ in range(5):
             opt.optimize_lattice(cell)
 
@@ -458,7 +446,49 @@ class Integration(PeakProjection):
         ub = UBModel(peaks_ws)
         ub.save_UB(ub_file)
 
-        data.load_clear_UB(ub_file, "data", run)
+        ub.copy_UB(data)
+        ub.copy_UB(md)
+
+    def optimize_peaks(
+        self, data, md, peaks_ws, centering, cell, run, reindex=False
+    ):
+        ub = UBModel(peaks_ws)
+
+        peaks = PeaksModel()
+
+        UB = ub.get_UB()
+
+        min_d, max_d = ub.get_primitive_cell_length_range(centering)
+
+        Q_min, _ = ub.shortest_reciprocal_spacing(centering)
+
+        result = peaks.scan_threshold(md, peaks_ws, Q_min)
+
+        scan_file = self.get_plot_file("run#{}_scan".format(run))
+
+        scan_plot = ScanPlot(*result)
+        scan_plot.save_plot(scan_file)
+
+        ub = UBModel(peaks_ws)
+
+        if reindex:
+            ub.determine_UB_with_primitive_cell(min_d, max_d, tol=0.15)
+
+            ub.select_type(cell, centering, 0.15)
+
+            ub.index_peaks(0.15)
+
+            ub.refine_UB_with_constraints(cell, 0.15)
+
+            Reorient(peaks_ws, UB, cell)
+
+            ub.copy_UB(data)
+            ub.copy_UB(md)
+
+        ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
+        ub_file = os.path.splitext(ub_file)[0] + ".mat"
+
+        ub.save_UB(ub_file)
 
     def get_file(self, file, ws=""):
         """
@@ -623,7 +653,8 @@ class Integration(PeakProjection):
                 if intens_params is None:
                     result[key] = None
                     print("Cannot extract fit")
-                    assert False
+                    del ellipsoid
+                    continue
 
                 c, S, *best_fit = ellipsoid.best_fit
 
@@ -946,3 +977,168 @@ class Integration(PeakProjection):
             sig /= norm
 
             peak.set_peak_intensity(i, intens, sig)
+
+    def extract_peak_counts(self, peaks_ws, r_cut, n_bins, peak_indices=None):
+        """
+        Obtain raw event counts in an axis-aligned Q-sample box around
+        each peak, without normalization or ellipsoid fitting.
+
+        Each peak's binned box is also saved to the diagnostic directory
+        (as "..._counts.nxs", same peak-named-subdirectory convention as
+        `extract_peak_info`'s "_data"/"_norm" files) for manual
+        inspection of what's actually inside the box.
+
+        Parameters
+        ----------
+        peaks_ws : str
+            Peaks table.
+        r_cut : float or ndarray, shape (n_peaks,)
+            Box half-width along each Q-sample axis. A scalar applies
+            the same half-width to every peak; a per-peak array (e.g.
+            from `ResolutionEllipsoid.predict_roi_radii`) sizes each
+            peak's box individually.
+        n_bins : int
+            Number of bins along each Q-sample axis.
+        peak_indices : iterable of int, optional
+            Only bin these peaks. Defaults to all peaks. Useful for
+            pulling a handful of boxes (e.g. for a diagnostic plot)
+            without re-binning the whole peaks table.
+
+        Returns
+        -------
+        peak_dict : dict
+            Keyed by peak index, each value a dict with "counts",
+            "Q", "R", "lamda", "two_theta", "az_phi". "counts" is
+            signal from "md", which is Lorentz-corrected (see
+            `convert_to_Q_sample`'s `lorentz_corr`) -- a real-valued
+            weighted sum, not raw event counts.
+
+        """
+
+        data = self.data
+
+        peak = PeakModel(peaks_ws)
+
+        n_peak = peak.get_number_peaks()
+
+        r_cuts = np.broadcast_to(r_cut, n_peak)
+
+        bins = np.full(3, n_bins, dtype=int)
+        projections = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+
+        Qs = [np.array(peak.get_sample_Q(i)) for i in range(n_peak)]
+
+        peak_dict = {}
+
+        indices = range(n_peak) if peak_indices is None else peak_indices
+
+        for i in indices:
+            Q = Qs[i]
+
+            lamda = peak.get_wavelength(i)
+            two_theta, az_phi = peak.get_angles(i)
+            R = peak.get_goniometer_matrix(i)
+
+            extents = [[q - r_cuts[i], q + r_cuts[i]] for q in Q]
+
+            counts, _, Q0, Q1, Q2 = data.bin_in_Q(
+                "md", extents, bins.copy(), projections
+            )
+
+            orig_d = self.orig_d.get(peak.get_hklmnp(i))
+            peak_name = peak.get_peak_name(i, d=orig_d)
+
+            counts_file = self.get_diagnostic_file(peak_name + "_counts")
+
+            directory = os.path.dirname(counts_file)
+
+            os.makedirs(directory, exist_ok=True)
+
+            data.save_histograms(counts_file, "md_bin")
+
+            data.delete_workspace("md_bin")
+
+            peak_dict[i] = {
+                "counts": counts,
+                "Q0": Q0,
+                "Q1": Q1,
+                "Q2": Q2,
+                "Q": Q,
+                "R": R,
+                "lamda": lamda,
+                "two_theta": two_theta,
+                "az_phi": az_phi,
+            }
+
+        return peak_dict
+
+    def plot_peak_shape_diagnostics(self, peaks_ws, res, r_cut, n_bins):
+        """
+        Per-peak diagnostic figure: raw counts box (from
+        `extract_peak_counts`) with the observed (whatever ellipsoid
+        shape is currently stored on the peak, e.g. from
+        `PeaksModel.integrate_peaks`) and model-predicted (`res`)
+        ellipse cross-sections overlaid on all three 2D projections.
+
+        One PNG per peak, saved next to that peak's other diagnostic
+        files (`extract_peak_counts`'s "..._counts.nxs", same
+        peak-named subdirectory). Complements `res.plot_diagnostics`'s
+        population-level obs-vs-pred scatter with a per-peak, spatial
+        check of the same thing -- whether the peak's stored shape
+        actually matches the counts around it, and whether the box
+        (`r_cut`) used for the box display looks well-sized.
+
+        Parameters
+        ----------
+        peaks_ws : str
+            Peaks table.
+        res : ResolutionEllipsoid
+            Fitted resolution model (`fit()` already called).
+        r_cut : float or ndarray, shape (n_peaks,)
+            Box half-width(s) for the counts box shown behind the
+            overlay -- purely for display, independent of whatever
+            produced the peak's stored shape.
+        n_bins : int
+            Number of bins along each Q-sample axis.
+
+        """
+        peak = PeakModel(peaks_ws)
+
+        peak_dict = self.extract_peak_counts(peaks_ws, r_cut, n_bins)
+
+        for i, info in peak_dict.items():
+            c0, c1, c2, r0, r1, r2, v0, v1, v2 = peak.get_peak_shape(
+                i, r_cut=r_cut
+            )
+
+            if not np.all(np.isfinite([r0, r1, r2])):
+                continue
+
+            V_obs = np.column_stack([v0, v1, v2])
+            S_obs = V_obs @ np.diag(np.array([r0, r1, r2]) ** 2) @ V_obs.T
+
+            S_pred = res.predict_sample_S(i)
+
+            sig_noise = peak.get_signal_to_noise(i)
+
+            orig_d = self.orig_d.get(peak.get_hklmnp(i))
+            peak_name = peak.get_peak_name(i, d=orig_d)
+
+            sample = {
+                "label": "peak {} (S/N={:.1f})".format(i, sig_noise),
+                "Q0": info["Q0"],
+                "Q1": info["Q1"],
+                "Q2": info["Q2"],
+                "counts": info["counts"],
+                "center": (c0, c1, c2),
+                "S_obs": S_obs,
+                "S_pred": S_pred,
+            }
+
+            shape_file = self.get_diagnostic_file(
+                peak_name + "_shape", ext=".png"
+            )
+
+            os.makedirs(os.path.dirname(shape_file), exist_ok=True)
+
+            _plot_peak_shape_diagnostics([sample], shape_file)

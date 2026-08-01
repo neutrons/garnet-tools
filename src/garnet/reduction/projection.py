@@ -188,7 +188,7 @@ def transform_Q(Q0, Q1, Q2, projections):
 
 
 def bin_extent(
-    UB, hkl, lamda, R, two_theta, az_phi, shape, dQ, bin_min=19, bin_max=21
+    UB, hkl, lamda, R, two_theta, az_phi, shape, dQ, bin_min=11, bin_max=21
 ):
     """
     Compute bin extents and projection transform for one peak.
@@ -241,15 +241,13 @@ def bin_extent(
 
     projections = [v0, v1, v2]
 
-    r_cut = 3 * np.array([r0, r1, r2])
+    r_cut = 2 * np.array([r0, r1, r2])
 
     N = np.column_stack([n, u, v])
     W = np.column_stack(projections)
 
     Sres = W.T @ (N @ np.diag(np.asarray(dQ) ** 2) @ N.T) @ W
     dQ_proj = np.sqrt(np.diag(Sres))
-
-    r_cut = np.where(r_cut < 3 * dQ_proj, 3 * dQ_proj, r_cut)
 
     A = 2 * np.pi * (W.T @ UB)
 

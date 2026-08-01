@@ -267,6 +267,9 @@ class Integration(PeakProjection):
                 update=True,
             )
 
+            if self.params["OptimizeUB"]:
+                self.optimize_ub("data" + app, "md", "peaks", cell, run)
+
             res = ResolutionEllipsoid("peaks", r_cut=r_cut, mosaic="isotropic")
             res.fit()
 
@@ -294,9 +297,6 @@ class Integration(PeakProjection):
 
             pk_file = self.get_diagnostic_file("run#{}_peaks".format(run))
             peaks.save_peaks(pk_file, "peaks")
-
-            if self.params["OptimizeUB"]:
-                self.optimize_ub("data" + app, "md", "peaks", cell, run)
 
             self.predict_all_peaks(
                 "data" + app,

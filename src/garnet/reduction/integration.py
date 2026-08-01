@@ -437,8 +437,7 @@ class Integration(PeakProjection):
 
     def optimize_ub(self, data, md, peaks_ws, cell, run):
         opt = Optimization(peaks_ws, tol=0.15)
-        for _ in range(5):
-            opt.optimize_lattice(cell)
+        opt.optimize_lattice(cell)
 
         ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
         ub_file = os.path.splitext(ub_file)[0] + ".mat"

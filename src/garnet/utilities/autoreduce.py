@@ -562,8 +562,8 @@ class AutoReduce:
         """
         Wide in-plane extents from d_min (cube-corner-through-inv(UB@W),
         same technique as application.py's FormModel.autolim), fixed
-        +/-0.1 integration on the thin (third) axis. Bins are fixed at
-        NxNx1.
+        +/-0.1 integration on the thin (third) axis. In-plane bin counts
+        are sized to a fixed 0.05 rlu step; the thin axis is a single bin.
         """
 
         UB = np.asarray(UB, dtype=float)
@@ -588,7 +588,13 @@ class AutoReduce:
             [-limits[1], limits[1]],
             [-0.1, 0.1],
         ]
-        bins = [801, 801, 1]
+
+        rlu_step = 0.05
+        bins = [
+            max(1, round(2 * limits[0] / rlu_step)),
+            max(1, round(2 * limits[1] / rlu_step)),
+            1,
+        ]
 
         return extents, bins
 

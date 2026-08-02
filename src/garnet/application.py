@@ -5,6 +5,8 @@ import subprocess
 import tempfile
 import traceback
 
+import yaml
+
 import re
 
 import numpy as np
@@ -12,10 +14,14 @@ import itertools
 import scipy.linalg
 import matplotlib.colors as mpl_colors
 
+# Must run before anything (pyvista/pyvistaqt included) imports qtpy,
+# which locks in a Qt binding on first import and ignores this env var
+# afterwards -- setting it late let qtpy silently fall back to whatever
+# binding it tried first, causing a PyQt6+VTK segfault in some environments.
+os.environ.setdefault("QT_API", "pyside6")
+
 import pyvista as pv
 from pyvistaqt import QtInteractor
-
-os.environ.setdefault("QT_API", "pyside6")
 
 from qtpy.QtWidgets import (
     QApplication,
@@ -53,7 +59,13 @@ from qtpy.QtGui import (
     QColor,
     QPalette,
 )
-from qtpy.QtCore import Qt, QProcess, QElapsedTimer, QSettings
+from qtpy.QtCore import (
+    Qt,
+    QProcess,
+    QProcessEnvironment,
+    QElapsedTimer,
+    QSettings,
+)
 
 _local_cfg = os.path.join(
     tempfile.gettempdir(), os.environ.get("USER", "user"), "qt"
@@ -81,6 +93,11 @@ except ImportError:
 def _qicon(name, **kwargs):
     return qta.icon(name, **kwargs) if qta is not None else QIcon()
 
+
+# Root directory containing the "garnet" package (src/garnet/.. == src),
+# so `python -m garnet.utilities.X` subprocesses can import it even when
+# it isn't (or isn't yet) installed into the interpreter running this GUI.
+_SRC_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 from garnet._version import __version__
 
@@ -199,6 +216,142 @@ class PeriodicTableDialog(QDialog):
         self.accept()
 
 
+class ScriptRunnerWidget(QWidget):
+    """
+    Load/Save/Run/Stop controls for a standalone utility script invoked
+    as ``python -m <module> config.yaml``, sharing the main window's
+    process and console output (``view.process``/``view.output``, via
+    ``view.run_command``/``view.stop_process``) rather than owning its
+    own -- ``view`` is looked up lazily so this can be built before
+    those exist yet on the FormView.
+
+    ``to_config``/``from_config`` are callables supplied by the caller:
+    ``to_config()`` builds a plain dict from the section's own field
+    widgets, ``from_config(dict)`` applies a loaded dict back onto them.
+    """
+
+    def __init__(
+        self, module, fields_widget, to_config, from_config, view, parent=None
+    ):
+        super().__init__(parent)
+
+        self.module = module
+        self.to_config = to_config
+        self.from_config = from_config
+        self.view = view
+        self.config_file = None
+
+        self.config_line = QLineEdit("")
+        self.config_line.setReadOnly(True)
+        self.config_line.setPlaceholderText("Path to config file (.yaml)")
+
+        self.load_button = QPushButton("Load", self)
+        self.save_button = QPushButton("Save", self)
+        self.save_as_button = QPushButton("Save As", self)
+        self.run_button = QPushButton("Run", self)
+        self.stop_button = QPushButton("Stop", self)
+
+        self.load_button.setIcon(_qicon("fa6s.folder-open"))
+        self.save_button.setIcon(_qicon("fa6s.floppy-disk"))
+        self.save_as_button.setIcon(_qicon("fa6s.file-export"))
+        self.run_button.setIcon(_qicon("fa6s.play"))
+        self.stop_button.setIcon(_qicon("fa6s.stop"))
+
+        config_layout = QHBoxLayout()
+        config_layout.addWidget(QLabel("Config File:"))
+        config_layout.addWidget(self.config_line)
+        config_layout.addWidget(self.load_button)
+        config_layout.addWidget(self.save_button)
+        config_layout.addWidget(self.save_as_button)
+
+        run_layout = QHBoxLayout()
+        run_layout.addStretch(1)
+        run_layout.addWidget(self.run_button)
+        run_layout.addWidget(self.stop_button)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(fields_widget)
+        layout.addLayout(config_layout)
+        layout.addLayout(run_layout)
+
+        self.load_button.clicked.connect(self._load)
+        self.save_button.clicked.connect(self._save)
+        self.save_as_button.clicked.connect(self._save_as)
+        self.run_button.clicked.connect(self._run)
+        self.stop_button.clicked.connect(lambda: self.view.stop_process())
+
+    def _load(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        file_dialog = QFileDialog()
+        filename, _ = file_dialog.getOpenFileName(
+            self,
+            "Load config file",
+            "",
+            "YAML files (*.yaml *.yml)",
+            options=options,
+        )
+        if filename:
+            with open(filename, "r") as f:
+                params = yaml.safe_load(f) or {}
+            self.from_config(params)
+            self.config_file = filename
+            self.config_line.setText(filename)
+            self.view.output.appendPlainText(
+                "Loaded config from {}\n".format(filename)
+            )
+
+    def _save_as(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        file_dialog = QFileDialog()
+        filename, _ = file_dialog.getSaveFileName(
+            self,
+            "Save config file",
+            "",
+            "YAML files (*.yaml *.yml)",
+            options=options,
+        )
+        if filename:
+            if not filename.endswith((".yaml", ".yml")):
+                filename += ".yaml"
+            self.config_file = filename
+            self.config_line.setText(filename)
+            self._write_config(filename)
+
+    def _save(self):
+        if self.config_file:
+            self._write_config(self.config_file)
+        else:
+            self._save_as()
+
+    def _write_config(self, filename):
+        params = self.to_config()
+        with open(filename, "w") as f:
+            yaml.dump(params, f, sort_keys=False)
+        self.view.output.appendPlainText(
+            "Saved config to {}\n".format(filename)
+        )
+
+    def _run(self):
+        if not self.config_file:
+            self.view.output.appendPlainText(
+                "Save a config file before running.\n"
+            )
+            return
+        self._write_config(self.config_file)
+
+        env = QProcessEnvironment.systemEnvironment()
+        pythonpath = env.value("PYTHONPATH", "")
+        paths = [_SRC_ROOT] + ([pythonpath] if pythonpath else [])
+        env.insert("PYTHONPATH", os.pathsep.join(paths))
+        self.view.process.setProcessEnvironment(env)
+
+        self.view.run_command(
+            [sys.executable, "-m", self.module, self.config_file]
+        )
+
+
 class FormView(QWidget):
     def __init__(self):
         super().__init__()
@@ -216,6 +369,11 @@ class FormView(QWidget):
 
         mat_tab = self.init_info()
         setup_widget.addTab(mat_tab, "Sample/Material")
+
+        peaks_tab = self.peaks_plan()
+        cal_tab = self.calibration_plan()
+        setup_widget.addTab(peaks_tab, "Peak/Shape/Refinement")
+        setup_widget.addTab(cal_tab, "Calibration")
 
         norm_tab = self.norm_plan()
         param_tab = self.param_plan()
@@ -1250,6 +1408,651 @@ class FormView(QWidget):
         layout.addStretch(1)
         layout.addLayout(profile_layout)
 
+        tab.setLayout(layout)
+
+        return tab
+
+    def _make_file_picker(self, placeholder, file_filters, directory=False):
+        """
+        Build a (QLineEdit, QPushButton) pair for a file/folder path,
+        the button opening a browse dialog that fills in the line edit.
+        """
+
+        line = QLineEdit("")
+        line.setPlaceholderText(placeholder)
+        button = QPushButton("Browse", self)
+        button.setIcon(_qicon("fa6s.folder-open"))
+
+        def _browse():
+            options = QFileDialog.Options()
+            options |= QFileDialog.DontUseNativeDialog
+            file_dialog = QFileDialog()
+            if directory:
+                filename = file_dialog.getExistingDirectory(
+                    self, "Select folder", "", options=options
+                )
+            else:
+                filename, _ = file_dialog.getOpenFileName(
+                    self, "Select file", "", file_filters, options=options
+                )
+            if filename:
+                line.setText(filename)
+
+        button.clicked.connect(_browse)
+
+        return line, button
+
+    def peaks_plan(self):
+        tab = QWidget()
+        layout = QVBoxLayout()
+
+        grid = QGridLayout()
+
+        instrument_combo = QComboBox(self)
+        for inst in ["TOPAZ", "MANDI", "CORELLI", "SNAP"]:
+            instrument_combo.addItem(inst)
+        self.auto_scale_dropdown(instrument_combo)
+
+        ipts_line = QLineEdit("31856")
+        ipts_line.setValidator(QIntValidator(1, 1000000000, self))
+
+        runs_line = QLineEdit("")
+        runs_line.setPlaceholderText("e.g. 12345,12346 or 12345:12400")
+
+        centering_combo = QComboBox(self)
+        for centering in ["P", "I", "F", "R", "A", "B", "C"]:
+            centering_combo.addItem(centering)
+        self.auto_scale_dropdown(centering_combo)
+
+        crystal_combo = QComboBox(self)
+        for cell in [
+            "Triclinic",
+            "Monoclinic",
+            "Orthorhombic",
+            "Tetragonal",
+            "Trigonal",
+            "Hexagonal",
+            "Cubic",
+        ]:
+            crystal_combo.addItem(cell)
+        crystal_combo.setCurrentText("Cubic")
+        self.auto_scale_dropdown(crystal_combo)
+
+        lattice_combo = QComboBox(self)
+        for lattice in ["Rhombohedral", "Hexagonal"]:
+            lattice_combo.addItem(lattice)
+        self.auto_scale_dropdown(lattice_combo)
+
+        notation = QDoubleValidator.StandardNotation
+        len_validator = QDoubleValidator(0.1, 1000, 5, notation=notation)
+        ang_validator = QDoubleValidator(1, 179, 5, notation=notation)
+
+        a_line = QLineEdit("5.431")
+        b_line = QLineEdit("5.431")
+        c_line = QLineEdit("5.431")
+        for w in (a_line, b_line, c_line):
+            w.setValidator(len_validator)
+
+        alpha_line = QLineEdit("90")
+        beta_line = QLineEdit("90")
+        gamma_line = QLineEdit("90")
+        for w in (alpha_line, beta_line, gamma_line):
+            w.setValidator(ang_validator)
+
+        max_threshold_line = QLineEdit("100000")
+        max_threshold_line.setValidator(
+            QDoubleValidator(10, 1e9, 1, notation=notation)
+        )
+
+        peak_radius_line = QLineEdit("0.25")
+        peak_radius_line.setValidator(
+            QDoubleValidator(0.001, 2, 4, notation=notation)
+        )
+
+        inst_def_line, inst_def_button = self._make_file_picker(
+            "Path to instrument definition (.xml)",
+            "Instrument files (*.xml)",
+        )
+        det_cal_line, det_cal_button = self._make_file_picker(
+            "Path to detector calibration (.DetCal/.xml)",
+            "Calibration files (*.DetCal *.detcal *.xml)",
+        )
+        tube_cal_line, tube_cal_button = self._make_file_picker(
+            "Path to tube calibration (.h5/.nxs)", "Tube files (*.h5 *.nxs)"
+        )
+
+        grid.addWidget(QLabel("Instrument:"), 0, 0)
+        grid.addWidget(instrument_combo, 0, 1)
+        grid.addWidget(QLabel("IPTS:"), 0, 2)
+        grid.addWidget(ipts_line, 0, 3)
+        grid.addWidget(QLabel("Centering:"), 0, 4)
+        grid.addWidget(centering_combo, 0, 5)
+
+        grid.addWidget(QLabel("Crystal System:"), 1, 0)
+        grid.addWidget(crystal_combo, 1, 1)
+        grid.addWidget(QLabel("Lattice System:"), 1, 2)
+        grid.addWidget(lattice_combo, 1, 3)
+        grid.addWidget(QLabel("Runs:"), 1, 4)
+        grid.addWidget(runs_line, 1, 5)
+
+        grid.addWidget(QLabel("a (Å):"), 2, 0)
+        grid.addWidget(a_line, 2, 1)
+        grid.addWidget(QLabel("b (Å):"), 2, 2)
+        grid.addWidget(b_line, 2, 3)
+        grid.addWidget(QLabel("c (Å):"), 2, 4)
+        grid.addWidget(c_line, 2, 5)
+
+        grid.addWidget(QLabel("α (°):"), 3, 0)
+        grid.addWidget(alpha_line, 3, 1)
+        grid.addWidget(QLabel("β (°):"), 3, 2)
+        grid.addWidget(beta_line, 3, 3)
+        grid.addWidget(QLabel("γ (°):"), 3, 4)
+        grid.addWidget(gamma_line, 3, 5)
+
+        grid.addWidget(QLabel("Max Threshold:"), 4, 0)
+        grid.addWidget(max_threshold_line, 4, 1)
+        grid.addWidget(QLabel("Peak Radius (Å⁻¹):"), 4, 2)
+        grid.addWidget(peak_radius_line, 4, 3)
+
+        grid.addWidget(QLabel("Instrument Definition:"), 5, 0)
+        grid.addWidget(inst_def_line, 5, 1, 1, 4)
+        grid.addWidget(inst_def_button, 5, 5)
+
+        grid.addWidget(QLabel("Detector Calibration:"), 6, 0)
+        grid.addWidget(det_cal_line, 6, 1, 1, 4)
+        grid.addWidget(det_cal_button, 6, 5)
+
+        grid.addWidget(QLabel("Tube Calibration:"), 7, 0)
+        grid.addWidget(tube_cal_line, 7, 1, 1, 4)
+        grid.addWidget(tube_cal_button, 7, 5)
+
+        fields_widget = QWidget()
+        fields_widget.setLayout(grid)
+
+        def to_config():
+            params = {
+                "Instrument": instrument_combo.currentText(),
+                "UnitCellLengths": [
+                    float(a_line.text()),
+                    float(b_line.text()),
+                    float(c_line.text()),
+                ],
+                "UnitCellAngles": [
+                    float(alpha_line.text()),
+                    float(beta_line.text()),
+                    float(gamma_line.text()),
+                ],
+                "Centering": centering_combo.currentText(),
+                "CrystalSystem": crystal_combo.currentText(),
+                "LatticeSystem": lattice_combo.currentText(),
+                "MaxThreshold": float(max_threshold_line.text()),
+                "PeakRadius": float(peak_radius_line.text()),
+            }
+            if inst_def_line.text():
+                params["InstrumentDefinition"] = inst_def_line.text()
+            if ipts_line.text():
+                params["IPTS"] = int(ipts_line.text())
+            if runs_line.text():
+                params["Runs"] = runs_line.text()
+            if det_cal_line.text():
+                params["DetectorCalibration"] = det_cal_line.text()
+            if tube_cal_line.text():
+                params["TubeCalibration"] = tube_cal_line.text()
+            return params
+
+        def from_config(params):
+            instrument_combo.setCurrentText(params.get("Instrument", "TOPAZ"))
+            inst_def_line.setText(params.get("InstrumentDefinition") or "")
+            ipts = params.get("IPTS")
+            ipts_line.setText(str(ipts) if ipts is not None else "")
+            runs = params.get("Runs")
+            runs_line.setText(str(runs) if runs is not None else "")
+            lengths = params.get("UnitCellLengths", [5.431, 5.431, 5.431])
+            a_line.setText(str(lengths[0]))
+            b_line.setText(str(lengths[1]))
+            c_line.setText(str(lengths[2]))
+            angles = params.get("UnitCellAngles", [90, 90, 90])
+            alpha_line.setText(str(angles[0]))
+            beta_line.setText(str(angles[1]))
+            gamma_line.setText(str(angles[2]))
+            centering_combo.setCurrentText(params.get("Centering", "P"))
+            crystal_combo.setCurrentText(params.get("CrystalSystem", "Cubic"))
+            lattice_combo.setCurrentText(
+                params.get("LatticeSystem", "Rhombohedral")
+            )
+            max_threshold_line.setText(str(params.get("MaxThreshold", 100000)))
+            peak_radius_line.setText(str(params.get("PeakRadius", 0.25)))
+            det_cal_line.setText(params.get("DetectorCalibration") or "")
+            tube_cal_line.setText(params.get("TubeCalibration") or "")
+
+        runner = ScriptRunnerWidget(
+            "garnet.utilities.peaks",
+            fields_widget,
+            to_config,
+            from_config,
+            self,
+        )
+
+        layout.addWidget(runner)
+        layout.addStretch(1)
+        tab.setLayout(layout)
+
+        return tab
+
+    def calibration_section(self):
+        tab = QWidget()
+        layout = QVBoxLayout()
+
+        grid = QGridLayout()
+
+        instrument_combo = QComboBox(self)
+        for inst in ["TOPAZ", "MANDI", "CORELLI", "SNAP"]:
+            instrument_combo.addItem(inst)
+        self.auto_scale_dropdown(instrument_combo)
+
+        crystal_combo = QComboBox(self)
+        for cell in [
+            "Triclinic",
+            "Monoclinic",
+            "Orthorhombic",
+            "Tetragonal",
+            "Trigonal",
+            "Hexagonal",
+            "Cubic",
+        ]:
+            crystal_combo.addItem(cell)
+        crystal_combo.setCurrentText("Cubic")
+        self.auto_scale_dropdown(crystal_combo)
+
+        lattice_combo = QComboBox(self)
+        for lattice in ["Rhombohedral", "Hexagonal"]:
+            lattice_combo.addItem(lattice)
+        self.auto_scale_dropdown(lattice_combo)
+
+        notation = QDoubleValidator.StandardNotation
+        len_validator = QDoubleValidator(0.1, 1000, 5, notation=notation)
+        ang_validator = QDoubleValidator(1, 179, 5, notation=notation)
+
+        a_line = QLineEdit("5.431")
+        b_line = QLineEdit("5.431")
+        c_line = QLineEdit("5.431")
+        for w in (a_line, b_line, c_line):
+            w.setValidator(len_validator)
+
+        alpha_line = QLineEdit("90")
+        beta_line = QLineEdit("90")
+        gamma_line = QLineEdit("90")
+        for w in (alpha_line, beta_line, gamma_line):
+            w.setValidator(ang_validator)
+
+        refine_gonio_box = QCheckBox("Refine Goniometer", self)
+        refine_gonio_box.setChecked(False)
+
+        inst_def_line, inst_def_button = self._make_file_picker(
+            "Path to instrument definition (.xml)",
+            "Instrument files (*.xml)",
+        )
+        peaks_table_line, peaks_table_button = self._make_file_picker(
+            "Path to peaks table (.nxs/.integrate)",
+            "Peaks files (*.nxs *.integrate)",
+        )
+        output_line, output_button = self._make_file_picker(
+            "Path to output folder", "", directory=True
+        )
+
+        grid.addWidget(QLabel("Instrument:"), 0, 0)
+        grid.addWidget(instrument_combo, 0, 1)
+        grid.addWidget(QLabel("Crystal System:"), 0, 2)
+        grid.addWidget(crystal_combo, 0, 3)
+        grid.addWidget(QLabel("Lattice System:"), 0, 4)
+        grid.addWidget(lattice_combo, 0, 5)
+
+        grid.addWidget(QLabel("a (Å):"), 1, 0)
+        grid.addWidget(a_line, 1, 1)
+        grid.addWidget(QLabel("b (Å):"), 1, 2)
+        grid.addWidget(b_line, 1, 3)
+        grid.addWidget(QLabel("c (Å):"), 1, 4)
+        grid.addWidget(c_line, 1, 5)
+
+        grid.addWidget(QLabel("α (°):"), 2, 0)
+        grid.addWidget(alpha_line, 2, 1)
+        grid.addWidget(QLabel("β (°):"), 2, 2)
+        grid.addWidget(beta_line, 2, 3)
+        grid.addWidget(QLabel("γ (°):"), 2, 4)
+        grid.addWidget(gamma_line, 2, 5)
+
+        grid.addWidget(refine_gonio_box, 3, 0, 1, 2)
+
+        grid.addWidget(QLabel("Instrument Definition:"), 4, 0)
+        grid.addWidget(inst_def_line, 4, 1, 1, 4)
+        grid.addWidget(inst_def_button, 4, 5)
+
+        grid.addWidget(QLabel("Peaks Table:"), 5, 0)
+        grid.addWidget(peaks_table_line, 5, 1, 1, 4)
+        grid.addWidget(peaks_table_button, 5, 5)
+
+        grid.addWidget(QLabel("Output Folder:"), 6, 0)
+        grid.addWidget(output_line, 6, 1, 1, 4)
+        grid.addWidget(output_button, 6, 5)
+
+        fields_widget = QWidget()
+        fields_widget.setLayout(grid)
+
+        def to_config():
+            params = {
+                "Instrument": instrument_combo.currentText(),
+                "UnitCellLengths": [
+                    float(a_line.text()),
+                    float(b_line.text()),
+                    float(c_line.text()),
+                ],
+                "UnitCellAngles": [
+                    float(alpha_line.text()),
+                    float(beta_line.text()),
+                    float(gamma_line.text()),
+                ],
+                "CrystalSystem": crystal_combo.currentText(),
+                "LatticeSystem": lattice_combo.currentText(),
+                "RefineGoniometer": refine_gonio_box.isChecked(),
+            }
+            if inst_def_line.text():
+                params["InstrumentDefinition"] = inst_def_line.text()
+            if peaks_table_line.text():
+                params["PeaksTable"] = peaks_table_line.text()
+            if output_line.text():
+                params["OutputFolder"] = output_line.text()
+            return params
+
+        def from_config(params):
+            instrument_combo.setCurrentText(params.get("Instrument", "TOPAZ"))
+            inst_def_line.setText(params.get("InstrumentDefinition") or "")
+            peaks_table_line.setText(params.get("PeaksTable") or "")
+            output_line.setText(params.get("OutputFolder") or "")
+            lengths = params.get("UnitCellLengths", [5.431, 5.431, 5.431])
+            a_line.setText(str(lengths[0]))
+            b_line.setText(str(lengths[1]))
+            c_line.setText(str(lengths[2]))
+            angles = params.get("UnitCellAngles", [90, 90, 90])
+            alpha_line.setText(str(angles[0]))
+            beta_line.setText(str(angles[1]))
+            gamma_line.setText(str(angles[2]))
+            crystal_combo.setCurrentText(params.get("CrystalSystem", "Cubic"))
+            lattice_combo.setCurrentText(
+                params.get("LatticeSystem", "Rhombohedral")
+            )
+            refine_gonio_box.setChecked(
+                bool(params.get("RefineGoniometer", False))
+            )
+
+        runner = ScriptRunnerWidget(
+            "garnet.utilities.calibration",
+            fields_widget,
+            to_config,
+            from_config,
+            self,
+        )
+
+        layout.addWidget(runner)
+        layout.addStretch(1)
+        tab.setLayout(layout)
+
+        return tab
+
+    def vanadium_section(self):
+        tab = QWidget()
+        layout = QVBoxLayout()
+
+        grid = QGridLayout()
+
+        instrument_combo = QComboBox(self)
+        for inst in ["TOPAZ", "MANDI", "CORELLI", "SNAP"]:
+            instrument_combo.addItem(inst)
+        self.auto_scale_dropdown(instrument_combo)
+
+        shape_combo = QComboBox(self)
+        for shape in ["sphere", "cylinder"]:
+            shape_combo.addItem(shape)
+        self.auto_scale_dropdown(shape_combo)
+
+        validator = QIntValidator(1, 1000000000, self)
+
+        van_ipts_line = QLineEdit("31856")
+        van_ipts_line.setValidator(validator)
+        van_runs_line = QLineEdit("")
+        van_runs_line.setPlaceholderText("e.g. 12345,12346 or 12345:12400")
+
+        bkg_ipts_line = QLineEdit("31856")
+        bkg_ipts_line.setValidator(validator)
+        bkg_runs_line = QLineEdit("")
+        bkg_runs_line.setPlaceholderText("e.g. 12345,12346 or 12345:12400")
+
+        notation = QDoubleValidator.StandardNotation
+
+        diameter_line = QLineEdit("4")
+        diameter_line.setValidator(
+            QDoubleValidator(0.01, 100, 3, notation=notation)
+        )
+        height_line = QLineEdit("")
+        height_line.setPlaceholderText("Cylinder height (mm)")
+        height_line.setValidator(
+            QDoubleValidator(0.01, 100, 3, notation=notation)
+        )
+        beam_diameter_line = QLineEdit("")
+        beam_diameter_line.setPlaceholderText("Beam diameter (mm)")
+        beam_diameter_line.setValidator(
+            QDoubleValidator(0.01, 100, 3, notation=notation)
+        )
+
+        mom_validator = QDoubleValidator(0.01, 100, 4, notation=notation)
+        mom_min_line = QLineEdit("1.8")
+        mom_min_line.setValidator(mom_validator)
+        mom_max_line = QLineEdit("18")
+        mom_max_line.setValidator(mom_validator)
+
+        def _update_momentum_from_instrument():
+            wl = beamlines[instrument_combo.currentText()]["Wavelength"]
+            lamda_min, lamda_max = min(wl), max(wl)
+            mom_min_line.setText(str(round(2 * np.pi / lamda_max, 4)))
+            mom_max_line.setText(str(round(2 * np.pi / lamda_min, 4)))
+
+        instrument_combo.currentIndexChanged.connect(
+            lambda *_: _update_momentum_from_instrument()
+        )
+        _update_momentum_from_instrument()
+
+        int_validator = QIntValidator(1, 512, self)
+        group_x_line = QLineEdit("4")
+        group_x_line.setValidator(int_validator)
+        group_y_line = QLineEdit("4")
+        group_y_line.setValidator(int_validator)
+
+        van_time_stop_line = QLineEdit("")
+        van_time_stop_line.setPlaceholderText("optional")
+        bkg_time_stop_line = QLineEdit("")
+        bkg_time_stop_line.setPlaceholderText("optional")
+
+        inst_def_line, inst_def_button = self._make_file_picker(
+            "Path to instrument definition (.xml)",
+            "Instrument files (*.xml)",
+        )
+        det_cal_line, det_cal_button = self._make_file_picker(
+            "Path to detector calibration (.DetCal/.xml)",
+            "Calibration files (*.DetCal *.detcal *.xml)",
+        )
+        tube_cal_line, tube_cal_button = self._make_file_picker(
+            "Path to tube calibration (.h5/.nxs)", "Tube files (*.h5 *.nxs)"
+        )
+        output_line, output_button = self._make_file_picker(
+            "Path to output folder", "", directory=True
+        )
+
+        grid.addWidget(QLabel("Instrument:"), 0, 0)
+        grid.addWidget(instrument_combo, 0, 1)
+        grid.addWidget(QLabel("Sample Shape:"), 0, 2)
+        grid.addWidget(shape_combo, 0, 3)
+        grid.addWidget(QLabel("Diameter (mm):"), 0, 4)
+        grid.addWidget(diameter_line, 0, 5)
+
+        grid.addWidget(QLabel("Vanadium IPTS:"), 1, 0)
+        grid.addWidget(van_ipts_line, 1, 1)
+        grid.addWidget(QLabel("Vanadium Runs:"), 1, 2)
+        grid.addWidget(van_runs_line, 1, 3)
+        grid.addWidget(QLabel("Height (mm):"), 1, 4)
+        grid.addWidget(height_line, 1, 5)
+
+        grid.addWidget(QLabel("No-Sample IPTS:"), 2, 0)
+        grid.addWidget(bkg_ipts_line, 2, 1)
+        grid.addWidget(QLabel("No-Sample Runs:"), 2, 2)
+        grid.addWidget(bkg_runs_line, 2, 3)
+        grid.addWidget(QLabel("Beam Diameter (mm):"), 2, 4)
+        grid.addWidget(beam_diameter_line, 2, 5)
+
+        grid.addWidget(QLabel("Vanadium Time Stop:"), 3, 0)
+        grid.addWidget(van_time_stop_line, 3, 1)
+        grid.addWidget(QLabel("No-Sample Time Stop:"), 3, 2)
+        grid.addWidget(bkg_time_stop_line, 3, 3)
+
+        grid.addWidget(QLabel("Momentum Limits:"), 4, 0)
+        grid.addWidget(mom_min_line, 4, 1)
+        grid.addWidget(mom_max_line, 4, 2)
+        grid.addWidget(QLabel("Grouping:"), 4, 3)
+        grid.addWidget(group_x_line, 4, 4)
+        grid.addWidget(group_y_line, 4, 5)
+
+        grid.addWidget(QLabel("Instrument Definition:"), 5, 0)
+        grid.addWidget(inst_def_line, 5, 1, 1, 4)
+        grid.addWidget(inst_def_button, 5, 5)
+
+        grid.addWidget(QLabel("Detector Calibration:"), 6, 0)
+        grid.addWidget(det_cal_line, 6, 1, 1, 4)
+        grid.addWidget(det_cal_button, 6, 5)
+
+        grid.addWidget(QLabel("Tube Calibration:"), 7, 0)
+        grid.addWidget(tube_cal_line, 7, 1, 1, 4)
+        grid.addWidget(tube_cal_button, 7, 5)
+
+        grid.addWidget(QLabel("Output Folder:"), 8, 0)
+        grid.addWidget(output_line, 8, 1, 1, 4)
+        grid.addWidget(output_button, 8, 5)
+
+        fields_widget = QWidget()
+        fields_widget.setLayout(grid)
+
+        def to_config():
+            params = {
+                "Instrument": instrument_combo.currentText(),
+                "SampleShape": shape_combo.currentText(),
+                "Diameter": float(diameter_line.text()),
+                "MomentumLimits": [
+                    float(mom_min_line.text()),
+                    float(mom_max_line.text()),
+                ],
+                "Grouping": [
+                    int(group_x_line.text()),
+                    int(group_y_line.text()),
+                ],
+            }
+            if van_ipts_line.text():
+                params["VanadiumIPTS"] = int(van_ipts_line.text())
+            if van_runs_line.text():
+                params["VanadiumRuns"] = van_runs_line.text()
+            if bkg_ipts_line.text():
+                params["NoSampleIPTS"] = int(bkg_ipts_line.text())
+            if bkg_runs_line.text():
+                params["NoSampleRuns"] = bkg_runs_line.text()
+            if van_time_stop_line.text():
+                params["VanadiumTimeStop"] = float(van_time_stop_line.text())
+            if bkg_time_stop_line.text():
+                params["NoSampleTimeStop"] = float(bkg_time_stop_line.text())
+            if height_line.text():
+                params["Height"] = float(height_line.text())
+            if beam_diameter_line.text():
+                params["BeamDiameter"] = float(beam_diameter_line.text())
+            if inst_def_line.text():
+                params["InstrumentDefinition"] = inst_def_line.text()
+            if det_cal_line.text():
+                params["DetectorCalibration"] = det_cal_line.text()
+            if tube_cal_line.text():
+                params["TubeCalibration"] = tube_cal_line.text()
+            if output_line.text():
+                params["OutputFolder"] = output_line.text()
+            return params
+
+        def from_config(params):
+            instrument_combo.setCurrentText(params.get("Instrument", "TOPAZ"))
+            shape_combo.setCurrentText(params.get("SampleShape", "sphere"))
+
+            van_ipts = params.get("VanadiumIPTS")
+            van_ipts_line.setText(
+                str(van_ipts) if van_ipts is not None else ""
+            )
+            van_runs = params.get("VanadiumRuns")
+            van_runs_line.setText(
+                str(van_runs) if van_runs is not None else ""
+            )
+
+            bkg_ipts = params.get("NoSampleIPTS")
+            bkg_ipts_line.setText(
+                str(bkg_ipts) if bkg_ipts is not None else ""
+            )
+            bkg_runs = params.get("NoSampleRuns")
+            bkg_runs_line.setText(
+                str(bkg_runs) if bkg_runs is not None else ""
+            )
+
+            van_time_stop = params.get("VanadiumTimeStop")
+            van_time_stop_line.setText(
+                str(van_time_stop) if van_time_stop is not None else ""
+            )
+            bkg_time_stop = params.get("NoSampleTimeStop")
+            bkg_time_stop_line.setText(
+                str(bkg_time_stop) if bkg_time_stop is not None else ""
+            )
+
+            diameter_line.setText(str(params.get("Diameter", 4)))
+            height = params.get("Height")
+            height_line.setText(str(height) if height is not None else "")
+            beam_diameter = params.get("BeamDiameter")
+            beam_diameter_line.setText(
+                str(beam_diameter) if beam_diameter is not None else ""
+            )
+
+            mom_limits = params.get("MomentumLimits", [1.8, 18])
+            mom_min_line.setText(str(mom_limits[0]))
+            mom_max_line.setText(str(mom_limits[1]))
+
+            grouping = params.get("Grouping", [4, 4])
+            group_x_line.setText(str(grouping[0]))
+            group_y_line.setText(str(grouping[1]))
+
+            inst_def_line.setText(params.get("InstrumentDefinition") or "")
+            det_cal_line.setText(params.get("DetectorCalibration") or "")
+            tube_cal_line.setText(params.get("TubeCalibration") or "")
+            output_line.setText(params.get("OutputFolder") or "")
+
+        runner = ScriptRunnerWidget(
+            "garnet.utilities.vanadium",
+            fields_widget,
+            to_config,
+            from_config,
+            self,
+        )
+
+        layout.addWidget(runner)
+        layout.addStretch(1)
+        tab.setLayout(layout)
+
+        return tab
+
+    def calibration_plan(self):
+        tab = QWidget()
+        layout = QVBoxLayout()
+
+        sub_tabs = QTabWidget(self)
+        sub_tabs.addTab(self.calibration_section(), "Calibration")
+        sub_tabs.addTab(self.vanadium_section(), "Vanadium")
+
+        layout.addWidget(sub_tabs)
         tab.setLayout(layout)
 
         return tab
@@ -2437,10 +3240,6 @@ class FormView(QWidget):
         self.mask_line.setPlaceholderText("Path to mask file (.xml)")
         self.output_line = QLineEdit("")
         self.output_line.setPlaceholderText("Path to config file (.yaml)")
-        self.gonio_line = QLineEdit("")
-        self.gonio_line.setPlaceholderText(
-            "Path to goniometer calibration (.xml)"
-        )
 
         self.wl_min_line = QLineEdit("0.3")
         self.wl_max_line = QLineEdit("3.5")
@@ -2463,7 +3262,6 @@ class FormView(QWidget):
         self.cal_browse_button = QPushButton("Detector", self)
         self.tube_browse_button = QPushButton("Tube", self)
         self.mask_browse_button = QPushButton("Mask", self)
-        self.gonio_browse_button = QPushButton("Goniometer", self)
 
         browse_icon = _qicon("fa6s.folder-open")
         self.ub_browse_button.setIcon(browse_icon)
@@ -2473,7 +3271,6 @@ class FormView(QWidget):
         self.cal_browse_button.setIcon(browse_icon)
         self.tube_browse_button.setIcon(browse_icon)
         self.mask_browse_button.setIcon(browse_icon)
-        self.gonio_browse_button.setIcon(browse_icon)
 
         experiment_params_layout.addWidget(self.instrument_combo)
         experiment_params_layout.addWidget(ipts_label)
@@ -2506,12 +3303,11 @@ class FormView(QWidget):
         instrument_params_layout.addWidget(self.cal_browse_button, 6, 1)
         instrument_params_layout.addWidget(self.tube_line, 7, 0)
         instrument_params_layout.addWidget(self.tube_browse_button, 7, 1)
-        instrument_params_layout.addWidget(self.gonio_line, 8, 0)
-        instrument_params_layout.addWidget(self.gonio_browse_button, 8, 1)
 
         layout.addLayout(experiment_params_layout)
         layout.addLayout(run_params_layout)
         layout.addLayout(instrument_params_layout)
+        layout.addStretch(1)
 
         tab.setLayout(layout)
 
@@ -2590,9 +3386,6 @@ class FormView(QWidget):
 
     def connect_load_detector(self, load_detector_cal):
         self.cal_browse_button.clicked.connect(load_detector_cal)
-
-    def connect_load_goniometer(self, load_goniometer_cal):
-        self.gonio_browse_button.clicked.connect(load_goniometer_cal)
 
     def connect_load_tube(self, load_tube_cal):
         self.tube_browse_button.clicked.connect(load_tube_cal)
@@ -2864,8 +3657,6 @@ class FormView(QWidget):
         if "SNS" in filepath:
             self.cal_line.setEnabled(True)
             self.cal_browse_button.setEnabled(True)
-            self.gonio_line.setEnabled(True)
-            self.gonio_browse_button.setEnabled(True)
             self.tube_line.setEnabled(False)
             self.tube_browse_button.setEnabled(False)
             if "CORELLI" in filepath:
@@ -2877,8 +3668,6 @@ class FormView(QWidget):
         else:
             self.cal_line.setEnabled(False)
             self.cal_browse_button.setEnabled(False)
-            self.gonio_line.setEnabled(False)
-            self.gonio_browse_button.setEnabled(False)
             self.tube_line.setEnabled(False)
             self.tube_browse_button.setEnabled(False)
             self.flux_line.setEnabled(False)
@@ -3006,27 +3795,6 @@ class FormView(QWidget):
 
         filename, _ = file_dialog.getOpenFileName(
             self, "Load calibration file", path, file_filters, options=options
-        )
-
-        return filename
-
-    def get_goniometer_calibration(self):
-        return self.gonio_line.text()
-
-    def set_goniometer_calibration(self, filename):
-        return self.gonio_line.setText(filename)
-
-    def load_goniometer_cal_dialog(self, path=""):
-        options = QFileDialog.Options()
-        options |= QFileDialog.DontUseNativeDialog
-
-        file_dialog = QFileDialog()
-        file_dialog.setFileMode(QFileDialog.AnyFile)
-
-        file_filters = "Calibration files (*.xml)"
-
-        filename, _ = file_dialog.getOpenFileName(
-            self, "Load goniometer file", path, file_filters, options=options
         )
 
         return filename
@@ -3853,7 +4621,6 @@ class FormPresenter:
         self.view.connect_load_UB(self.load_UB)
         self.view.connect_load_mask(self.load_mask)
         self.view.connect_load_detector(self.load_detector)
-        self.view.connect_load_goniometer(self.load_goniometer)
         self.view.connect_load_tube(self.load_tube)
         self.view.connect_load_background(self.load_background)
         self.view.connect_load_vanadium(self.load_vanadium)
@@ -4116,6 +4883,10 @@ class FormPresenter:
         wavelength = self.model.get_wavelength()
         self.view.set_wavelength(wavelength)
 
+        min_d = self.model.get_min_d()
+        if min_d is not None:
+            self.view.set_min_d(min_d)
+
         groupings = self.model.get_groupings()
         self.view.set_groupings(groupings)
 
@@ -4159,13 +4930,6 @@ class FormPresenter:
 
         if filename:
             self.view.set_detector_calibration(filename)
-
-    def load_goniometer(self):
-        path = self.model.get_goniometer_file_path()
-        filename = self.view.load_goniometer_cal_dialog(path)
-
-        if filename:
-            self.view.set_goniometer_calibration(filename)
 
     def load_tube(self):
         path = self.model.get_calibration_file_path()
@@ -4240,10 +5004,6 @@ class FormPresenter:
             detector = self.model.get_detector_calibration()
             if detector is not None:
                 self.view.set_detector_calibration(detector)
-
-            gonio = self.model.get_goniometer_calibration()
-            if gonio is not None:
-                self.view.set_goniometer_calibration(gonio)
 
             tube = self.model.get_tube_calibration()
             if tube is not None:
@@ -4324,10 +5084,6 @@ class FormPresenter:
             detector = self.view.get_detector_calibration()
             if detector is not None:
                 self.model.set_detector_calibration(detector)
-
-            gonio = self.view.get_goniometer_calibration()
-            if gonio is not None:
-                self.model.set_goniometer_calibration(gonio)
 
             tube = self.view.get_tube_calibration()
             if tube is not None:
@@ -4849,18 +5605,6 @@ class FormModel:
             if cal is not None:
                 self.reduction.plan["DetectorCalibration"] = cal
 
-    def get_goniometer_calibration(self):
-        if self.reduction.plan is not None:
-            cal = self.reduction.plan.get("GoniometerCalibration")
-            return cal
-
-    def set_goniometer_calibration(self, cal):
-        cal = None if cal == "" else cal
-        if self.reduction.plan is not None:
-            self.reduction.plan.pop("GoniometerCalibration", None)
-            if cal is not None:
-                self.reduction.plan["GoniometerCalibration"] = cal
-
     def get_tube_calibration(self):
         if self.reduction.plan is not None:
             cal = self.reduction.plan.get("TubeCalibration")
@@ -5275,6 +6019,12 @@ class FormModel:
     def get_processes(self):
         return self.beamline["Processes"]
 
+    def get_min_d(self):
+        if self.reduction.plan is not None:
+            integration = self.reduction.plan.get("Integration")
+            if integration is not None:
+                return integration.get("MinD")
+
     def get_wavelength(self):
         wl = self.beamline["Wavelength"]
         if self.reduction is not None:
@@ -5334,15 +6084,6 @@ class FormModel:
         return filepath
 
     def get_calibration_file_path(self):
-        return os.path.join(
-            "/",
-            self.beamline["Facility"],
-            self.beamline["InstrumentName"],
-            "shared",
-            "calibration",
-        )
-
-    def get_goniometer_file_path(self):
         return os.path.join(
             "/",
             self.beamline["Facility"],

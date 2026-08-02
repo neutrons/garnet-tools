@@ -1666,7 +1666,6 @@ class LaueData(BaseDataModel):
         event_name,
         detector_calibration,
         tube_calibration=None,
-        goniometer_calibration=None,
     ):
         """
         Apply detector calibration.
@@ -1679,8 +1678,6 @@ class LaueData(BaseDataModel):
             Detector calibration as either .xml or .DetCal.
         tube_calibration : str, optional
             CORELLI-only tube calibration. The default is None.
-        goniometer_calibration : str
-            Goniometer calibration as .xml. The default is None.
 
         """
 
@@ -1704,39 +1701,6 @@ class LaueData(BaseDataModel):
                 LoadIsawDetCal(
                     InputWorkspace=event_name, Filename=detector_calibration
                 )
-
-        if goniometer_calibration is not None:
-            if os.path.splitext(goniometer_calibration)[1] == ".xml":
-                LoadParameterFile(
-                    Workspace="goniometer", Filename=goniometer_calibration
-                )
-
-                inst = mtd["goniometer"].getInstrument()
-                run = mtd[event_name].run()
-
-                params = ["omega-offset", "chi-offset", "phi-offset"]
-
-                for i, param in enumerate(params):
-                    if inst.hasParameter(param):
-                        val = inst.getNumberParameter(param)[0]
-                        name = self.gon_axis_logs[i]
-                        values = run.getProperty(name).value
-                        times = run.getProperty(name).times
-                        log = FloatTimeSeriesProperty(name)
-                        for t, v in zip(times, values):
-                            log.addValue(t, v + val)
-                        run[name] = log
-
-                self.set_goniometer(event_name)
-
-                run = mtd[event_name].run()
-
-                param = "goniometer-tilt"
-                if inst.hasParameter(param):
-                    v = inst.getStringParameter(param)[0]
-                    G = np.array(v.split(",")).astype(float).reshape(3, 3)
-                    gon = run.getGoniometer()
-                    gon.setR(G @ gon.getR())
 
         if mtd.doesExist("sa") and not self.sa_cal:
             self.sa_cal = True

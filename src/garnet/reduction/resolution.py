@@ -825,7 +825,7 @@ class ResolutionEllipsoid:
         x, residual_norm, robust_weights = self.robust_nnls(A, y)
 
         self.model = {
-            **self._label_variance_parameters(x),
+            **self._label_variance_parameters(x.ravel()),
             "variance_parameters": x,
             "residual_norm": residual_norm,
             "used_peaks": used,
@@ -1205,7 +1205,12 @@ class ResolutionEllipsoid:
         ]
 
         for key, val in self.model.items():
-            if key in ("variance_parameters", "residual_norm", "used_peaks"):
+            if key in (
+                "variance_parameters",
+                "residual_norm",
+                "used_peaks",
+                "robust_weights",
+            ):
                 continue
             lines.append("{}: {:.6e}\n".format(key, val))
 

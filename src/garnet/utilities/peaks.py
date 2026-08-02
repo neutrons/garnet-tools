@@ -10,8 +10,6 @@ sys.path.append(directory)
 import yaml
 
 import numpy as np
-import scipy.optimize
-import scipy.interpolate
 
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
@@ -30,213 +28,93 @@ from mantid.simpleapi import (
     SetGoniometer,
     CreateSingleValuedWorkspace,
     SetUB,
-    SaveIsawUB,
-    ReorientUnitCell,
-    TransformHKL,
-    FindUBUsingLatticeParameters,
-    OptimizeLatticeForCellType,
+    IndexPeaks,
+    FindPeaksMD,
     ConvertToMD,
     SaveMD,
     LoadMD,
     ConvertQtoHKLMDHisto,
     PreprocessDetectorsToMD,
-    IndexPeaks,
-    FindPeaksMD,
     CloneWorkspace,
     CombinePeaksWorkspaces,
     mtd,
 )
 
-from mantid.geometry import UnitCell
+from garnet.reduction.ub import UBModel, Optimization, Reorient
+from garnet.reduction.peaks import PeaksModel
+from garnet.reduction.resolution import ResolutionEllipsoid
 
-from calculate import CalculateUB
 
+def scan_threshold(
+    md, peaks, min_Q, max_peaks, max_threshold=1e5, min_found=50
+):
+    """
+    Scan the peak-finding density threshold and select one that yields
+    a balanced number of found peaks.
 
-class Laue:
-    def __init__(self, ws):
-        self.ws = ws
+    Unlike ``PeaksModel.scan_threshold``, this does not index the found
+    peaks at each threshold (no UB exists yet at this point), so the
+    selection is based on found-peak count alone rather than indexed
+    count.
 
-        self.centering_reflection = {
-            "P": "Primitive",
-            "I": "Body centred",
-            "F": "All-face centred",
-            "R": "Primitive",  # rhomb axes
-            "R(obv)": "Rhombohderally centred, obverse",  # hex axes
-            "R(rev)": "Rhombohderally centred, reverse",  # hex axes
-            "A": "A-face centred",
-            "B": "B-face centred",
-            "C": "C-face centred",
-        }
+    Parameters
+    ----------
+    md : str
+        Name of Q-sample MD workspace.
+    peaks : str
+        Name of output peaks table.
+    min_Q : float
+        Minimum Q-spacing enforcing lower limit of peak spacing.
+    max_peaks : int
+        Maximum number of peaks to find.
+    max_threshold : float, optional
+        Upper bound of the density threshold scan. The default is 1e5.
+    min_found : int, optional
+        Minimum number of found peaks desired for UB determination.
+        The default is 50.
 
-        self.centering_matrices = {
-            "P": np.eye(3),
-            "A": np.array([[2, 0, 0], [0, 1, 1], [0, 1, -1]]) / 2,
-            "B": np.array([[1, 0, 1], [0, 2, 0], [1, 0, -1]]) / 2,
-            "C": np.array([[1, 1, 0], [1, -1, 0], [0, 0, 2]]) / 2,
-            "I": np.array([[-1, 1, 1], [1, -1, 1], [1, 1, -1]]) / 2,
-            "F": np.array([[0, 1, 1], [1, 0, 1], [1, 1, 0]]) / 2,
-            "R": np.array([[2, -1, -1], [1, 1, -2], [1, 1, 1]]) / 3,
-        }
+    Returns
+    -------
+    threshold : float
+        Selected density threshold.
 
-        self.lattice_group = {
-            "Triclinic": "-1",
-            "Monoclinic": "2/m",
-            "Orthorhombic": "mmm",
-            "Tetragonal": "4/mmm",
-            "Rhombohedral": "-3m",
-            "Hexagonal": "6/mmm",
-            "Cubic": "m-3m",
-        }
+    """
 
-        t = np.linspace(0, np.pi, 1024)
-        cdf = (t - np.sin(t)) / np.pi
+    thresholds = np.logspace(1, np.log10(max_threshold), 50)
+    found = []
 
-        self._angle = scipy.interpolate.interp1d(cdf, t, kind="linear")
-
-    def uncertainty_line_segements(self):
-        """
-        The scattering vector scaled with the (unknown) wavelength.
-
-        Returns
-        -------
-        kf_ki_dir : list
-            Difference between scattering and incident beam directions.
-
-        """
-
-        kf_ki_dir = []
-        for peak in mtd[self.ws]:
-            kf_ki_dir.append(
-                peak.getDetectorDirectionSampleFrame()
-                + peak.getSourceDirectionSampleFrame()
-            )
-
-        return np.array(kf_ki_dir)
-
-    def wavelengths(self):
-        """
-        The Laue resolved wavelength.
-
-        Returns
-        -------
-        Wavelength : list
-            Peak wavelength.
-
-        """
-
-        wavelength = []
-        for peak in mtd[self.ws]:
-            wavelength.append(peak.getWavelength())
-
-        return np.array(wavelength)
-
-    def find_UB(self, a, b, c, alpha, beta, gamma, centering="P", n_proc=1):
-        """
-        Fit the orientation and other parameters.
-
-        Parameters
-        ----------
-        a, b, c : float
-            Lattice lengths.
-        alpha, beta, gamma : float
-            Lattice angles.
-        centering : str
-            Lattice centering.
-        n_proc : int, optional
-            Number of processes to use. The default is -1.
-
-        """
-
-        kf_ki_dir = self.uncertainty_line_segements()
-        lamda = self.wavelengths()
-
-        params = self.convert_conventional_to_primitive(
-            a, b, c, alpha, beta, gamma, centering
+    for threshold in thresholds:
+        FindPeaksMD(
+            InputWorkspace=md,
+            MaxPeaks=max_peaks,
+            PeakDistanceThreshold=min_Q,
+            DensityThresholdFactor=threshold,
+            OutputWorkspace=peaks,
         )
+        found.append(mtd[peaks].getNumberPeaks())
 
-        opt = CalculateUB(*params)
+    found = np.array(found)
 
-        UB, hkls, lamdas = opt.minimize(kf_ki_dir, lamda, n_proc)
+    i_max = np.argmax(found)
+    thr_at_max = thresholds[i_max]
 
-        SetUB(Workspace=self.ws, UB=UB)
+    meets_min = np.where(found <= min_found)[0]
+    thr_at_min = thresholds[meets_min[0]] if meets_min.size else thresholds[-1]
 
-        IndexPeaks(PeaksWorkspace=self.ws)
+    target_threshold = np.sqrt(thr_at_max * thr_at_min)
 
-        transform = self.calculate_transform(centering)
+    i_best = np.nanargmin(np.abs(thresholds - target_threshold))
+    threshold = thresholds[i_best]
 
-        self.transform_lattice(self.ws, transform)
+    FindPeaksMD(
+        InputWorkspace=md,
+        MaxPeaks=max_peaks,
+        PeakDistanceThreshold=min_Q,
+        DensityThresholdFactor=threshold,
+        OutputWorkspace=peaks,
+    )
 
-        self.opt = opt
-
-    def convert_conventional_to_primitive(
-        self,
-        a,
-        b,
-        c,
-        alpha,
-        beta,
-        gamma,
-        centering,
-    ):
-        uc = UnitCell(a, b, c, alpha, beta, gamma)
-
-        G = uc.getG()
-
-        P = self.centering_matrices[centering]
-
-        Gp = P.T @ G @ P
-
-        uc.recalculateFromGstar(np.linalg.inv(Gp))
-
-        return uc.a(), uc.b(), uc.c(), uc.alpha(), uc.beta(), uc.gamma()
-
-    def calculate_transform(self, centering):
-        P = self.centering_matrices[centering]
-
-        return np.linalg.inv(P).T
-
-    def transform_lattice(self, peaks, transform, tol=0.2):
-        """
-        Apply a cell transformation to the lattice.
-
-        Parameters
-        ----------
-        transform : 3x3 array-like
-            Transform to apply to hkl values.
-        tol : float, optional
-            Indexing tolerance. The default is 0.1.
-
-        """
-
-        hkl_trans = ",".join(["{},{},{}".format(*row) for row in transform])
-
-        TransformHKL(
-            PeaksWorkspace=peaks,
-            Tolerance=tol,
-            HKLTransform=hkl_trans,
-            FindError=False,
-        )
-
-    def refine_UB(self, cell, wavelength):
-        kf_ki_dir = self.uncertainty_line_segements()
-
-        UB, hkls, lamdas, uncertainties = self.opt.refine(
-            kf_ki_dir, wavelength, cell
-        )
-
-        SetUB(Workspace=self.ws, UB=UB)
-
-        for lamda, hkl, peak in zip(
-            lamdas.tolist(), hkls.tolist(), mtd[self.ws]
-        ):
-            peak.setWavelength(lamda)
-            peak.setHKL(*hkl)
-
-        ol = mtd[self.ws].sample().getOrientedLattice()
-
-        ol.setError(*uncertainties)
-
-        IndexPeaks(PeaksWorkspace=self.ws)
+    return threshold
 
 
 def _process_run(config, ipts, run, idx, tol):
@@ -248,17 +126,20 @@ def _process_run(config, ipts, run, idx, tol):
     gon_axis = config["gon_axis"]
     Q_max = config["Q_max"]
     Q_min = config["Q_min"]
-    max_peaks = config["max_peaks"]
-    strong_threshold = config["strong_threshold"]
+    d_min = config["d_min"]
+    max_threshold = config["max_threshold"]
+    peak_radius = config["peak_radius"]
     a = config["a"]
     b = config["b"]
     c = config["c"]
     alpha = config["alpha"]
     beta = config["beta"]
     gamma = config["gamma"]
+    centering = config["centering"]
     cell_type = config["cell_type"]
     crystal_system = config["crystal_system"]
     lattice_system = config["lattice_system"]
+    UB_ref = config["UB_ref"]
     tube_calibration = config["tube_calibration"]
     detector_calibration = config["detector_calibration"]
 
@@ -316,6 +197,20 @@ def _process_run(config, ipts, run, idx, tol):
         Average=True,
     )
 
+    SetUB(Workspace=data_ws, UB=UB_ref)
+
+    peaks_model = PeaksModel()
+    peaks_model.predict_peaks(
+        data_ws,
+        strong_ws,
+        centering,
+        d_min,
+        wavelength_band[0],
+        wavelength_band[1],
+    )
+
+    max_peaks = mtd[strong_ws].getNumberPeaks()
+
     ConvertToMD(
         InputWorkspace=data_ws,
         QDimensions="Q3D",
@@ -327,48 +222,39 @@ def _process_run(config, ipts, run, idx, tol):
         OutputWorkspace=md_ws,
     )
 
-    FindPeaksMD(
-        InputWorkspace=md_ws,
-        MaxPeaks=max_peaks,
-        PeakDistanceThreshold=Q_min,
-        DensityThresholdFactor=strong_threshold,
-        OutputWorkspace=strong_ws,
+    scan_threshold(md_ws, strong_ws, Q_min, max_peaks, max_threshold)
+
+    ub = UBModel(strong_ws)
+
+    (
+        a_p,
+        b_p,
+        c_p,
+        alpha_p,
+        beta_p,
+        gamma_p,
+    ) = ub.convert_conventional_to_primitive(
+        a, b, c, alpha, beta, gamma, centering
     )
 
-    FindUBUsingLatticeParameters(
-        PeaksWorkspace=strong_ws,
-        a=a,
-        b=b,
-        c=c,
-        alpha=alpha,
-        beta=beta,
-        gamma=gamma,
-        Tolerance=tol,
-        FixParameters=True,
-        NumInitial=100,
-        Iterations=1,
-    )
+    min_d = 0.9 * min(a_p, b_p, c_p)
+    max_d = 1.1 * max(a_p, b_p, c_p)
 
-    IndexPeaks(PeaksWorkspace=strong_ws, Tolerance=tol, RoundHKLs=True)
+    ub.determine_UB_with_primitive_cell(min_d, max_d, tol=tol)
 
-    OptimizeLatticeForCellType(
-        PeaksWorkspace=strong_ws,
-        CellType=cell_type,
-        Apply=True,
-        Tolerance=tol,
-        OutputDirectory=output_folder,
-    )
+    ub.select_type(cell_type, centering, tol)
 
-    ReorientUnitCell(
-        PeaksWorkspace=strong_ws,
-        Tolerance=tol,
-        CrystalSystem=crystal_system,
-        LatticeSystem=lattice_system,
-    )
+    ub.index_peaks(tol)
+
+    ub.refine_UB_with_constraints(cell_type, tol)
+
+    Reorient(strong_ws, UB_ref, crystal_system, lattice_system)
+
+    peaks_model.integrate_ellipsoids(data_ws, strong_ws, peak_radius)
 
     mat_file = os.path.join(output_folder, "{}.mat".format(run))
 
-    SaveIsawUB(InputWorkspace=strong_ws, Filename=mat_file)
+    ub.save_UB(mat_file)
 
     peaks_file = os.path.join(output_folder, "peaks_{}.nxs".format(run))
     SaveNexus(InputWorkspace=strong_ws, Filename=peaks_file)
@@ -417,10 +303,11 @@ class Peaks:
             "OutputFolder": "",
             "UnitCellLengths": [5.431, 5.431, 5.431],
             "UnitCellAngles": [90, 90, 90],
+            "Centering": "P",
             "CrystalSystem": "Cubic",
             "LatticeSystem": "Cubic",
-            "MaxPeaks": 500,
-            "PeakThreshold": 100,
+            "MaxThreshold": 1e5,
+            "PeakRadius": 0.25,
         }
         defaults.update(config)
 
@@ -442,14 +329,22 @@ class Peaks:
         self.a, self.b, self.c = defaults.get("UnitCellLengths")
         self.alpha, self.beta, self.gamma = defaults.get("UnitCellAngles")
 
+        self.centering = defaults.get("Centering")
+
         self.crystal_system = defaults.get("CrystalSystem")
         self.lattice_system = defaults.get("LatticeSystem")
 
         if self.crystal_system != "Trigonal":
             self.lattice_system = "Rhombohedral"
 
-        self.max_peaks = defaults.get("MaxPeaks")
-        self.strong_threshold = defaults.get("PeakThreshold")
+        self.cell_type = (
+            self.crystal_system
+            if self.lattice_system != "Trigonal"
+            else self.lattice_system
+        )
+
+        self.max_threshold = defaults.get("MaxThreshold")
+        self.peak_radius = defaults.get("PeakRadius")
 
         inst_config = beamlines[self.instrument]
 
@@ -518,6 +413,8 @@ class Peaks:
         ol = mtd["sample"].sample().getOrientedLattice()
         astar, bstar, cstar = ol.astar(), ol.bstar(), ol.cstar()
 
+        self.UB_ref = ol.getUB().copy()
+
         self.Q_min = 2 * np.pi * min([astar, bstar, cstar])
         self.d_max = 2 * np.pi / self.Q_min
         self.d_min = 2 * np.pi / self.Q_max
@@ -567,11 +464,6 @@ class Peaks:
         if not isinstance(run_nos, list):
             run_nos = self._runs_string_to_list(run_nos)
 
-        cell_type = (
-            self.crystal_system
-            if self.lattice_system != "Trigonal"
-            else self.lattice_system
-        )
         config = {
             "instrument": self.instrument,
             "file_folder": self.file_folder,
@@ -581,17 +473,20 @@ class Peaks:
             "gon_axis": self.gon_axis,
             "Q_max": self.Q_max,
             "Q_min": self.Q_min,
-            "max_peaks": self.max_peaks,
-            "strong_threshold": self.strong_threshold,
+            "d_min": self.d_min,
+            "max_threshold": self.max_threshold,
+            "peak_radius": self.peak_radius,
             "a": self.a,
             "b": self.b,
             "c": self.c,
             "alpha": self.alpha,
             "beta": self.beta,
             "gamma": self.gamma,
-            "cell_type": cell_type,
+            "centering": self.centering,
+            "cell_type": self.cell_type,
             "crystal_system": self.crystal_system,
             "lattice_system": self.lattice_system,
+            "UB_ref": self.UB_ref,
             "h_max": self.h_max,
             "k_max": self.k_max,
             "l_max": self.l_max,
@@ -677,8 +572,21 @@ class Peaks:
 
         IndexPeaks(PeaksWorkspace="peaks", Tolerance=tol, RoundHKLs=True)
 
+        opt = Optimization("peaks", tol=tol)
+        opt.optimize_lattice(self.cell_type)
+
+        IndexPeaks(PeaksWorkspace="peaks", Tolerance=tol, RoundHKLs=True)
+
         filename = os.path.join(self.output_folder, "peaks.mat")
-        SaveIsawUB(InputWorkspace="peaks", Filename=filename)
+        ub = UBModel("peaks")
+        ub.save_UB(filename)
+
+        res = ResolutionEllipsoid("peaks", r_cut=self.peak_radius)
+        res.fit()
+
+        if res.model is not None:
+            res_file = os.path.join(self.output_folder, "resolution.txt")
+            res.write_resolution_parameters(res_file)
 
     def run(self, n_proc=10):
         self.load_instrument()
@@ -693,7 +601,13 @@ if __name__ == "__main__":
     with open(config_file, "r") as f:
         params = yaml.safe_load(f)
 
-    params["OutputFolder"] = os.path.dirname(os.path.abspath(config_file))
+    config_dir = os.path.dirname(os.path.abspath(config_file))
+    name = os.path.splitext(os.path.basename(config_file))[0]
+
+    output_folder = os.path.join(config_dir, name)
+    os.makedirs(output_folder, exist_ok=True)
+
+    params["OutputFolder"] = output_folder
 
     peaks = Peaks(params)
     peaks.run()

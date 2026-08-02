@@ -193,7 +193,6 @@ class Integration(PeakProjection):
                 "data",
                 self.plan.get("DetectorCalibration"),
                 self.plan.get("TubeCalibration"),
-                self.plan.get("GoniometerCalibration"),
             )
 
             data.preprocess_detectors("data")

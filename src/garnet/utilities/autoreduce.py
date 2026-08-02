@@ -42,7 +42,6 @@ from mantid.simpleapi import (
     MDNorm,
     LoadMD,
     SaveMD,
-    PlusMD,
     CopySample,
     CreateSingleValuedWorkspace,
     AddSampleLog,
@@ -693,10 +692,17 @@ class AutoReduce:
             InputWorkspace="raw_md", OutputWorkspace="raw_md"
         )
 
-    def _run_mdnorm(self, md, projections, extents, bins):
+    def _run_mdnorm(
+        self, md, projections, extents, bins, temp_data=None, temp_norm=None
+    ):
         """
         MDNorm a projection out of "raw_md", mirroring the exact call in
         LaueData.normalize_to_hkl (no background, no symmetry).
+
+        temp_data/temp_norm, if given, are prior accumulated data/norm
+        workspace names (same binning as extents/bins) that MDNorm adds
+        the new normalization into directly, in place of a separate
+        PlusMD step.
         """
 
         v0, v1, v2 = projections
@@ -721,6 +727,8 @@ class AutoReduce:
             Dimension0Binning=[Q0_min, dQ0, Q0_max],
             Dimension1Binning=[Q1_min, dQ1, Q1_max],
             Dimension2Binning=[Q2_min, dQ2, Q2_max],
+            TemporaryDataWorkspace=temp_data,
+            TemporaryNormalizationWorkspace=temp_norm,
             OutputWorkspace=md + "_result",
             OutputDataWorkspace=md + "_data",
             OutputNormalizationWorkspace=md + "_norm",
@@ -857,29 +865,32 @@ class AutoReduce:
         self._convert_to_Q_sample(d_min)
 
         for name, W in projections:
-            extents, bins = self._projection_extents(UB, W, d_min)
-
-            data_ws, norm_ws, _ = self._run_mdnorm("raw_md", W, extents, bins)
-
             base = "{}_{}".format(safe_key, name)
             data_file = os.path.join(self.autoreduce_dir, base + "_data.nxs")
             norm_file = os.path.join(self.autoreduce_dir, base + "_norm.nxs")
 
-            if os.path.exists(data_file) and os.path.exists(norm_file):
+            has_prev = os.path.exists(data_file) and os.path.exists(norm_file)
+
+            if has_prev:
                 LoadMD(Filename=data_file, OutputWorkspace="prev_data")
                 LoadMD(Filename=norm_file, OutputWorkspace="prev_norm")
 
-                PlusMD(
-                    LHSWorkspace=data_ws,
-                    RHSWorkspace="prev_data",
-                    OutputWorkspace=data_ws,
-                )
-                PlusMD(
-                    LHSWorkspace=norm_ws,
-                    RHSWorkspace="prev_norm",
-                    OutputWorkspace=norm_ws,
-                )
+                dims = [mtd["prev_data"].getDimension(i) for i in range(3)]
+                extents = [[d.getMinimum(), d.getMaximum()] for d in dims]
+                bins = [d.getNBins() for d in dims]
+            else:
+                extents, bins = self._projection_extents(UB, W, d_min)
 
+            data_ws, norm_ws, _ = self._run_mdnorm(
+                "raw_md",
+                W,
+                extents,
+                bins,
+                temp_data="prev_data" if has_prev else None,
+                temp_norm="prev_norm" if has_prev else None,
+            )
+
+            if has_prev:
                 DeleteWorkspace(Workspace="prev_data")
                 DeleteWorkspace(Workspace="prev_norm")
 

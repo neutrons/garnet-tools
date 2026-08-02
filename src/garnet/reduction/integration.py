@@ -423,22 +423,38 @@ class Integration(PeakProjection):
 
     def refine_peaks_with_prior(self, peaks_ws, md, r_cut, n_bins):
         """
-        Replace IntegratePeaksMD with a per-peak linearized Gaussian
-        fit (`RefineEllipsoid`) seeded from the instrument's prior
-        resolution model (`self.prior_res`).
+        Replace IntegratePeaksMD with a per-peak fit seeded from the
+        instrument's prior resolution model (`self.prior_res`).
 
         For each predicted peak: BinMD's `md` into a box (half-width
         `r_cut`, `n_bins` per axis) aligned to `self.prior_res`'s
         predicted principal axes at that peak -- so the peak is, by
         construction, axis-aligned in the bin and only small
-        orientation corrections need refining -- fits it with
-        `RefineEllipsoid`, and stores the fitted center/shape/intensity
-        back onto the peak (mirroring what `IntegratePeaksMD` with
-        `UseCentroid=True, update=True` would have set). Peaks the fit
-        fails on (too few finite voxels, degenerate kernel) are left
-        with zero intensity and no ellipsoid shape, so they're
-        excluded from `ResolutionEllipsoid.fit()` the same way a
-        shapeless peak already is.
+        orientation corrections need refining -- and fits it with
+        `RefineEllipsoid` to get a shape (center, widths, orientation).
+
+        Fitting intensity jointly with that shape (as
+        `RefineEllipsoid` also does) badly inflates its uncertainty for
+        weak peaks: shape and intensity end up correlated, competing
+        for the same handful of near-peak voxels, and the Fisher-matrix
+        inverse correctly reflects that correlation as a large marginal
+        sigma_intensity. `IntegratePeaksMD` avoids this because it
+        never fits shape and intensity together. So instead, intensity
+        is obtained separately: with the shape now held FIXED, do a
+        proper Poisson profile fit (`PeakEllipsoid.profile_fit`) on raw
+        neutron counts (`getNumEventsArray`, not the Lorentz-weighted
+        `getSignalArray` used for the shape fit -- that weighting
+        breaks the Poisson mean=variance assumption), seeded from the
+        classic background-subtracted box-sum (`extract_raw_intensity`)
+        -- which is what this reduces to for strong, high-count peaks.
+
+        Stores the fitted center/shape/intensity back onto the peak
+        (mirroring what `IntegratePeaksMD` with `UseCentroid=True,
+        update=True` would have set). Peaks the shape fit fails on (too
+        few finite voxels, degenerate kernel) are left with zero
+        intensity and no ellipsoid shape, so they're excluded from
+        `ResolutionEllipsoid.fit()` the same way a shapeless peak
+        already is.
 
         Parameters
         ----------
@@ -454,6 +470,7 @@ class Integration(PeakProjection):
         """
         peak = PeakModel(peaks_ws)
         bins = np.full(3, n_bins, dtype=int)
+        ellipsoid = PeakEllipsoid()
 
         for i in range(peak.get_number_peaks()):
             Q = np.array(peak.get_sample_Q(i))
@@ -469,30 +486,62 @@ class Integration(PeakProjection):
 
             self.data.bin_in_Q(md, extents, bins.copy(), projections)
 
-            workspace = mtd[md + "_bin"]
+            bin_ws = md + "_bin"
+            workspace = mtd[bin_ws]
 
             refiner = RefineEllipsoid(
                 sigma_initial=sigma_prior, center_initial=center_local
             )
 
             try:
-                result = refiner.fit(workspace)
+                shape = refiner.fit(workspace)
             except (ValueError, RuntimeError) as e:
                 print("RefineEllipsoid failed for peak {}: {}".format(i, e))
                 peak.set_peak_intensity(i, 0, 0)
-                self.data.delete_workspace(md + "_bin")
+                self.data.delete_workspace(bin_ws)
                 continue
 
-            self.data.delete_workspace(md + "_bin")
+            radii_local = ResolutionEllipsoid.radii_from_sigma(shape["sigma"])
+            V_fit = shape["rotation_matrix"]
+            S_local = V_fit @ np.diag(radii_local**2) @ V_fit.T
 
-            center_sample = V_prior @ result["center"]
-            V_sample = V_prior @ result["rotation_matrix"]
-            radii = ResolutionEllipsoid.radii_from_sigma(result["sigma"])
+            d = self.data.extract_counts(bin_ws)
+            _, _, x0, x1, x2 = self.data.extract_bin_info(bin_ws)
 
-            peak.set_peak_shape(i, *center_sample, *radii, *V_sample.T)
-            peak.set_peak_intensity(
-                i, result["intensity"], result["sigma_intensity"]
+            self.data.delete_workspace(bin_ws)
+
+            pk, bkg, mask, kernel = ellipsoid.peak_roi(
+                x0, x1, x2, shape["center"], S_local, 1
             )
+
+            vol = ellipsoid.voxel_volume(x0, x1, x2)
+            n = np.full_like(d, vol, dtype=float)
+
+            seed_intensity, _ = ellipsoid.extract_raw_intensity(d, pk, bkg)
+            seed_intensity = (
+                max(seed_intensity, 0.0)
+                if np.isfinite(seed_intensity)
+                else 0.0
+            )
+            seed_background = (
+                float(np.nanmean(d[bkg])) / vol if np.any(bkg) else 0.0
+            )
+
+            profile, _ = ellipsoid.profile_fit(
+                d,
+                n,
+                kernel,
+                mask,
+                initial_intensity=seed_intensity,
+                initial_background=seed_background,
+            )
+            intensity, sigma_intensity = profile[0], profile[1]
+
+            center_sample = V_prior @ shape["center"]
+            V_sample = V_prior @ V_fit
+
+            peak.set_peak_shape(i, *center_sample, *radii_local, *V_sample.T)
+            peak.set_peak_intensity(i, intensity, sigma_intensity)
 
     def predict_add_satellite_peaks(
         self, peaks_ws, md_ws, lamda_min, lamda_max

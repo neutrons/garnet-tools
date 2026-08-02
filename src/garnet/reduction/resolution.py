@@ -113,6 +113,7 @@ def _plot_resolution_diagnostics(rows, filename, sn_label="$I/\\sigma$"):
                 marker="o",
                 linewidths=0.8,
                 rasterized=kwargs.get("rasterized", False),
+                zorder=0,
             )
         return sc
 

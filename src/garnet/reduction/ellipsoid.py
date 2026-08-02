@@ -4370,3 +4370,788 @@ class PeakEllipsoid:
         }
 
         return I_fit, s_fit
+
+
+def _dimension_centers(workspace, index):
+    """
+    Bin centers along one dimension of an MDHistoWorkspace.
+
+    Parameters
+    ----------
+    workspace : MDHistoWorkspace
+        Workspace to read the dimension from.
+    index : int
+        Dimension index.
+
+    Returns
+    -------
+    centers : ndarray
+        Bin centers along this dimension.
+    """
+    dimension = workspace.getDimension(index)
+
+    edges = np.linspace(
+        float(dimension.getMinimum()),
+        float(dimension.getMaximum()),
+        int(dimension.getNBins()) + 1,
+    )
+
+    return 0.5 * (edges[:-1] + edges[1:])
+
+
+def _as_three(value, name, allow_none=True):
+    """
+    Broadcast a scalar or 3-vector to shape (3,), validating positivity.
+
+    Parameters
+    ----------
+    value : scalar, array_like, or None
+        Value(s) to broadcast.
+    name : str
+        Parameter name, used in the error message.
+    allow_none : bool, optional
+        Whether `None` passes through unchanged.
+
+    Returns
+    -------
+    result : ndarray of shape (3,), or None
+    """
+    if value is None and allow_none:
+        return None
+
+    result = np.broadcast_to(np.asarray(value, dtype=float), (3,)).copy()
+
+    if np.any(~np.isfinite(result)) or np.any(result <= 0):
+        raise ValueError(f"{name} must contain three positive finite values.")
+
+    return result
+
+
+class RefineEllipsoid:
+    """
+    Linearized-least-squares refinement of a single Gaussian peak on a
+    BinMD region of interest aligned to its predicted principal axes.
+
+    Fits::
+
+        y(x) = B + b.x + I * k(x; center, sigma, rotation)
+
+    where k is normalized over the finite ROI (sum(k) = 1), so I is the
+    integrated Gaussian-profile amplitude in the signal units of the
+    MDHistoWorkspace. Intended as a fast, prior-informed replacement
+    for `IntegratePeaksMD` when an instrument-characteristic model
+    (e.g. `ResolutionEllipsoid`) is available to seed `sigma_initial`/
+    `rotation_initial`, ahead of a further `ResolutionEllipsoid` fit.
+
+    Parameters
+    ----------
+    sigma_initial : array_like, shape (3,)
+        Initial Gaussian standard deviations along the local axes.
+    center_initial : array_like, shape (3,), optional
+        Initial center in the local BinMD coordinate system.
+    rotation_initial : array_like, shape (3, 3), optional
+        Initial orientation matrix. Use None if BinMD already aligned
+        the predicted ellipsoid to the coordinate axes.
+    fit_background_plane : bool, optional
+        Fit a constant plus three linear background slopes.
+    fit_widths : bool, optional
+        Refine three logarithmic width corrections.
+    fit_orientation : bool, optional
+        Refine small orientation corrections.
+    max_iterations : int, optional
+        Maximum number of IRLS/Gauss-Newton iterations.
+    huber_delta : float, optional
+        Huber threshold (standardized-residual units) for robust
+        down-weighting.
+    center_prior_sigma : array_like, shape (3,), optional
+        Prior widths for the center coordinates. None means no prior.
+    width_prior_sigma : array_like, shape (3,), optional
+        Prior widths for log(sigma / sigma_initial).
+    rotation_prior_sigma_deg : array_like, shape (3,), optional
+        Prior widths for the rotation-vector components, in degrees.
+    background_slope_prior_sigma : array_like, shape (3,), optional
+        Prior widths for the background plane slopes. None means no
+        prior.
+    maximum_center_shift_sigma : float, optional
+        Bound (in units of `sigma_initial`) on the total center shift.
+    maximum_center_step_sigma : float, optional
+        Bound on the per-iteration center step.
+    maximum_width_ratio : float, optional
+        Bound on the total log-width change, as sigma/sigma_initial.
+    maximum_log_width_step : float, optional
+        Bound on the per-iteration log-width step.
+    maximum_rotation_deg : float, optional
+        Bound on the total rotation, in degrees.
+    maximum_rotation_step_deg : float, optional
+        Bound on the per-iteration rotation step, in degrees.
+    minimum_orientation_anisotropy : float, optional
+        An axis is only refined if its inverse-variance differs from
+        its neighbors by at least this fraction; otherwise the fit
+        would be under-determined (near-degenerate ellipsoid).
+    rotation_finite_difference_step : float, optional
+        Step size for finite-difference rotation derivatives.
+    tolerance : float, optional
+        Convergence tolerance on the scaled parameter step.
+
+    """
+
+    def __init__(
+        self,
+        sigma_initial,
+        center_initial=(0.0, 0.0, 0.0),
+        rotation_initial=None,
+        fit_background_plane=True,
+        fit_widths=True,
+        fit_orientation=True,
+        max_iterations=8,
+        huber_delta=3.0,
+        center_prior_sigma=None,
+        width_prior_sigma=(0.20, 0.20, 0.20),
+        rotation_prior_sigma_deg=(5.0, 5.0, 5.0),
+        background_slope_prior_sigma=None,
+        maximum_center_shift_sigma=2.0,
+        maximum_center_step_sigma=0.50,
+        maximum_width_ratio=2.0,
+        maximum_log_width_step=0.15,
+        maximum_rotation_deg=15.0,
+        maximum_rotation_step_deg=3.0,
+        minimum_orientation_anisotropy=0.02,
+        rotation_finite_difference_step=1.0e-4,
+        tolerance=1.0e-5,
+    ):
+        self.sigma0 = _as_three(
+            sigma_initial, "sigma_initial", allow_none=False
+        )
+        self.center0 = np.asarray(center_initial, dtype=float).reshape(3)
+        self.rotation0 = self._orthogonalize(rotation_initial)
+
+        self.fit_background_plane = fit_background_plane
+        self.fit_widths = fit_widths
+        self.fit_orientation = fit_orientation
+
+        self.max_iterations = max_iterations
+        self.huber_delta = huber_delta
+
+        self.center_prior_sigma = _as_three(
+            center_prior_sigma, "center_prior_sigma"
+        )
+        self.width_prior_sigma = _as_three(
+            width_prior_sigma, "width_prior_sigma"
+        )
+
+        rotation_prior_deg = _as_three(
+            rotation_prior_sigma_deg, "rotation_prior_sigma_deg"
+        )
+        self.rotation_prior_sigma = (
+            np.deg2rad(rotation_prior_deg)
+            if rotation_prior_deg is not None
+            else None
+        )
+
+        self.background_slope_prior_sigma = _as_three(
+            background_slope_prior_sigma, "background_slope_prior_sigma"
+        )
+
+        self.maximum_center_shift_sigma = maximum_center_shift_sigma
+        self.maximum_center_step_sigma = maximum_center_step_sigma
+        self.maximum_log_width = np.log(maximum_width_ratio)
+        self.maximum_log_width_step = maximum_log_width_step
+        self.maximum_rotation = np.deg2rad(maximum_rotation_deg)
+        self.maximum_rotation_step = np.deg2rad(maximum_rotation_step_deg)
+        self.minimum_orientation_anisotropy = minimum_orientation_anisotropy
+        self.rotation_finite_difference_step = rotation_finite_difference_step
+        self.tolerance = tolerance
+
+        self.result = None
+
+    @staticmethod
+    def _orthogonalize(rotation_initial):
+        """
+        Closest proper rotation matrix to `rotation_initial`, or the
+        identity if `rotation_initial` is None.
+        """
+        if rotation_initial is None:
+            return np.eye(3)
+
+        rotation = np.asarray(rotation_initial, dtype=float).reshape(3, 3)
+
+        u, _, vt = np.linalg.svd(rotation)
+        rotation = u @ vt
+
+        if np.linalg.det(rotation) < 0:
+            u[:, -1] *= -1
+            rotation = u @ vt
+
+        return rotation
+
+    def fit(self, workspace):
+        """
+        Fit the peak on a 3D MDHistoWorkspace produced by BinMD in the
+        predicted principal-axis frame.
+
+        Parameters
+        ----------
+        workspace : MDHistoWorkspace
+            Region of interest, binned by BinMD in the local frame
+            this instance's `sigma_initial`/`rotation_initial` refer
+            to.
+
+        Returns
+        -------
+        result : dict
+            Fitted intensity, uncertainty, center, widths, orientation,
+            covariance, model, residual, and parameter covariance.
+            Also stored on `self.result`.
+
+        """
+        signal = np.asarray(workspace.getSignalArray(), dtype=float)
+        error_squared = np.asarray(
+            workspace.getErrorSquaredArray(), dtype=float
+        )
+
+        if signal.ndim != 3:
+            raise ValueError(
+                "workspace must be a three-dimensional MDHistoWorkspace."
+            )
+
+        if error_squared.shape != signal.shape:
+            raise ValueError(
+                "Signal and error-squared arrays have different shapes."
+            )
+
+        axes = [_dimension_centers(workspace, index) for index in range(3)]
+        grids = np.meshgrid(*axes, indexing="ij")
+        coordinates = np.column_stack([grid.ravel() for grid in grids])
+
+        y = signal.ravel()
+        variance_input = error_squared.ravel()
+
+        valid = (
+            np.isfinite(y)
+            & np.isfinite(variance_input)
+            & np.all(np.isfinite(coordinates), axis=1)
+        )
+
+        if np.count_nonzero(valid) < 20:
+            raise ValueError("Too few finite voxels for a 3-D fit.")
+
+        sigma0 = self.sigma0
+        rotation0 = self.rotation0
+        center0 = self.center0
+
+        initial_precision = 1.0 / sigma0**2
+
+        orientation_anisotropy = np.array(
+            [
+                abs(initial_precision[2] - initial_precision[1])
+                / (initial_precision[2] + initial_precision[1]),
+                abs(initial_precision[0] - initial_precision[2])
+                / (initial_precision[0] + initial_precision[2]),
+                abs(initial_precision[1] - initial_precision[0])
+                / (initial_precision[1] + initial_precision[0]),
+            ]
+        )
+
+        orientation_axes = np.flatnonzero(
+            self.fit_orientation
+            & (orientation_anisotropy >= self.minimum_orientation_anisotropy)
+        )
+
+        parameter_names = ["background", "intensity"]
+        parameter_slices = {}
+        number_parameters = 2
+
+        if self.fit_background_plane:
+            parameter_slices["background_slope"] = slice(
+                number_parameters, number_parameters + 3
+            )
+            parameter_names.extend(
+                ["background_x", "background_y", "background_z"]
+            )
+            number_parameters += 3
+
+        parameter_slices["center"] = slice(
+            number_parameters, number_parameters + 3
+        )
+        parameter_names.extend(["center_x", "center_y", "center_z"])
+        number_parameters += 3
+
+        if self.fit_widths:
+            parameter_slices["log_width"] = slice(
+                number_parameters, number_parameters + 3
+            )
+            parameter_names.extend(
+                ["log_sigma_1", "log_sigma_2", "log_sigma_3"]
+            )
+            number_parameters += 3
+
+        if orientation_axes.size:
+            parameter_slices["rotation"] = slice(
+                number_parameters, number_parameters + orientation_axes.size
+            )
+            parameter_names.extend(
+                [f"rotation_{axis + 1}" for axis in orientation_axes]
+            )
+            number_parameters += orientation_axes.size
+
+        background_coordinates = coordinates - center0
+
+        def unpack(parameters):
+            background = parameters[0]
+            intensity = parameters[1]
+
+            background_slope = np.zeros(3)
+            if "background_slope" in parameter_slices:
+                background_slope = parameters[
+                    parameter_slices["background_slope"]
+                ]
+
+            center = parameters[parameter_slices["center"]]
+
+            log_width = np.zeros(3)
+            if "log_width" in parameter_slices:
+                log_width = parameters[parameter_slices["log_width"]]
+
+            rotation_vector = np.zeros(3)
+            if "rotation" in parameter_slices:
+                rotation_vector[orientation_axes] = parameters[
+                    parameter_slices["rotation"]
+                ]
+
+            return (
+                background,
+                intensity,
+                background_slope,
+                center,
+                log_width,
+                rotation_vector,
+            )
+
+        def calculate_kernel(center, log_width, rotation_vector):
+            sigma = sigma0 * np.exp(log_width)
+
+            rotation_matrix = (
+                rotation0
+                @ scipy.spatial.transform.Rotation.from_rotvec(
+                    rotation_vector
+                ).as_matrix()
+            )
+
+            displacement = coordinates - center
+            principal_coordinates = displacement @ rotation_matrix
+
+            inverse_variance = 1.0 / sigma**2
+
+            exponent = -0.5 * np.sum(
+                principal_coordinates**2 * inverse_variance[None, :],
+                axis=1,
+            )
+
+            raw_kernel = np.zeros_like(exponent)
+            finite = valid & np.isfinite(exponent)
+
+            if not np.any(finite):
+                raise RuntimeError(
+                    "No finite voxels remain in the Gaussian kernel."
+                )
+
+            raw_kernel[finite] = np.exp(
+                exponent[finite] - np.max(exponent[finite])
+            )
+
+            normalization = np.sum(raw_kernel)
+
+            if not np.isfinite(normalization) or normalization <= 0:
+                raise RuntimeError("Gaussian kernel normalization failed.")
+
+            kernel = raw_kernel / normalization
+
+            return kernel, principal_coordinates, sigma, rotation_matrix
+
+        def normalized_derivative(kernel, score):
+            mean_score = kernel @ score
+            return kernel[:, None] * (score - mean_score[None, :])
+
+        def evaluate(parameters, calculate_jacobian=False):
+            (
+                background,
+                intensity,
+                background_slope,
+                center,
+                log_width,
+                rotation_vector,
+            ) = unpack(parameters)
+
+            (
+                kernel,
+                principal_coordinates,
+                sigma,
+                rotation_matrix,
+            ) = calculate_kernel(center, log_width, rotation_vector)
+
+            model = (
+                background
+                + background_coordinates @ background_slope
+                + intensity * kernel
+            )
+
+            if not calculate_jacobian:
+                return model, kernel, sigma, rotation_matrix
+
+            columns = [np.ones(y.size), kernel]
+
+            if self.fit_background_plane:
+                columns.extend(
+                    [
+                        background_coordinates[:, 0],
+                        background_coordinates[:, 1],
+                        background_coordinates[:, 2],
+                    ]
+                )
+
+            inverse_variance = 1.0 / sigma**2
+
+            center_score = (
+                principal_coordinates * inverse_variance[None, :]
+            ) @ rotation_matrix.T
+
+            kernel_center_derivative = normalized_derivative(
+                kernel, center_score
+            )
+            columns.extend(
+                [
+                    intensity * kernel_center_derivative[:, axis]
+                    for axis in range(3)
+                ]
+            )
+
+            if self.fit_widths:
+                width_score = (
+                    principal_coordinates**2 * inverse_variance[None, :]
+                )
+                kernel_width_derivative = normalized_derivative(
+                    kernel, width_score
+                )
+                columns.extend(
+                    [
+                        intensity * kernel_width_derivative[:, axis]
+                        for axis in range(3)
+                    ]
+                )
+
+            for axis in orientation_axes:
+                delta_rotation = np.zeros(3)
+                delta_rotation[axis] = self.rotation_finite_difference_step
+
+                kernel_plus, *_ = calculate_kernel(
+                    center, log_width, rotation_vector + delta_rotation
+                )
+                kernel_minus, *_ = calculate_kernel(
+                    center, log_width, rotation_vector - delta_rotation
+                )
+
+                derivative = (kernel_plus - kernel_minus) / (
+                    2.0 * self.rotation_finite_difference_step
+                )
+                columns.append(intensity * derivative)
+
+            jacobian = np.column_stack(columns)
+
+            return model, kernel, sigma, rotation_matrix, jacobian
+
+        parameters = np.zeros(number_parameters)
+        parameters[parameter_slices["center"]] = center0
+
+        _, initial_kernel, _, _ = evaluate(
+            parameters, calculate_jacobian=False
+        )
+
+        _, initial_principal_coordinates, initial_sigma, _ = calculate_kernel(
+            center0, np.zeros(3), np.zeros(3)
+        )
+
+        radius_squared = np.sum(
+            (initial_principal_coordinates / initial_sigma[None, :]) ** 2,
+            axis=1,
+        )
+
+        background_shell = valid & (radius_squared >= 9.0)
+        if np.count_nonzero(background_shell) < 10:
+            background_shell = valid
+
+        if self.fit_background_plane:
+            background_design = np.column_stack(
+                [np.ones(y.size), background_coordinates]
+            )
+        else:
+            background_design = np.ones((y.size, 1))
+
+        background_coefficients = np.linalg.lstsq(
+            background_design[background_shell],
+            y[background_shell],
+            rcond=None,
+        )[0]
+
+        parameters[0] = max(float(background_coefficients[0]), 0.0)
+
+        if self.fit_background_plane:
+            parameters[
+                parameter_slices["background_slope"]
+            ] = background_coefficients[1:4]
+
+        _, _, initial_background_slope, _, _, _ = unpack(parameters)
+
+        initial_background = (
+            parameters[0] + background_coordinates @ initial_background_slope
+        )
+
+        parameters[1] = max(
+            np.dot(
+                initial_kernel[valid],
+                y[valid] - initial_background[valid],
+            )
+            / np.dot(initial_kernel[valid], initial_kernel[valid]),
+            0.0,
+        )
+
+        prior_mean = np.zeros(number_parameters)
+        prior_precision = np.zeros(number_parameters)
+
+        prior_mean[parameter_slices["center"]] = center0
+
+        if self.center_prior_sigma is not None:
+            prior_precision[parameter_slices["center"]] = (
+                1.0 / self.center_prior_sigma**2
+            )
+
+        if (
+            self.fit_background_plane
+            and self.background_slope_prior_sigma is not None
+        ):
+            prior_precision[parameter_slices["background_slope"]] = (
+                1.0 / self.background_slope_prior_sigma**2
+            )
+
+        if self.fit_widths and self.width_prior_sigma is not None:
+            prior_precision[parameter_slices["log_width"]] = (
+                1.0 / self.width_prior_sigma**2
+            )
+
+        if orientation_axes.size and self.rotation_prior_sigma is not None:
+            prior_precision[parameter_slices["rotation"]] = (
+                1.0 / self.rotation_prior_sigma[orientation_axes] ** 2
+            )
+
+        def project_parameters(candidate):
+            candidate = candidate.copy()
+
+            candidate[0] = max(candidate[0], 0.0)
+            candidate[1] = max(candidate[1], 0.0)
+
+            center = candidate[parameter_slices["center"]]
+            normalized_center_shift = (center - center0) / sigma0
+            center_shift_norm = np.linalg.norm(normalized_center_shift)
+
+            if center_shift_norm > self.maximum_center_shift_sigma:
+                candidate[parameter_slices["center"]] = center0 + (
+                    normalized_center_shift
+                    * (self.maximum_center_shift_sigma / center_shift_norm)
+                    * sigma0
+                )
+
+            if self.fit_widths:
+                candidate[parameter_slices["log_width"]] = np.clip(
+                    candidate[parameter_slices["log_width"]],
+                    -self.maximum_log_width,
+                    self.maximum_log_width,
+                )
+
+            if orientation_axes.size:
+                rotation_parameters = candidate[parameter_slices["rotation"]]
+                rotation_norm = np.linalg.norm(rotation_parameters)
+
+                if rotation_norm > self.maximum_rotation:
+                    candidate[parameter_slices["rotation"]] *= (
+                        self.maximum_rotation / rotation_norm
+                    )
+
+            return candidate
+
+        converged = False
+        iterations = 0
+
+        for iterations in range(1, self.max_iterations + 1):
+            model, _, sigma, _, jacobian = evaluate(
+                parameters, calculate_jacobian=True
+            )
+
+            residual = y - model
+
+            variance = np.where(
+                (variance_input > 0) & np.isfinite(variance_input),
+                variance_input,
+                np.maximum(model, 1.0),
+            )
+            variance = np.maximum(variance, np.finfo(float).eps)
+
+            standardized_residual = residual / np.sqrt(variance)
+
+            robust_factor = np.ones_like(standardized_residual)
+            outlier = np.abs(standardized_residual) > self.huber_delta
+            robust_factor[outlier] = self.huber_delta / np.abs(
+                standardized_residual[outlier]
+            )
+
+            weights = robust_factor / variance
+            use = valid & np.isfinite(weights) & (weights > 0)
+
+            square_root_weight = np.sqrt(weights[use])
+            weighted_jacobian = jacobian[use] * square_root_weight[:, None]
+            weighted_residual = residual[use] * square_root_weight
+
+            hessian = weighted_jacobian.T @ weighted_jacobian + np.diag(
+                prior_precision
+            )
+            right_hand_side = (
+                weighted_jacobian.T @ weighted_residual
+                - prior_precision * (parameters - prior_mean)
+            )
+
+            ridge = max(np.trace(hessian) / number_parameters, 1.0)
+            hessian += 1.0e-12 * ridge * np.eye(number_parameters)
+
+            try:
+                update = np.linalg.solve(hessian, right_hand_side)
+            except np.linalg.LinAlgError:
+                update = np.linalg.lstsq(hessian, right_hand_side, rcond=None)[
+                    0
+                ]
+
+            center_update = update[parameter_slices["center"]]
+            normalized_center_step = center_update / sigma
+            center_step_norm = np.linalg.norm(normalized_center_step)
+
+            if center_step_norm > self.maximum_center_step_sigma:
+                update[parameter_slices["center"]] *= (
+                    self.maximum_center_step_sigma / center_step_norm
+                )
+
+            if self.fit_widths:
+                update[parameter_slices["log_width"]] = np.clip(
+                    update[parameter_slices["log_width"]],
+                    -self.maximum_log_width_step,
+                    self.maximum_log_width_step,
+                )
+
+            if orientation_axes.size:
+                rotation_update = update[parameter_slices["rotation"]]
+                rotation_update_norm = np.linalg.norm(rotation_update)
+
+                if rotation_update_norm > self.maximum_rotation_step:
+                    update[parameter_slices["rotation"]] *= (
+                        self.maximum_rotation_step / rotation_update_norm
+                    )
+
+            current_objective = np.sum(
+                weights[use] * residual[use] ** 2
+            ) + np.sum(prior_precision * (parameters - prior_mean) ** 2)
+
+            accepted = False
+            step_scale = 1.0
+
+            while step_scale >= 1.0 / 128.0:
+                trial_parameters = project_parameters(
+                    parameters + step_scale * update
+                )
+
+                trial_model, *_ = evaluate(
+                    trial_parameters, calculate_jacobian=False
+                )
+                trial_residual = y - trial_model
+
+                trial_objective = np.sum(
+                    weights[use] * trial_residual[use] ** 2
+                ) + np.sum(
+                    prior_precision * (trial_parameters - prior_mean) ** 2
+                )
+
+                if trial_objective <= current_objective:
+                    parameters = trial_parameters
+                    accepted = True
+                    break
+
+                step_scale *= 0.5
+
+            scaled_step_norm = np.linalg.norm(
+                step_scale * update / np.maximum(np.abs(parameters), 1.0)
+            )
+
+            if not accepted or scaled_step_norm < self.tolerance:
+                converged = accepted
+                break
+
+        model, _, sigma, rotation_matrix, jacobian = evaluate(
+            parameters, calculate_jacobian=True
+        )
+
+        residual = y - model
+
+        variance = np.where(
+            (variance_input > 0) & np.isfinite(variance_input),
+            variance_input,
+            np.maximum(model, 1.0),
+        )
+        variance = np.maximum(variance, np.finfo(float).eps)
+
+        weights = 1.0 / variance
+        use = valid & np.isfinite(weights) & (weights > 0)
+
+        weighted_jacobian = jacobian[use] * np.sqrt(weights[use])[:, None]
+        information_matrix = weighted_jacobian.T @ weighted_jacobian + np.diag(
+            prior_precision
+        )
+        parameter_covariance = np.linalg.pinv(information_matrix)
+
+        degrees_of_freedom = max(np.count_nonzero(use) - number_parameters, 1)
+        reduced_chi_square = (
+            np.sum(residual[use] ** 2 / variance[use]) / degrees_of_freedom
+        )
+
+        (
+            background,
+            intensity,
+            background_slope,
+            center,
+            log_width,
+            rotation_vector,
+        ) = unpack(parameters)
+
+        peak_covariance = (
+            rotation_matrix @ np.diag(sigma**2) @ rotation_matrix.T
+        )
+
+        sigma_intensity = np.sqrt(max(parameter_covariance[1, 1], 0.0))
+
+        self.result = {
+            "intensity": float(intensity),
+            "sigma_intensity": float(sigma_intensity),
+            "background": float(background),
+            "background_gradient": background_slope.copy(),
+            "center": center.copy(),
+            "sigma": sigma.copy(),
+            "log_width_change": log_width.copy(),
+            "rotation_vector": rotation_vector.copy(),
+            "rotation_vector_deg": np.rad2deg(rotation_vector),
+            "rotation_matrix": rotation_matrix.copy(),
+            "covariance": peak_covariance.copy(),
+            "parameter_names": parameter_names,
+            "parameter_values": parameters.copy(),
+            "parameter_covariance": parameter_covariance,
+            "reduced_chi_square": float(reduced_chi_square),
+            "iterations": iterations,
+            "converged": converged,
+            "model": model.reshape(signal.shape),
+            "residual": residual.reshape(signal.shape),
+        }
+
+        return self.result

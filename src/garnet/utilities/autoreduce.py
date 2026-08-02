@@ -108,8 +108,6 @@ class AutoReduce:
         self.files = {}
         self.plot_html = ""
 
-        self.cc = False
-
     def elastic(self, time_offset=14000):
         if self.instrument == "CORELLI":
             try:
@@ -125,9 +123,7 @@ class AutoReduce:
                     ".nxs.h5", "_elastic.nxs"
                 ).replace("nexus", "shared/autoreduce")
                 SaveNexus(InputWorkspace="elastic", Filename=output)
-                self.cc = True
                 self.compress("elastic")
-                self.plot_instrument()
 
     def compress(self, ws):
         beamline = beamlines[self.instrument]
@@ -371,9 +367,16 @@ class AutoReduce:
         nu = np.rad2deg(np.arcsin(kf_y))
         gamma = np.rad2deg(np.arctan2(kf_x, kf_z))
 
-        n_bins = 200
-        xedges = np.linspace(gamma.min(), gamma.max(), n_bins + 1)
-        yedges = np.linspace(nu.min(), nu.max(), n_bins + 1)
+        beamline = beamlines[self.instrument]
+        pixel_size = beamline["PixelSize"]
+        grouping_c, grouping_r = [
+            int(v) for v in beamline["Grouping"].split("x")
+        ]
+        dx = pixel_size[0] * grouping_c
+        dy = pixel_size[1] * grouping_r
+
+        xedges = np.arange(gamma.min(), gamma.max() + dx, dx)
+        yedges = np.arange(nu.min(), nu.max() + dy, dy)
 
         sum_I, xedges, yedges = np.histogram2d(
             gamma, nu, bins=[xedges, yedges], weights=counts
@@ -387,8 +390,7 @@ class AutoReduce:
         x = 0.5 * (xedges[1:] + xedges[:-1])
         y = 0.5 * (yedges[1:] + yedges[:-1])
 
-        out = "_elastic" if self.cc else ""
-        run_title = os.path.basename(self.filename.replace(".nxs.h5", out))
+        run_title = os.path.basename(self.filename.replace(".nxs.h5", ""))
 
         zmin, zmax = self._sigma_clim(img)
 

@@ -858,6 +858,93 @@ class ResolutionEllipsoid:
                 base[f"sigma_mosaic_{lab}"] = sq(x[5 + k])
         return base
 
+    def set_variance_parameters(self, sigmas):
+        """
+        Initialize the model directly from known/prior sigma parameters,
+        bypassing fit() -- e.g. instrument-characteristic divergence
+        parameters (`config.instruments.beamlines[...]["DivergenceParams"]`)
+        used to seed peak shapes before per-run peaks exist to fit an
+        instrument-specific model against.
+
+        Parameters
+        ----------
+        sigmas : dict
+            Same keys `_label_variance_parameters` returns for the
+            current `self.mosaic` model (e.g. for "isotropic":
+            sigma_alpha_i, sigma_beta_i, sigma_alpha_f, sigma_beta_f,
+            sigma_dl_mod, sigma_mosaic).
+
+        Returns
+        -------
+        model : dict
+            Same shape `fit()` sets on `self.model`, minus the fit-only
+            keys "residual_norm", "used_peaks", "robust_weights".
+
+        """
+        if self.mosaic == "isotropic":
+            keys = [
+                "sigma_alpha_i",
+                "sigma_beta_i",
+                "sigma_alpha_f",
+                "sigma_beta_f",
+                "sigma_dl_mod",
+                "sigma_mosaic",
+            ]
+        elif self.mosaic == "diagonal":
+            keys = [
+                "sigma_alpha_i",
+                "sigma_beta_i",
+                "sigma_alpha_f",
+                "sigma_beta_f",
+                "sigma_dl_mod",
+                "sigma_mosaic_0",
+                "sigma_mosaic_1",
+                "sigma_mosaic_2",
+            ]
+        else:  # full
+            keys = [
+                "sigma_alpha_i",
+                "sigma_beta_i",
+                "sigma_alpha_f",
+                "sigma_beta_f",
+                "sigma_dl_mod",
+            ] + [
+                f"sigma_mosaic_{lab}"
+                for lab in ("00", "11", "22", "01", "02", "12")
+            ]
+
+        x = np.array([sigmas[k] for k in keys], dtype=float) ** 2
+
+        self.model = {k: sigmas[k] for k in keys}
+        self.model["variance_parameters"] = x
+
+        return self.model
+
+    def set_variance_parameters_deg(self, sigmas_deg):
+        """
+        Same as `set_variance_parameters`, but with the angular sigmas
+        given in degrees instead of radians. "sigma_dl_mod" is
+        dimensionless (sigma_lambda/lambda, see `_model_design_lab`)
+        rather than an angle, so it is passed through unchanged.
+
+        Parameters
+        ----------
+        sigmas_deg : dict
+            Same keys as `set_variance_parameters`, with every key but
+            "sigma_dl_mod" in degrees.
+
+        Returns
+        -------
+        model : dict
+            Same as `set_variance_parameters`.
+
+        """
+        sigmas = {
+            key: (value if key == "sigma_dl_mod" else np.radians(value))
+            for key, value in sigmas_deg.items()
+        }
+        return self.set_variance_parameters(sigmas)
+
     def renumber_by_size(self, n=None):
         """
         Renumber peak runNumbers 1..n ordered by model ellipsoid size.
@@ -944,6 +1031,45 @@ class ResolutionEllipsoid:
         R = peak.getGoniometerMatrix()
         S_sam = R.T @ S_lab @ R
         return 0.5 * (S_sam + S_sam.T)
+
+    def predict_sample_sigma_axes(self, peak_index):
+        """
+        Predicted Gaussian sigma and principal axes (sample frame) for
+        one peak -- the literal-covariance counterpart to
+        `predict_sample_S`/`_ellipsoid_from_S`'s containment-scale
+        radii (see module docstring, `_CONTAINMENT_SCALE_3D`).
+
+        Parameters
+        ----------
+        peak_index : int
+
+        Returns
+        -------
+        sigma : ndarray, shape (3,)
+            Gaussian standard deviations along the principal axes.
+        V : ndarray, shape (3, 3)
+            Principal axes (columns), sample frame.
+
+        """
+        if self.model is None:
+            raise RuntimeError(
+                "Call fit() or set_variance_parameters() before "
+                "predict_sample_sigma_axes()."
+            )
+
+        S_sample = self.predict_sample_S(peak_index)
+        radii, V = self._ellipsoid_from_S(S_sample)
+        sigma = radii / np.sqrt(_CONTAINMENT_SCALE_3D)
+
+        return sigma, V
+
+    @staticmethod
+    def radii_from_sigma(sigma):
+        """
+        Containment-scale radii (this module's convention -- see
+        `_CONTAINMENT_SCALE_3D`) from literal Gaussian sigma.
+        """
+        return np.asarray(sigma, dtype=float) * np.sqrt(_CONTAINMENT_SCALE_3D)
 
     def predict_roi_radii(self, r_cut, margin=2.0, min_frac=0.3):
         """
@@ -1213,7 +1339,10 @@ class ResolutionEllipsoid:
                 "robust_weights",
             ):
                 continue
-            lines.append("{}: {:.6e}\n".format(key, val))
+            if key == "sigma_dl_mod":
+                lines.append("{}: {:.6e} (dimensionless)\n".format(key, val))
+            else:
+                lines.append("{}: {:.6e} deg\n".format(key, np.degrees(val)))
 
         for line in lines:
             print(line)

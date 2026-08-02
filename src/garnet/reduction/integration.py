@@ -20,7 +20,7 @@ from garnet.plots.peaks import PeakPlot, ScanPlot
 from garnet.config.instruments import beamlines
 from garnet.reduction.ub import UBModel, Optimization, Reorient, lattice_group
 from garnet.reduction.peaks import PeaksModel, PeakModel, centering_reflection
-from garnet.reduction.ellipsoid import PeakEllipsoid
+from garnet.reduction.ellipsoid import PeakEllipsoid, RefineEllipsoid
 from garnet.reduction.resolution import (
     ResolutionEllipsoid,
     _plot_peak_shape_diagnostics,
@@ -148,18 +148,25 @@ class Integration(PeakProjection):
             ub = UBModel("combine")
             ub.save_UB(ub_file)
 
-        self.cleanup()
-        self.write(result_file)
+            self.cleanup()
+            self.write(result_file)
+        else:
+            self.cleanup()
 
     def write(self, result_file):
-        process = subprocess.Popen(
-            ["python", REFLECTIONS, self.plan["YAML"]],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        out, err = process.communicate()
-        if process.returncode == 0:
-            print("First command succeeded:", out.decode().strip())
+        try:
+            process = subprocess.Popen(
+                ["python", REFLECTIONS, self.plan["YAML"]],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            out, err = process.communicate()
+            if process.returncode == 0:
+                print("First command succeeded:", out.decode().strip())
+            else:
+                raise subprocess.SubprocessError(err.decode().strip())
+        except (FileNotFoundError, subprocess.SubprocessError):
+            subprocess.Popen(["python", REFLECTIONS, self.plan["YAML"]])
 
     def integrate(self):
         output_file = self.get_output_file()
@@ -258,13 +265,26 @@ class Integration(PeakProjection):
 
             self.data = data
 
-            peaks.integrate_peaks(
-                "md",
-                "peaks",
-                r_cut / np.cbrt(3),
-                centroid=True,
-                update=True,
+            div_params = beamlines[self.plan["Instrument"]].get(
+                "DivergenceParams"
             )
+
+            self.prior_res = None
+            if div_params is not None:
+                self.prior_res = ResolutionEllipsoid(
+                    "peaks", r_cut=r_cut, mosaic="isotropic"
+                )
+                self.prior_res.set_variance_parameters_deg(div_params)
+
+                self.refine_peaks_with_prior("peaks", "md", r_cut, 21)
+            else:
+                peaks.integrate_peaks(
+                    "md",
+                    "peaks",
+                    r_cut / np.cbrt(3),
+                    centroid=True,
+                    update=True,
+                )
 
             if self.params["OptimizeUB"]:
                 self.optimize_ub("data" + app, "md", "peaks", cell, run)
@@ -401,6 +421,79 @@ class Integration(PeakProjection):
 
         return result_file
 
+    def refine_peaks_with_prior(self, peaks_ws, md, r_cut, n_bins):
+        """
+        Replace IntegratePeaksMD with a per-peak linearized Gaussian
+        fit (`RefineEllipsoid`) seeded from the instrument's prior
+        resolution model (`self.prior_res`).
+
+        For each predicted peak: BinMD's `md` into a box (half-width
+        `r_cut`, `n_bins` per axis) aligned to `self.prior_res`'s
+        predicted principal axes at that peak -- so the peak is, by
+        construction, axis-aligned in the bin and only small
+        orientation corrections need refining -- fits it with
+        `RefineEllipsoid`, and stores the fitted center/shape/intensity
+        back onto the peak (mirroring what `IntegratePeaksMD` with
+        `UseCentroid=True, update=True` would have set). Peaks the fit
+        fails on (too few finite voxels, degenerate kernel) are left
+        with zero intensity and no ellipsoid shape, so they're
+        excluded from `ResolutionEllipsoid.fit()` the same way a
+        shapeless peak already is.
+
+        Parameters
+        ----------
+        peaks_ws : str
+            Peaks table.
+        md : str
+            Q-sample MDEventWorkspace.
+        r_cut : float
+            Box half-width along each local (rotated) axis.
+        n_bins : int
+            Number of bins along each local axis.
+
+        """
+        peak = PeakModel(peaks_ws)
+        bins = np.full(3, n_bins, dtype=int)
+
+        for i in range(peak.get_number_peaks()):
+            Q = np.array(peak.get_sample_Q(i))
+
+            sigma_prior, V_prior = self.prior_res.predict_sample_sigma_axes(i)
+
+            center_local = V_prior.T @ Q
+            extents = [
+                [center_local[k] - r_cut, center_local[k] + r_cut]
+                for k in range(3)
+            ]
+            projections = [V_prior[:, 0], V_prior[:, 1], V_prior[:, 2]]
+
+            self.data.bin_in_Q(md, extents, bins.copy(), projections)
+
+            workspace = mtd[md + "_bin"]
+
+            refiner = RefineEllipsoid(
+                sigma_initial=sigma_prior, center_initial=center_local
+            )
+
+            try:
+                result = refiner.fit(workspace)
+            except (ValueError, RuntimeError) as e:
+                print("RefineEllipsoid failed for peak {}: {}".format(i, e))
+                peak.set_peak_intensity(i, 0, 0)
+                self.data.delete_workspace(md + "_bin")
+                continue
+
+            self.data.delete_workspace(md + "_bin")
+
+            center_sample = V_prior @ result["center"]
+            V_sample = V_prior @ result["rotation_matrix"]
+            radii = ResolutionEllipsoid.radii_from_sigma(result["sigma"])
+
+            peak.set_peak_shape(i, *center_sample, *radii, *V_sample.T)
+            peak.set_peak_intensity(
+                i, result["intensity"], result["sigma_intensity"]
+            )
+
     def predict_add_satellite_peaks(
         self, peaks_ws, md_ws, lamda_min, lamda_max
     ):
@@ -444,8 +537,37 @@ class Integration(PeakProjection):
         ub = UBModel(peaks_ws)
         ub.save_UB(ub_file)
 
+        info_file = self.get_diagnostic_file("run#{}_ub".format(run), ".txt")
+        self.write_ub_info(info_file, run, opt, ub)
+
         ub.copy_UB(data)
         ub.copy_UB(md)
+
+    def write_ub_info(self, info_file, run, opt, ub):
+        n_peaks = len(opt.hkl)
+        min_d = self.params["MinD"]
+
+        a, b, c, alpha, beta, gamma = ub.get_lattice_parameters()
+        (
+            sig_a,
+            sig_b,
+            sig_c,
+            sig_alpha,
+            sig_beta,
+            sig_gamma,
+        ) = ub.get_lattice_parameter_uncertanties()
+
+        with open(info_file, "w") as f:
+            f.write("Run: {}\n".format(run))
+            f.write("Peaks used in optimization: {}\n".format(n_peaks))
+            f.write("Resolution (minimum d-spacing): {:.4f} Å\n".format(min_d))
+            f.write("\nLattice parameters:\n")
+            f.write("a = {:.4f} ± {:.4f} Å\n".format(a, sig_a))
+            f.write("b = {:.4f} ± {:.4f} Å\n".format(b, sig_b))
+            f.write("c = {:.4f} ± {:.4f} Å\n".format(c, sig_c))
+            f.write("alpha = {:.4f} ± {:.4f} deg\n".format(alpha, sig_alpha))
+            f.write("beta = {:.4f} ± {:.4f} deg\n".format(beta, sig_beta))
+            f.write("gamma = {:.4f} ± {:.4f} deg\n".format(gamma, sig_gamma))
 
     def optimize_peaks(
         self, data, md, peaks_ws, centering, cell, run, reindex=False
@@ -466,6 +588,8 @@ class Integration(PeakProjection):
 
         scan_plot = ScanPlot(*result)
         scan_plot.save_plot(scan_file)
+
+        peaks.remove_duplicate_peaks(peaks_ws)
 
         ub = UBModel(peaks_ws)
 

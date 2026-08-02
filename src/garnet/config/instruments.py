@@ -57,6 +57,17 @@ beamlines = {
         "Banks": 91,
         "DeltaTheta": 0.16,
         "Processes": 12,
+        # Angles in degrees; "sigma_dl_mod" is dimensionless
+        # (sigma_lambda / lambda), not an angle -- see
+        # ResolutionEllipsoid.set_variance_parameters_deg.
+        "DivergenceParams": {
+            "sigma_alpha_i": 0.595,
+            "sigma_beta_i": 0.955,
+            "sigma_alpha_f": 0.630,
+            "sigma_beta_f": 0.509,
+            "sigma_dl_mod": 0.017,
+            "sigma_mosaic": 0.201,
+        },
     },
     "TOPAZ": {
         "Facility": "SNS",
@@ -88,6 +99,17 @@ beamlines = {
         "Banks": 25,
         "DeltaTheta": 0.044,
         "Processes": 4,
+        # Angles in degrees; "sigma_dl_mod" is dimensionless
+        # (sigma_lambda / lambda), not an angle -- see
+        # ResolutionEllipsoid.set_variance_parameters_deg.
+        "DivergenceParams": {
+            "sigma_alpha_i": 1.072,
+            "sigma_beta_i": 1.054,
+            "sigma_alpha_f": 0.414,
+            "sigma_beta_f": 0.288,
+            "sigma_dl_mod": 0.006,
+            "sigma_mosaic": 0.223,
+        },
     },
     "MANDI": {
         "Facility": "SNS",

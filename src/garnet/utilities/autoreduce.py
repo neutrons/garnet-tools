@@ -853,7 +853,7 @@ class AutoReduce:
 
             data_ws, norm_ws, _ = self._run_mdnorm("raw_md", W, extents, bins)
 
-            base = "{}_{}_{}".format(self.instrument, safe_key, name)
+            base = "{}_{}".format(safe_key, name)
             data_file = os.path.join(self.autoreduce_dir, base + "_data.nxs")
             norm_file = os.path.join(self.autoreduce_dir, base + "_norm.nxs")
 

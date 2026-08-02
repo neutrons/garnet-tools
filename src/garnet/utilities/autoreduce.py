@@ -330,7 +330,7 @@ class AutoReduce:
         fig = go.Figure(
             data=[
                 go.Heatmap(
-                    z=z, x=x, y=y, colorscale="Jet", zmin=zmin, zmax=zmax
+                    z=z, x=x, y=y, colorscale="Greys", zmin=zmin, zmax=zmax
                 )
             ],
             layout=layout,
@@ -363,7 +363,7 @@ class AutoReduce:
         nu = np.rad2deg(np.arcsin(kf_y))
         gamma = np.rad2deg(np.arctan2(kf_x, kf_z))
 
-        n_bins = 300
+        n_bins = 200
         xedges = np.linspace(gamma.min(), gamma.max(), n_bins + 1)
         yedges = np.linspace(nu.min(), nu.max(), n_bins + 1)
 

@@ -285,6 +285,7 @@ class AutoReduce:
         aspect=None,
         zmin=None,
         zmax=None,
+        invert_x=False,
     ):
         """
         Build a Plotly heatmap HTML div, mirroring plot_publisher's
@@ -298,6 +299,9 @@ class AutoReduce:
             set_aspect.
         zmin, zmax : float, optional
             Color limits; if omitted, Plotly auto-ranges from the data.
+        invert_x : bool, optional
+            Reverse the x-axis, e.g. to match NeuXtalViz's instrument
+            view convention (ub_tools.py's ax_inst.invert_xaxis()).
         """
 
         axis_style = dict(
@@ -314,6 +318,10 @@ class AutoReduce:
         if aspect is not None:
             yaxis.update(scaleanchor="x", scaleratio=aspect)
 
+        xaxis = dict(title=x_title, **axis_style)
+        if invert_x:
+            xaxis.update(autorange="reversed")
+
         layout = go.Layout(
             showlegend=False,
             autosize=True,
@@ -322,7 +330,7 @@ class AutoReduce:
             margin=dict(t=40, b=40, l=80, r=40),
             hovermode="closest",
             bargap=0,
-            xaxis=dict(title=x_title, **axis_style),
+            xaxis=xaxis,
             yaxis=yaxis,
             title=title,
         )
@@ -394,6 +402,7 @@ class AutoReduce:
             zmax=zmax,
             title=run_title,
             aspect=1,
+            invert_x=True,
         )
 
         self.plot_html += "<div>{}</div>\n".format(div)
@@ -430,6 +439,43 @@ class AutoReduce:
         self.slice_config = config
 
         return True
+
+    def _set_goniometer(self, ws):
+        """
+        Set the goniometer from the instrument's actual motor logs.
+
+        "Universal" (the previous default here) only recognizes logs
+        literally named omega/chi/phi -- TOPAZ and friends log their
+        motors under PV names like "BL12:Mot:omega" instead, so
+        SetGoniometer would silently fail to find them (Mantid logs an
+        error but doesn't raise) and leave an identity goniometer matrix
+        on every run, breaking any accumulation keyed on real orientation.
+        Mirrors garnet.reduction.data.BaseDataModel's gon_axis/
+        set_goniometer construction.
+        """
+
+        beamline = beamlines[self.instrument]
+        gon = beamline["Goniometer"]
+        gon_axis_names = beamline.get("GoniometerAxisNames")
+        if gon_axis_names is None:
+            gon_axis_names = list(gon.keys())
+
+        axis_kwargs = {}
+        gon_ind = 0
+        for name in gon_axis_names:
+            if name is None:
+                continue
+            axis_kwargs["Axis{}".format(gon_ind)] = ",".join(
+                str(v) for v in [name] + list(gon[name])
+            )
+            gon_ind += 1
+
+        SetGoniometer(
+            Workspace=ws,
+            Goniometers="None, Specify Individually",
+            Average=True,
+            **axis_kwargs,
+        )
 
     def _title_group_key(self, title):
         """
@@ -788,7 +834,7 @@ class AutoReduce:
             InputWorkspace="data",
             Filename=config["UBFile"].replace("*", str(self.run)),
         )
-        SetGoniometer(Workspace="data", Goniometers="Universal")
+        self._set_goniometer("data")
 
         UB = mtd["data"].sample().getOrientedLattice().getUB()
         aligned = self._is_axis_aligned(UB)

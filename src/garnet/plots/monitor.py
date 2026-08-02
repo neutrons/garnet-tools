@@ -173,7 +173,7 @@ class SlicePlot:
             y=self.v,
             z=initial,
             customdata=customdata,
-            colorscale="Viridis",
+            colorscale="Turbo",
             zsmooth=False,
             colorbar=dict(title="Intensity"),
             hovertemplate=(

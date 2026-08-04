@@ -20,6 +20,11 @@ class SlicePlot:
         in the slice frame.
     """
 
+    # Hard cap on the display grid per axis, independent of oversample --
+    # a full-resolution slice (e.g. 801x801) plus its 3x customdata
+    # channel can exceed livedata.sns.gov's upload size limit (HTTP 413).
+    MAX_DISPLAY_BINS = 401
+
     def __init__(self, UB, W):
         G = UB.T @ UB
 
@@ -131,6 +136,9 @@ class SlicePlot:
 
         nu = max(2, int(np.ceil(oversample * (umax - umin) / dx)) + 1)
         nv = max(2, int(np.ceil(oversample * (ymax - ymin) / dy)) + 1)
+
+        nu = min(nu, self.MAX_DISPLAY_BINS)
+        nv = min(nv, self.MAX_DISPLAY_BINS)
 
         self.u = np.linspace(umin, umax, nu)
         self.v = np.linspace(ymin, ymax, nv)

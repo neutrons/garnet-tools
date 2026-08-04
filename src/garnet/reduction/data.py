@@ -833,14 +833,20 @@ class BaseDataModel:
 
         """
 
-        SaveMD(
-            Filename=filename,
-            InputWorkspace=ws,
-            SaveHistory=False,
-            SaveInstrument=sample_logs,
-            SaveSample=sample_logs,
-            SaveLogs=sample_logs,
-        )
+        try:
+            SaveMD(
+                Filename=filename,
+                InputWorkspace=ws,
+                SaveHistory=False,
+                SaveInstrument=sample_logs,
+                SaveSample=sample_logs,
+                SaveLogs=sample_logs,
+            )
+        except RuntimeError as e:
+            if "Cannot open file" in str(e):
+                print("Failed to save {}".format(filename))
+            else:
+                raise e
 
     def merge_Q_sample(self, filenames, filename, merge):
         """

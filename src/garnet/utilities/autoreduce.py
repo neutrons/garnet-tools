@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import glob
+import hashlib
 import itertools
 
 directory = os.path.dirname(os.path.realpath(__file__))
@@ -70,12 +71,12 @@ AUTOLITE = "/SNS/software/scd/lite/"
 class AutoReduce:
     # Display-grid oversample for the interactive monitor plots, decoupled
     # from the underlying MDNorm bin count (kept fine on disk for the
-    # accumulated data/norm nxs files). At oversample=1.0 the display grid
-    # tracks the source resolution 1:1, which for an 801x801 slice plus its
-    # 3x customdata channel made the combined monitor-page payload exceed
-    # livedata.sns.gov's upload size limit (HTTP 413). This keeps the
-    # display grid to roughly 1/5 the source resolution per axis.
-    MONITOR_OVERSAMPLE = 0.2
+    # accumulated data/norm nxs files). At 1.0 the display grid tracks the
+    # source resolution 1:1 -- for an 801x801 slice plus its 3x customdata
+    # channel this previously made the combined monitor-page payload exceed
+    # livedata.sns.gov's upload size limit (HTTP 413); lower this again if
+    # that recurs.
+    MONITOR_OVERSAMPLE = 1.0
 
     def __init__(self, filename):
         self.filename = filename
@@ -597,6 +598,27 @@ class AutoReduce:
 
         return extents, bins
 
+    def _extent_key(self, extents, bins):
+        """
+        Short deterministic key derived from the calculated projection
+        extents/bins (see _projection_extents), which are themselves
+        derived from UB. Accumulation files are named using this key
+        rather than the run title alone, so a UB change (e.g. sample
+        swapped before a new UB is set) yields different extents and
+        therefore a different key -- a fresh file is started instead of
+        silently accumulating new data into a file computed under the
+        previous UB.
+        """
+
+        payload = repr(
+            (
+                tuple(tuple(round(v, 6) for v in e) for e in extents),
+                tuple(bins),
+            )
+        )
+
+        return hashlib.md5(payload.encode()).hexdigest()[:8]
+
     def _load_solid_angle(self, vanadium_file):
         """
         Load the solid-angle workspace directly: it already matches the
@@ -865,21 +887,23 @@ class AutoReduce:
         self._convert_to_Q_sample(d_min)
 
         for name, W in projections:
+            extents, bins = self._projection_extents(UB, W, d_min)
+            geom_key = self._extent_key(extents, bins)
+
             base = "{}_{}".format(safe_key, name)
-            data_file = os.path.join(self.autoreduce_dir, base + "_data.nxs")
-            norm_file = os.path.join(self.autoreduce_dir, base + "_norm.nxs")
+            file_base = "{}_{}".format(base, geom_key)
+            data_file = os.path.join(
+                self.autoreduce_dir, file_base + "_data.nxs"
+            )
+            norm_file = os.path.join(
+                self.autoreduce_dir, file_base + "_norm.nxs"
+            )
 
             has_prev = os.path.exists(data_file) and os.path.exists(norm_file)
 
             if has_prev:
                 LoadMD(Filename=data_file, OutputWorkspace="prev_data")
                 LoadMD(Filename=norm_file, OutputWorkspace="prev_norm")
-
-                dims = [mtd["prev_data"].getDimension(i) for i in range(3)]
-                extents = [[d.getMinimum(), d.getMaximum()] for d in dims]
-                bins = [d.getNBins() for d in dims]
-            else:
-                extents, bins = self._projection_extents(UB, W, d_min)
 
             data_ws, norm_ws, _ = self._run_mdnorm(
                 "raw_md",

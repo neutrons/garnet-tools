@@ -291,36 +291,47 @@ def _ellipse_patch(S_2d, center_2d, **kwargs):
     )
 
 
-def _plot_peak_shape_diagnostics(samples, filename):
+def _plot_peak_shape_diagnostics(samples, filename, axis_labels=None):
     """
-    Render the per-peak box + observed/predicted ellipse diagnostic
-    figure -- a spatial complement to `_plot_resolution_diagnostics`'s
+    Render the per-peak box + overlaid ellipse diagnostic figure -- a
+    spatial complement to `_plot_resolution_diagnostics`'s
     population-level obs-vs-pred scatter, showing the actual counts
-    box each peak's shape estimate came from.
+    box each peak's shape estimate(s) came from.
 
-    Used by `Integration.plot_peak_shape_diagnostics` on a small,
-    signal/noise- and |Q|-stratified sample of peaks (plotting every
-    peak this way doesn't scale).
+    Used by `Integration.plot_peak_shape_diagnostics` -- observed vs.
+    population-model-predicted shape, and (when an instrument prior
+    model was used to size the integration radii) prior vs. observed
+    shape too -- on a small, signal/noise- and |Q|-stratified sample of
+    peaks (plotting every peak this way doesn't scale).
 
     Parameters
     ----------
     samples : list of dict
-        Per-peak rows with keys "label", "Q0"/"Q1"/"Q2" (dense
-        Q-sample grids from `data.bin_in_Q`, ij-indexed), "counts"
-        (matching 3D array), "center" (3-tuple, Q-sample frame),
-        "S_obs"/"S_pred" (3x3, Q-sample frame, containment-scale), and
-        "signal_noise".
+        Per-peak rows with keys "label", "Q0"/"Q1"/"Q2" (dense grids
+        from `data.bin_in_Q`, ij-indexed), "counts" (matching 3D
+        array), and "ellipses": a list of dict, each with "center"
+        (3-tuple, same frame as "Q0"/"Q1"/"Q2"), "S" (3x3,
+        containment-scale, same frame), "label", "color", and
+        "linestyle" -- one dashed/solid pair overlaid on the counts
+        image per sample, in the order given.
     filename : str
         Output image path.
+    axis_labels : list of (str, str), optional
+        Per-projection axis labels, one pair per dimension dropped
+        (i.e. projections onto the other two). Defaults to the
+        Q-sample convention `[("Q_1", "Q_2"), ("Q_0", "Q_2"),
+        ("Q_0", "Q_1")]`; pass e.g. local rotated-frame labels when
+        "Q0"/"Q1"/"Q2" aren't literal Q-sample components.
 
     """
     n_rows = len(samples)
 
+    if axis_labels is None:
+        axis_labels = [("Q_1", "Q_2"), ("Q_0", "Q_2"), ("Q_0", "Q_1")]
+
     fig, axes = plt.subplots(
         n_rows, 3, figsize=(12, 4 * n_rows), squeeze=False
     )
-
-    plane_labels = [("Q_1", "Q_2"), ("Q_0", "Q_2"), ("Q_0", "Q_1")]
 
     for row, sample in enumerate(samples):
         xs = [
@@ -329,9 +340,7 @@ def _plot_peak_shape_diagnostics(samples, filename):
             sample["Q2"][0, 0, :],
         ]
         counts = sample["counts"]
-        center = sample["center"]
-        S_obs = sample["S_obs"]
-        S_pred = sample["S_pred"]
+        ellipses = sample["ellipses"]
 
         for k in range(3):
             a, b = [d for d in range(3) if d != k]
@@ -349,30 +358,22 @@ def _plot_peak_shape_diagnostics(samples, filename):
             )
 
             idx = [a, b]
-            center_2d = (center[a], center[b])
 
-            ax.add_patch(
-                _ellipse_patch(
-                    S_obs[np.ix_(idx, idx)],
-                    center_2d,
-                    edgecolor="white",
-                    facecolor="none",
-                    linestyle="--",
-                    linewidth=1.2,
-                )
-            )
-            ax.add_patch(
-                _ellipse_patch(
-                    S_pred[np.ix_(idx, idx)],
-                    center_2d,
-                    edgecolor="red",
-                    facecolor="none",
-                    linestyle="-",
-                    linewidth=1.2,
-                )
-            )
+            for ellipse in ellipses:
+                center_2d = (ellipse["center"][a], ellipse["center"][b])
 
-            lab_a, lab_b = plane_labels[k]
+                ax.add_patch(
+                    _ellipse_patch(
+                        ellipse["S"][np.ix_(idx, idx)],
+                        center_2d,
+                        edgecolor=ellipse["color"],
+                        facecolor="none",
+                        linestyle=ellipse["linestyle"],
+                        linewidth=1.2,
+                    )
+                )
+
+            lab_a, lab_b = axis_labels[k]
             ax.set_xlabel("${}$ [$\\AA^{{-1}}$]".format(lab_a))
             if k == 0:
                 ax.set_ylabel(
@@ -383,11 +384,23 @@ def _plot_peak_shape_diagnostics(samples, filename):
             if row == 0:
                 ax.set_title("{} vs {}".format(lab_a, lab_b))
 
-    handles = [
-        plt.Line2D([0], [0], color="white", linestyle="--", label="observed"),
-        plt.Line2D([0], [0], color="red", linestyle="-", label="predicted"),
-    ]
-    fig.legend(handles=handles, loc="upper center", ncol=2)
+    seen = set()
+    handles = []
+    for sample in samples:
+        for ellipse in sample["ellipses"]:
+            key = (ellipse["label"], ellipse["color"], ellipse["linestyle"])
+            if key not in seen:
+                seen.add(key)
+                handles.append(
+                    plt.Line2D(
+                        [0],
+                        [0],
+                        color=ellipse["color"],
+                        linestyle=ellipse["linestyle"],
+                        label=ellipse["label"],
+                    )
+                )
+    fig.legend(handles=handles, loc="upper center", ncol=len(handles))
 
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     fig.savefig(filename, bbox_inches="tight")
@@ -722,7 +735,23 @@ class ResolutionEllipsoid:
         residual_norm = np.linalg.norm(A @ x - y)
         return x, residual_norm, w
 
-    def fit(self):
+    def fit(self, fixed_instrumental=None):
+        """
+        Fit the variance parameters against the workspace's peak shapes.
+
+        Parameters
+        ----------
+        fixed_instrumental : dict or None
+            Prior instrumental sigmas (radians, "sigma_dl_mod"
+            dimensionless -- same shape as `set_variance_parameters`
+            expects), e.g. from a beamline's characterized
+            `DivergenceParams`. When given, the instrumental columns
+            (alpha_i, beta_i, alpha_f, beta_f, dl_mod) are held at this
+            prior shape and only a single overall scale factor plus the
+            mosaic term(s) are fit, rather than letting all instrumental
+            terms float independently.
+
+        """
         ws = mtd[self.peaks_ws]
 
         A_blocks = []
@@ -823,7 +852,36 @@ class ResolutionEllipsoid:
         A = np.vstack(A_blocks)
         y = np.concatenate(y_blocks)
 
-        x, residual_norm, robust_weights = self.robust_nnls(A, y)
+        n_instrumental = 5
+        instrumental_scale = None
+
+        if fixed_instrumental is not None:
+            x_prior = (
+                np.array(
+                    [
+                        fixed_instrumental[k]
+                        for k in (
+                            "sigma_alpha_i",
+                            "sigma_beta_i",
+                            "sigma_alpha_f",
+                            "sigma_beta_f",
+                            "sigma_dl_mod",
+                        )
+                    ],
+                    dtype=float,
+                )
+                ** 2
+            )
+
+            A_scale = (A[:, :n_instrumental] @ x_prior)[:, None]
+            A_fit = np.column_stack([A_scale, A[:, n_instrumental:]])
+
+            x_fit, residual_norm, robust_weights = self.robust_nnls(A_fit, y)
+
+            instrumental_scale = x_fit[0]
+            x = np.concatenate([instrumental_scale * x_prior, x_fit[1:]])
+        else:
+            x, residual_norm, robust_weights = self.robust_nnls(A, y)
 
         self.model = {
             **self._label_variance_parameters(x.ravel()),
@@ -834,6 +892,7 @@ class ResolutionEllipsoid:
             # exactly 1.0 for peaks within the robust threshold (see
             # robust_nnls), <1.0 for peaks it down-weighted as outliers.
             "robust_weights": robust_weights,
+            "instrumental_scale": instrumental_scale,
         }
         return self.model
 
@@ -1031,45 +1090,6 @@ class ResolutionEllipsoid:
         R = peak.getGoniometerMatrix()
         S_sam = R.T @ S_lab @ R
         return 0.5 * (S_sam + S_sam.T)
-
-    def predict_sample_sigma_axes(self, peak_index):
-        """
-        Predicted Gaussian sigma and principal axes (sample frame) for
-        one peak -- the literal-covariance counterpart to
-        `predict_sample_S`/`_ellipsoid_from_S`'s containment-scale
-        radii (see module docstring, `_CONTAINMENT_SCALE_3D`).
-
-        Parameters
-        ----------
-        peak_index : int
-
-        Returns
-        -------
-        sigma : ndarray, shape (3,)
-            Gaussian standard deviations along the principal axes.
-        V : ndarray, shape (3, 3)
-            Principal axes (columns), sample frame.
-
-        """
-        if self.model is None:
-            raise RuntimeError(
-                "Call fit() or set_variance_parameters() before "
-                "predict_sample_sigma_axes()."
-            )
-
-        S_sample = self.predict_sample_S(peak_index)
-        radii, V = self._ellipsoid_from_S(S_sample)
-        sigma = radii / np.sqrt(_CONTAINMENT_SCALE_3D)
-
-        return sigma, V
-
-    @staticmethod
-    def radii_from_sigma(sigma):
-        """
-        Containment-scale radii (this module's convention -- see
-        `_CONTAINMENT_SCALE_3D`) from literal Gaussian sigma.
-        """
-        return np.asarray(sigma, dtype=float) * np.sqrt(_CONTAINMENT_SCALE_3D)
 
     def predict_roi_radii(self, r_cut, margin=2.0, min_frac=0.3):
         """
@@ -1331,12 +1351,21 @@ class ResolutionEllipsoid:
             ),
         ]
 
+        instrumental_scale = self.model.get("instrumental_scale")
+        if instrumental_scale is not None:
+            lines.append(
+                "instrumental_scale: {:.6e} (dimensionless)\n".format(
+                    instrumental_scale
+                )
+            )
+
         for key, val in self.model.items():
             if key in (
                 "variance_parameters",
                 "residual_norm",
                 "used_peaks",
                 "robust_weights",
+                "instrumental_scale",
             ):
                 continue
             if key == "sigma_dl_mod":

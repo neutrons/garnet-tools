@@ -1461,7 +1461,10 @@ class PeakPlot(BasePlot):
             return np.array([]), np.array([])
 
         mask = scipy.ndimage.binary_fill_holes(mask)
+        mask = np.pad(mask, 1, mode="constant", constant_values=False)
         mask = scipy.ndimage.binary_erosion(mask, structure=np.ones((3, 3)))
+
+        x, y = x - dx, y - dy
 
         roi = np.repeat(np.repeat(mask, 4, axis=0), 4, axis=1)
 

@@ -1216,6 +1216,51 @@ class Optimization:
         ol.setError(sig_a, sig_b, sig_c, sig_alpha, sig_beta, sig_gamma)
 
 
+def write_ub_info(info_file, run, min_d, opt, ub):
+    """
+    Write a lattice-refinement diagnostic text file.
+
+    Parameters
+    ----------
+    info_file : str
+        Output text file path.
+    run : int
+        Run number, for the report header.
+    min_d : float
+        Resolution (minimum d-spacing) used for peak prediction.
+    opt : Optimization
+        Lattice optimization (already `optimize_lattice()`-refined),
+        for the count of peaks used.
+    ub : UBModel
+        UB model (already refined), for the lattice parameters and
+        their uncertainties.
+
+    """
+    n_peaks = len(opt.hkl)
+
+    a, b, c, alpha, beta, gamma = ub.get_lattice_parameters()
+    (
+        sig_a,
+        sig_b,
+        sig_c,
+        sig_alpha,
+        sig_beta,
+        sig_gamma,
+    ) = ub.get_lattice_parameter_uncertanties()
+
+    with open(info_file, "w") as f:
+        f.write("Run: {}\n".format(run))
+        f.write("Peaks used in optimization: {}\n".format(n_peaks))
+        f.write("Resolution (minimum d-spacing): {:.4f} Å\n".format(min_d))
+        f.write("\nLattice parameters:\n")
+        f.write("a = {:.4f} ± {:.4f} Å\n".format(a, sig_a))
+        f.write("b = {:.4f} ± {:.4f} Å\n".format(b, sig_b))
+        f.write("c = {:.4f} ± {:.4f} Å\n".format(c, sig_c))
+        f.write("alpha = {:.4f} ± {:.4f} deg\n".format(alpha, sig_alpha))
+        f.write("beta = {:.4f} ± {:.4f} deg\n".format(beta, sig_beta))
+        f.write("gamma = {:.4f} ± {:.4f} deg\n".format(gamma, sig_gamma))
+
+
 class RefineSingleCrystalGoniometer:
     def __init__(self, peaks, tol=0.12, cell="Triclinic", n_iter=1):
         self.peaks = peaks

@@ -18,9 +18,15 @@ os.environ["TBB_THREAD_ENABLED"] = "0"
 
 from garnet.plots.peaks import PeakPlot, ScanPlot
 from garnet.config.instruments import beamlines
-from garnet.reduction.ub import UBModel, Optimization, Reorient, lattice_group
+from garnet.reduction.ub import (
+    UBModel,
+    Optimization,
+    Reorient,
+    lattice_group,
+    write_ub_info,
+)
 from garnet.reduction.peaks import PeaksModel, PeakModel, centering_reflection
-from garnet.reduction.ellipsoid import PeakEllipsoid, RefineEllipsoid
+from garnet.reduction.ellipsoid import PeakEllipsoid
 from garnet.reduction.resolution import (
     ResolutionEllipsoid,
     _plot_peak_shape_diagnostics,
@@ -276,7 +282,15 @@ class Integration(PeakProjection):
                 )
                 self.prior_res.set_variance_parameters_deg(div_params)
 
-                self.refine_peaks_with_prior("peaks", "md", r_cut, 21)
+                peaks.stash_run_number("peaks")
+
+                radii = self.prior_res.renumber_by_size(5)
+
+                peaks.integrate_peaks_with_radii(
+                    "md", "peaks", radii, centroid=True, update=True
+                )
+
+                peaks.restore_run_number("peaks")
             else:
                 peaks.integrate_peaks(
                     "md",
@@ -290,7 +304,10 @@ class Integration(PeakProjection):
                 self.optimize_ub("data" + app, "md", "peaks", cell, run)
 
             res = ResolutionEllipsoid("peaks", r_cut=r_cut, mosaic="isotropic")
-            res.fit()
+            fixed_instrumental = (
+                self.prior_res.model if self.prior_res is not None else None
+            )
+            res.fit(fixed_instrumental=fixed_instrumental)
 
             if res.model is not None:
                 res_file = self.get_plot_file("run#{}_res".format(run))
@@ -421,128 +438,6 @@ class Integration(PeakProjection):
 
         return result_file
 
-    def refine_peaks_with_prior(self, peaks_ws, md, r_cut, n_bins):
-        """
-        Replace IntegratePeaksMD with a per-peak fit seeded from the
-        instrument's prior resolution model (`self.prior_res`).
-
-        For each predicted peak: BinMD's `md` into a box (half-width
-        `r_cut`, `n_bins` per axis) aligned to `self.prior_res`'s
-        predicted principal axes at that peak -- so the peak is, by
-        construction, axis-aligned in the bin and only small
-        orientation corrections need refining -- and fits it with
-        `RefineEllipsoid` to get a shape (center, widths, orientation).
-
-        Fitting intensity jointly with that shape (as
-        `RefineEllipsoid` also does) badly inflates its uncertainty for
-        weak peaks: shape and intensity end up correlated, competing
-        for the same handful of near-peak voxels, and the Fisher-matrix
-        inverse correctly reflects that correlation as a large marginal
-        sigma_intensity. `IntegratePeaksMD` avoids this because it
-        never fits shape and intensity together. So instead, intensity
-        is obtained separately: with the shape now held FIXED, do a
-        proper Poisson profile fit (`PeakEllipsoid.profile_fit`) on raw
-        neutron counts (`getNumEventsArray`, not the Lorentz-weighted
-        `getSignalArray` used for the shape fit -- that weighting
-        breaks the Poisson mean=variance assumption), seeded from the
-        classic background-subtracted box-sum (`extract_raw_intensity`)
-        -- which is what this reduces to for strong, high-count peaks.
-
-        Stores the fitted center/shape/intensity back onto the peak
-        (mirroring what `IntegratePeaksMD` with `UseCentroid=True,
-        update=True` would have set). Peaks the shape fit fails on (too
-        few finite voxels, degenerate kernel) are left with zero
-        intensity and no ellipsoid shape, so they're excluded from
-        `ResolutionEllipsoid.fit()` the same way a shapeless peak
-        already is.
-
-        Parameters
-        ----------
-        peaks_ws : str
-            Peaks table.
-        md : str
-            Q-sample MDEventWorkspace.
-        r_cut : float
-            Box half-width along each local (rotated) axis.
-        n_bins : int
-            Number of bins along each local axis.
-
-        """
-        peak = PeakModel(peaks_ws)
-        bins = np.full(3, n_bins, dtype=int)
-        ellipsoid = PeakEllipsoid()
-
-        for i in range(peak.get_number_peaks()):
-            Q = np.array(peak.get_sample_Q(i))
-
-            sigma_prior, V_prior = self.prior_res.predict_sample_sigma_axes(i)
-
-            center_local = V_prior.T @ Q
-            extents = [
-                [center_local[k] - r_cut, center_local[k] + r_cut]
-                for k in range(3)
-            ]
-            projections = [V_prior[:, 0], V_prior[:, 1], V_prior[:, 2]]
-
-            self.data.bin_in_Q(md, extents, bins.copy(), projections)
-
-            bin_ws = md + "_bin"
-            workspace = mtd[bin_ws]
-
-            refiner = RefineEllipsoid(
-                sigma_initial=sigma_prior, center_initial=center_local
-            )
-
-            try:
-                shape = refiner.fit(workspace)
-            except (ValueError, RuntimeError) as e:
-                print("RefineEllipsoid failed for peak {}: {}".format(i, e))
-                peak.set_peak_intensity(i, 0, 0)
-                self.data.delete_workspace(bin_ws)
-                continue
-
-            radii_local = ResolutionEllipsoid.radii_from_sigma(shape["sigma"])
-            V_fit = shape["rotation_matrix"]
-            S_local = V_fit @ np.diag(radii_local**2) @ V_fit.T
-
-            d = self.data.extract_counts(bin_ws)
-            _, _, x0, x1, x2 = self.data.extract_bin_info(bin_ws)
-
-            self.data.delete_workspace(bin_ws)
-
-            pk, bkg, mask, kernel = ellipsoid.peak_roi(
-                x0, x1, x2, shape["center"], S_local, 1
-            )
-
-            vol = ellipsoid.voxel_volume(x0, x1, x2)
-            n = np.full_like(d, vol, dtype=float)
-
-            seed_intensity, _ = ellipsoid.extract_raw_intensity(d, pk, bkg)
-            seed_intensity = (
-                max(seed_intensity, 0.0)
-                if np.isfinite(seed_intensity)
-                else 0.0
-            )
-            seed_background = (
-                float(np.nanmean(d[bkg])) / vol if np.any(bkg) else 0.0
-            )
-
-            profile, _ = ellipsoid.profile_fit(
-                d,
-                n,
-                kernel,
-                mask,
-                initial_intensity=seed_intensity,
-                initial_background=seed_background,
-            )
-            intensity, sigma_intensity = profile[0], profile[1]
-
-            center_sample = V_prior @ shape["center"]
-            V_sample = V_prior @ V_fit
-
-            peak.set_peak_shape(i, *center_sample, *radii_local, *V_sample.T)
-            peak.set_peak_intensity(i, intensity, sigma_intensity)
-
     def predict_add_satellite_peaks(
         self, peaks_ws, md_ws, lamda_min, lamda_max
     ):
@@ -587,36 +482,10 @@ class Integration(PeakProjection):
         ub.save_UB(ub_file)
 
         info_file = self.get_diagnostic_file("run#{}_ub".format(run), ".txt")
-        self.write_ub_info(info_file, run, opt, ub)
+        write_ub_info(info_file, run, self.params["MinD"], opt, ub)
 
         ub.copy_UB(data)
         ub.copy_UB(md)
-
-    def write_ub_info(self, info_file, run, opt, ub):
-        n_peaks = len(opt.hkl)
-        min_d = self.params["MinD"]
-
-        a, b, c, alpha, beta, gamma = ub.get_lattice_parameters()
-        (
-            sig_a,
-            sig_b,
-            sig_c,
-            sig_alpha,
-            sig_beta,
-            sig_gamma,
-        ) = ub.get_lattice_parameter_uncertanties()
-
-        with open(info_file, "w") as f:
-            f.write("Run: {}\n".format(run))
-            f.write("Peaks used in optimization: {}\n".format(n_peaks))
-            f.write("Resolution (minimum d-spacing): {:.4f} Å\n".format(min_d))
-            f.write("\nLattice parameters:\n")
-            f.write("a = {:.4f} ± {:.4f} Å\n".format(a, sig_a))
-            f.write("b = {:.4f} ± {:.4f} Å\n".format(b, sig_b))
-            f.write("c = {:.4f} ± {:.4f} Å\n".format(c, sig_c))
-            f.write("alpha = {:.4f} ± {:.4f} deg\n".format(alpha, sig_alpha))
-            f.write("beta = {:.4f} ± {:.4f} deg\n".format(beta, sig_beta))
-            f.write("gamma = {:.4f} ± {:.4f} deg\n".format(gamma, sig_gamma))
 
     def optimize_peaks(
         self, data, md, peaks_ws, centering, cell, run, reindex=False
@@ -1251,6 +1120,13 @@ class Integration(PeakProjection):
         `PeaksModel.integrate_peaks`) and model-predicted (`res`)
         ellipse cross-sections overlaid on all three 2D projections.
 
+        When `self.prior_res` is set (an instrument prior model was
+        used to size the adaptive per-peak integration radii, see
+        `integrate`), a second row is prepended comparing that prior
+        model's prediction against the peak's stored shape -- i.e. two
+        rows per peak: prior vs. observed, then observed vs. the
+        now-updated population model `res`.
+
         One PNG per peak, saved next to that peak's other diagnostic
         files (`extract_peak_counts`'s "..._counts.nxs", same
         peak-named subdirectory). Complements `res.plot_diagnostics`'s
@@ -1295,16 +1171,72 @@ class Integration(PeakProjection):
             orig_d = self.orig_d.get(peak.get_hklmnp(i))
             peak_name = peak.get_peak_name(i, d=orig_d)
 
-            sample = {
-                "label": "peak {} (S/N={:.1f})".format(i, sig_noise),
+            label = "peak {} (S/N={:.1f})".format(i, sig_noise)
+
+            grid = {
                 "Q0": info["Q0"],
                 "Q1": info["Q1"],
                 "Q2": info["Q2"],
                 "counts": info["counts"],
-                "center": (c0, c1, c2),
-                "S_obs": S_obs,
-                "S_pred": S_pred,
             }
+
+            obs_label = "observed"
+            pred_label = (
+                "updated resolution model" if self.prior_res else "predicted"
+            )
+
+            samples = []
+
+            if self.prior_res is not None:
+                S_prior = self.prior_res.predict_sample_S(i)
+
+                samples.append(
+                    {
+                        "label": label + " -- prior vs. observed",
+                        "ellipses": [
+                            {
+                                "center": (c0, c1, c2),
+                                "S": S_prior,
+                                "label": "instrument config guess",
+                                "color": "gold",
+                                "linestyle": "--",
+                            },
+                            {
+                                "center": (c0, c1, c2),
+                                "S": S_obs,
+                                "label": obs_label,
+                                "color": "red",
+                                "linestyle": "-",
+                            },
+                        ],
+                        **grid,
+                    }
+                )
+
+            has_prior = self.prior_res is not None
+
+            samples.append(
+                {
+                    "label": label + " -- observed vs. population model",
+                    "ellipses": [
+                        {
+                            "center": (c0, c1, c2),
+                            "S": S_obs,
+                            "label": obs_label,
+                            "color": "red" if has_prior else "white",
+                            "linestyle": "-" if has_prior else "--",
+                        },
+                        {
+                            "center": (c0, c1, c2),
+                            "S": S_pred,
+                            "label": pred_label,
+                            "color": "cyan" if has_prior else "red",
+                            "linestyle": "-." if has_prior else "-",
+                        },
+                    ],
+                    **grid,
+                }
+            )
 
             shape_file = self.get_diagnostic_file(
                 peak_name + "_shape", ext=".png"
@@ -1312,4 +1244,4 @@ class Integration(PeakProjection):
 
             os.makedirs(os.path.dirname(shape_file), exist_ok=True)
 
-            _plot_peak_shape_diagnostics([sample], shape_file)
+            _plot_peak_shape_diagnostics(samples, shape_file)

@@ -386,6 +386,7 @@ class AutoReduce:
         with np.errstate(invalid="ignore"):
             img = sum_I / count_map
         img[count_map == 0] = np.nan
+        img[np.isclose(img, 0)] = np.nan
 
         x = 0.5 * (xedges[1:] + xedges[:-1])
         y = 0.5 * (yedges[1:] + yedges[:-1])

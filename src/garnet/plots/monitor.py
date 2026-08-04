@@ -23,7 +23,7 @@ class SlicePlot:
     # Hard cap on the display grid per axis, independent of oversample --
     # a full-resolution slice (e.g. 801x801) plus its 3x customdata
     # channel can exceed livedata.sns.gov's upload size limit (HTTP 413).
-    MAX_DISPLAY_BINS = 401
+    MAX_DISPLAY_BINS = 201
 
     def __init__(self, UB, W):
         G = UB.T @ UB

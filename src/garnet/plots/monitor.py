@@ -155,8 +155,11 @@ class SlicePlot:
         #
         #   x = u - shear * (v - y_min)
         #   y = v
-        self.X_source = U - self.shear * (V - ymin)
-        self.Y_source = V
+        # float32: halves the JSON payload of the customdata/z arrays
+        # embedded in the exported plot, with no visible loss of
+        # precision for display purposes.
+        self.X_source = (U - self.shear * (V - ymin)).astype(np.float32)
+        self.Y_source = V.astype(np.float32)
 
         # RegularGridInterpolator expects points in the order of
         # the data dimensions. Since slice data will have shape
@@ -168,7 +171,7 @@ class SlicePlot:
             ]
         )
 
-        initial = np.full((nv, nu), np.nan, dtype=float)
+        initial = np.full((nv, nu), np.nan, dtype=np.float32)
         customdata = np.stack(
             [self.X_source, self.Y_source, initial],
             axis=-1,
@@ -317,7 +320,9 @@ class SlicePlot:
         vmin, vmax = self._compute_clim(sampled)
 
         with np.errstate(divide="ignore", invalid="ignore"):
-            log_sampled = np.where(sampled > 0, np.log10(sampled), np.nan)
+            log_sampled = np.where(
+                sampled > 0, np.log10(sampled), np.nan
+            ).astype(np.float32)
         log_min = np.log10(vmin)
         log_max = np.log10(vmax)
 
@@ -335,7 +340,7 @@ class SlicePlot:
             ticktext = [f"{vmin:.2g}", f"{vmax:.2g}"]
 
         customdata = np.stack(
-            [self.X_source, self.Y_source, sampled],
+            [self.X_source, self.Y_source, sampled.astype(np.float32)],
             axis=-1,
         )
 

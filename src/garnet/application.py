@@ -47,6 +47,7 @@ from qtpy.QtWidgets import (
     QHeaderView,
     QDialog,
     QScrollArea,
+    QGroupBox,
 )
 
 from qtpy.QtGui import (
@@ -149,6 +150,72 @@ def _centering_mask(hkl, centering):
     elif centering == "H":
         return (h - k) % 3 == 0
     return np.ones(len(hkl), dtype=bool)
+
+
+def _parse_mask_token(token):
+    token = token.strip()
+    if "-" in token:
+        lo, hi = token.split("-")
+        return [int(lo), int(hi)]
+    return int(token)
+
+
+def _format_mask_token(token):
+    if isinstance(token, (list, tuple)):
+        return "{}-{}".format(*token)
+    return str(token)
+
+
+def _parse_mask_list(text):
+    """'1-6,29-30,68' -> [[1, 6], [29, 30], 68]"""
+    text = text.strip()
+    if not text:
+        return None
+    return [_parse_mask_token(t) for t in text.split(",") if t.strip()]
+
+
+def _format_mask_list(value):
+    if not value:
+        return ""
+    return ",".join(_format_mask_token(v) for v in value)
+
+
+def _parse_mask_groups(text):
+    """'52:16,76:15' -> [[52, 16], [76, 15]]
+
+    '58:12-16:80-130' -> [[58, [12, 16], [80, 130]]]
+    """
+    text = text.strip()
+    if not text:
+        return None
+    groups = []
+    for chunk in text.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        groups.append([_parse_mask_token(t) for t in chunk.split(":")])
+    return groups
+
+
+def _format_mask_groups(value):
+    if not value:
+        return ""
+    return ",".join(
+        ":".join(_format_mask_token(t) for t in group) for group in value
+    )
+
+
+class _FlowListDumper(yaml.Dumper):
+    """Dumps sequences in flow style, e.g. Grouping: [4, 4]."""
+
+
+def _represent_flow_list(dumper, data):
+    return dumper.represent_sequence(
+        "tag:yaml.org,2002:seq", data, flow_style=True
+    )
+
+
+_FlowListDumper.add_representer(list, _represent_flow_list)
 
 
 _PT_COLORS = {
@@ -328,7 +395,7 @@ class ScriptRunnerWidget(QWidget):
     def _write_config(self, filename):
         params = self.to_config()
         with open(filename, "w") as f:
-            yaml.dump(params, f, sort_keys=False)
+            yaml.dump(params, f, sort_keys=False, Dumper=_FlowListDumper)
         self.view.output.appendPlainText(
             "Saved config to {}\n".format(filename)
         )
@@ -1886,6 +1953,21 @@ class FormView(QWidget):
             "Path to output folder", "", directory=True
         )
 
+        banks_line = QLineEdit("")
+        banks_line.setPlaceholderText("e.g. 1-6,29-30,62-67,68,71-72,91")
+        pixels_line = QLineEdit("")
+        pixels_line.setPlaceholderText("e.g. 1-12,244-256")
+        tubes_line = QLineEdit("")
+        tubes_line.setPlaceholderText("e.g. 1-4,60-64")
+        bank_tube_line = QLineEdit("")
+        bank_tube_line.setPlaceholderText(
+            "bank:tube pairs, e.g. 52:16,76:15,87:10,90:8"
+        )
+        bank_tube_pixel_line = QLineEdit("")
+        bank_tube_pixel_line.setPlaceholderText(
+            "bank:tube:pixel, e.g. 58:12-16:80-130,59:1-5:80-130"
+        )
+
         grid.addWidget(QLabel("Instrument:"), 0, 0)
         grid.addWidget(instrument_combo, 0, 1)
         grid.addWidget(QLabel("Sample Shape:"), 0, 2)
@@ -1912,12 +1994,20 @@ class FormView(QWidget):
         grid.addWidget(QLabel("No-Sample Time Stop:"), 3, 2)
         grid.addWidget(bkg_time_stop_line, 3, 3)
 
-        grid.addWidget(QLabel("Momentum Limits:"), 4, 0)
-        grid.addWidget(mom_min_line, 4, 1)
-        grid.addWidget(mom_max_line, 4, 2)
-        grid.addWidget(QLabel("Grouping:"), 4, 3)
-        grid.addWidget(group_x_line, 4, 4)
-        grid.addWidget(group_y_line, 4, 5)
+        limits_widget = QWidget()
+        limits_layout = QHBoxLayout()
+        limits_layout.setContentsMargins(0, 0, 0, 0)
+        limits_layout.addWidget(QLabel("k(min) (Å⁻¹):"))
+        limits_layout.addWidget(mom_min_line)
+        limits_layout.addWidget(QLabel("k(max) (Å⁻¹):"))
+        limits_layout.addWidget(mom_max_line)
+        limits_layout.addWidget(QLabel("Rows:"))
+        limits_layout.addWidget(group_x_line)
+        limits_layout.addWidget(QLabel("Cols:"))
+        limits_layout.addWidget(group_y_line)
+        limits_widget.setLayout(limits_layout)
+
+        grid.addWidget(limits_widget, 4, 0, 1, 6)
 
         grid.addWidget(QLabel("Instrument Definition:"), 5, 0)
         grid.addWidget(inst_def_line, 5, 1, 1, 4)
@@ -1934,6 +2024,36 @@ class FormView(QWidget):
         grid.addWidget(QLabel("Output Folder:"), 8, 0)
         grid.addWidget(output_line, 8, 1, 1, 4)
         grid.addWidget(output_button, 8, 5)
+
+        mask_group = QGroupBox("Mask Options")
+        mask_group.setCheckable(True)
+        mask_group.setChecked(False)
+
+        mask_grid = QGridLayout()
+        mask_grid.addWidget(QLabel("Banks:"), 0, 0)
+        mask_grid.addWidget(banks_line, 0, 1)
+        mask_grid.addWidget(QLabel("Pixels:"), 0, 2)
+        mask_grid.addWidget(pixels_line, 0, 3)
+
+        mask_grid.addWidget(QLabel("Bank/Tube:"), 1, 0)
+        mask_grid.addWidget(bank_tube_line, 1, 1)
+        mask_grid.addWidget(QLabel("Tubes:"), 1, 2)
+        mask_grid.addWidget(tubes_line, 1, 3)
+
+        mask_grid.addWidget(QLabel("Bank/Tube/Pixel:"), 2, 0)
+        mask_grid.addWidget(bank_tube_pixel_line, 2, 1, 1, 3)
+
+        mask_fields_widget = QWidget()
+        mask_fields_widget.setLayout(mask_grid)
+        mask_fields_widget.setVisible(mask_group.isChecked())
+
+        mask_group_layout = QVBoxLayout()
+        mask_group_layout.addWidget(mask_fields_widget)
+        mask_group.setLayout(mask_group_layout)
+
+        mask_group.toggled.connect(mask_fields_widget.setVisible)
+
+        grid.addWidget(mask_group, 9, 0, 1, 6)
 
         fields_widget = QWidget()
         fields_widget.setLayout(grid)
@@ -1976,6 +2096,24 @@ class FormView(QWidget):
                 params["TubeCalibration"] = tube_cal_line.text()
             if output_line.text():
                 params["OutputFolder"] = output_line.text()
+
+            mask_options = {}
+            if banks_line.text():
+                mask_options["Banks"] = _parse_mask_list(banks_line.text())
+            if pixels_line.text():
+                mask_options["Pixels"] = _parse_mask_list(pixels_line.text())
+            if tubes_line.text():
+                mask_options["Tubes"] = _parse_mask_list(tubes_line.text())
+            if bank_tube_line.text():
+                mask_options["BankTube"] = _parse_mask_groups(
+                    bank_tube_line.text()
+                )
+            if bank_tube_pixel_line.text():
+                mask_options["BankTubePixel"] = _parse_mask_groups(
+                    bank_tube_pixel_line.text()
+                )
+            if mask_options:
+                params["MaskOptions"] = mask_options
             return params
 
         def from_config(params):
@@ -2029,6 +2167,18 @@ class FormView(QWidget):
             det_cal_line.setText(params.get("DetectorCalibration") or "")
             tube_cal_line.setText(params.get("TubeCalibration") or "")
             output_line.setText(params.get("OutputFolder") or "")
+
+            mask_options = params.get("MaskOptions") or {}
+            banks_line.setText(_format_mask_list(mask_options.get("Banks")))
+            pixels_line.setText(_format_mask_list(mask_options.get("Pixels")))
+            tubes_line.setText(_format_mask_list(mask_options.get("Tubes")))
+            bank_tube_line.setText(
+                _format_mask_groups(mask_options.get("BankTube"))
+            )
+            bank_tube_pixel_line.setText(
+                _format_mask_groups(mask_options.get("BankTubePixel"))
+            )
+            mask_group.setChecked(bool(mask_options))
 
         runner = ScriptRunnerWidget(
             "garnet.utilities.vanadium",

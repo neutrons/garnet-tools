@@ -312,26 +312,45 @@ class ReductionPlan:
         return check(*args, **kwargs)
 
     def validate_file(self, fname, ext):
+        self.check(
+            os.path.exists(fname),
+            "is",
+            True,
+            "File does not exist: {}".format(fname),
+        )
+        self.check(
+            os.path.isfile(fname),
+            "is",
+            True,
+            "Path exists but is not a file: {}".format(fname),
+        )
         try:
-            assert os.path.exists(fname)
-        except AssertionError:
-            print("{} does not exist!".format(fname))
-
-        try:
-            assert os.path.isfile(fname)
-            assert os.access(fname, os.R_OK)
             with open(fname, "rb"):
                 pass
-        except (AssertionError, OSError):
-            print("{} exists but is not readable!".format(fname))
+        except OSError as e:
+            raise AssertionError(
+                "File is not readable: {} ({})".format(fname, e)
+            )
 
-        try:
-            if type(ext) is list:
-                assert os.path.splitext(fname)[1].lower() in ext
-            else:
-                assert os.path.splitext(fname)[1].lower() == ext
-        except AssertionError:
-            print("{} not valid!".format(fname))
+        actual_ext = os.path.splitext(fname)[1].lower()
+        if type(ext) is list:
+            self.check(
+                actual_ext,
+                "in",
+                ext,
+                "File {} has extension {!r}, expected one of {}".format(
+                    fname, actual_ext, ext
+                ),
+            )
+        else:
+            self.check(
+                actual_ext,
+                "==",
+                ext,
+                "File {} has extension {!r}, expected {!r}".format(
+                    fname, actual_ext, ext
+                ),
+            )
 
     def validate_plan(self):
         self.check(
@@ -546,7 +565,14 @@ class ReductionPlan:
 
         plan = {}
 
-        assert instrument in beamlines.keys()
+        self.check(
+            instrument,
+            "in",
+            beamlines.keys(),
+            "Unknown instrument {!r}, expected one of {}".format(
+                instrument, sorted(beamlines.keys())
+            ),
+        )
         params = beamlines[instrument]
 
         plan["Instrument"] = instrument

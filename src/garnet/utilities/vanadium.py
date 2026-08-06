@@ -25,6 +25,7 @@ from mantid.simpleapi import (
     Divide,
     Multiply,
     ConvertUnits,
+    ConvertToDistribution,
     CropWorkspace,
     AddSampleLog,
     RemoveLogs,
@@ -40,6 +41,7 @@ from mantid.simpleapi import (
     ExtractMonitors,
     SetSample,
     SetBeam,
+    SolidAngle,
     AbsorptionCorrection,
     MultipleScatteringCorrection,
     CreateSingleValuedWorkspace,
@@ -75,6 +77,7 @@ class Vanadium:
             "Grouping": [4, 4],
             "VanadiumTimeStop": None,
             "NoSampleTimeStop": None,
+            "CountRateStep": 0.01,
         }
 
         defaults.update(config)
@@ -104,6 +107,8 @@ class Vanadium:
 
         self.mask_options = defaults.get("MaskOptions") or {}
         self.x_bins, self.y_bins = defaults.get("Grouping")
+
+        self.count_rate_step = defaults.get("CountRateStep")
 
         self.file_folder = "/SNS/{}/IPTS-{}/nexus/"
         self.file_name = "{}_{}.nxs.h5"
@@ -610,6 +615,115 @@ class Vanadium:
             PreserveEvents=True,
         )
 
+    def calculate_pixel_solid_angle(self):
+        """
+        Accurate per-pixel geometric solid angle (pixel_area * cos(gamma)
+        / L2^2) from the calibrated instrument geometry, masked and grouped
+        to match the pixel grouping already applied to the data workspaces.
+        """
+
+        SolidAngle(
+            InputWorkspace=self.instrument,
+            OutputWorkspace="solid_angle_geom",
+        )
+
+        MaskDetectors(
+            Workspace="solid_angle_geom",
+            MaskedWorkspace="mask",
+        )
+
+        if self.x_bins > 1 or self.y_bins > 1:
+            SmoothNeighbours(
+                InputWorkspace="solid_angle_geom",
+                OutputWorkspace="solid_angle_geom",
+                SumPixelsX=self.x_bins,
+                SumPixelsY=self.y_bins,
+            )
+
+    def _bank_wavelength_rate(
+        self, workspace, output, dlamda, solid_angle=None
+    ):
+        """
+        Group a Momentum-units event workspace by bank, rebin into fixed
+        wavelength bins, and convert to a per-Angstrom rate. The input
+        workspace is expected to already be normalized by proton charge
+        (as done in load_runs), so the result is counts / (charge * Angstrom)
+        per bank.
+
+        Parameters
+        ----------
+        workspace : str
+            Momentum-units event workspace, normalized by proton charge.
+        output : str
+            Name of the resulting wavelength-dependent rate workspace.
+        dlamda : float
+            Wavelength bin width in Angstrom.
+        solid_angle : str, optional
+            Per-pixel geometric solid angle workspace (see
+            calculate_pixel_solid_angle). When given, the pixel-level rate
+            is divided by it before grouping by bank, so the bank-summed
+            result is expressed per steradian.
+
+        """
+
+        ConvertUnits(
+            InputWorkspace=workspace,
+            OutputWorkspace=output,
+            Target="Wavelength",
+        )
+
+        if solid_angle is not None:
+            Divide(
+                LHSWorkspace=output,
+                RHSWorkspace=solid_angle,
+                OutputWorkspace=output,
+            )
+
+        GroupDetectors(
+            InputWorkspace=output,
+            CopyGroupingFromWorkspace="group",
+            Behaviour="Sum",
+            PreserveEvents=True,
+            OutputWorkspace=output,
+        )
+
+        Rebin(
+            InputWorkspace=output,
+            OutputWorkspace=output,
+            Params=[self.lamda_min, dlamda, self.lamda_max],
+            PreserveEvents=False,
+        )
+
+        ConvertToDistribution(Workspace=output)
+
+    def generate_count_rate(self):
+        """
+        Wavelength-dependent, per-bank signal count rate derived from the
+        background-subtracted, absorption-corrected vanadium workspace,
+        normalized by the accurate per-pixel geometric solid angle.
+        Intended as the incident-flux x detector-efficiency ingredient for
+        a forward count-rate simulator.
+        """
+
+        self.calculate_pixel_solid_angle()
+
+        self._bank_wavelength_rate(
+            "vanadium",
+            "count_rate",
+            self.count_rate_step,
+            solid_angle="solid_angle_geom",
+        )
+
+    def generate_background_count_rate(self):
+        """
+        Wavelength-dependent, per-bank background count rate derived from
+        the standalone background run.
+        """
+
+        self._bank_wavelength_rate(
+            "background", "background_count_rate", self.count_rate_step
+        )
+
     def _smooth_data(self, data, units="wavelength"):
         y = mtd[data].extractY().copy()
         x = mtd[data].extractX()
@@ -704,6 +818,8 @@ class Vanadium:
             "solid_angle",
             "correction",
             "scale",
+            "count_rate",
+            "background_count_rate",
         ]
         for workspace in workspaces:
             filename = os.path.join(output_folder, workspace + ".nxs")
@@ -723,6 +839,8 @@ class Vanadium:
         self.set_sample_geometry()
         self.apply_absorption_correction()
         self.process_data()
+        self.generate_count_rate()
+        self.generate_background_count_rate()
         self.finalize_and_save()
 
 

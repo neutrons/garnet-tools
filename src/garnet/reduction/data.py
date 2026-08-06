@@ -256,7 +256,8 @@ class BaseDataModel:
             self.raw_file_path = os.path.join(raw_path, raw_file)
             files = self.get_file_name_list(IPTS, plan["Runs"])
 
-        assert np.all([os.path.exists(file) for file in files])
+        for file in files:
+            assert os.path.exists(file), "Check file {}".format(file)
 
         if instrument != "DEMAND":
             if (

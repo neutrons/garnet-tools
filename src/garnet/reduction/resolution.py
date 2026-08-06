@@ -6,7 +6,7 @@ from mantid.simpleapi import mtd
 from mantid.kernel import V3D
 from mantid.dataobjects import PeakShapeEllipsoid
 
-from scipy.optimize import nnls
+from scipy.optimize import least_squares
 from scipy.stats import chi2
 
 # Stored/fitted ellipsoid radii and covariance-like "S" matrices throughout
@@ -694,37 +694,56 @@ class ResolutionEllipsoid:
 
     def robust_nnls(self, A, y, max_iter=20, c=1.345, eps=1e-12):
         """
-        Robust NNLS using Huber-style iterative reweighting.
-        A x ~= y, x >= 0
+        Robust bounded least squares (x >= 0) using a Huber loss.
+
+        Replaces a previous plain-NNLS (Lawson-Hanson) reweighting
+        scheme: NNLS's active-set solve pins parameters to exactly
+        zero, and which parameters get pinned can flip between
+        iterations as the Huber weights change, so the fit could
+        oscillate instead of converging. `least_squares` with
+        `method="trf"` enforces x >= 0 continuously instead, and
+        supports the Huber loss directly.
         """
 
         finite = np.all(np.isfinite(A), axis=1) & np.isfinite(y)
         A = A[finite]
         y = y[finite]
 
-        # initial unweighted fit
-        x, _ = nnls(A, y)
+        n = A.shape[1]
+        bounds = (np.zeros(n), np.full(n, np.inf))
+
+        def width_resid(x):
+            # compare widths rather than variances
+            y_fit = A @ x
+            return np.sqrt(np.maximum(y_fit, eps)) - np.sqrt(
+                np.maximum(y, eps)
+            )
+
+        # initial unweighted fit for a feasible starting point
+        x = least_squares(
+            width_resid, np.zeros(n), bounds=bounds, method="trf"
+        ).x
+
+        w = np.ones(A.shape[0])
 
         for _ in range(max_iter):
-            y_fit = A @ x
-
-            # compare widths rather than variances
-            r = np.sqrt(np.maximum(y_fit, eps)) - np.sqrt(np.maximum(y, eps))
+            r = width_resid(x)
 
             # robust scale estimate
             mad = np.median(np.abs(r - np.median(r)))
             scale = 1.4826 * mad + eps
 
-            z = r / scale
+            x_new = least_squares(
+                width_resid,
+                x,
+                bounds=bounds,
+                method="trf",
+                loss="huber",
+                f_scale=c * scale,
+            ).x
 
-            # Huber weights
-            w = np.ones_like(z)
-            mask = np.abs(z) > c
-            w[mask] = c / np.abs(z[mask])
-
-            # weighted NNLS
-            sw = np.sqrt(w)
-            x_new, _ = nnls(A * sw[:, None], y * sw)
+            z = width_resid(x_new) / scale
+            w = np.where(np.abs(z) <= c, 1.0, c / np.abs(z))
 
             if np.linalg.norm(x_new - x) < 1e-10 * (np.linalg.norm(x) + eps):
                 x = x_new

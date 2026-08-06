@@ -1321,6 +1321,12 @@ class Peaks:
             Operator=">=",
         )
 
+        if mtd[peaks].getNumberPeaks() == 0:
+            raise RuntimeError(
+                "No peaks with Signal/Noise >= 2 remain in "
+                "'{}' before rescaling intensities.".format(peaks)
+            )
+
         self.rescale_intensities()
 
         FilterPeaks(
@@ -1331,6 +1337,12 @@ class Peaks:
             Operator=">=",
         )
 
+        if mtd[peaks].getNumberPeaks() == 0:
+            raise RuntimeError(
+                "No peaks with Signal/Noise >= 2 remain in '{}' after "
+                "rescaling intensities.".format(peaks)
+            )
+
         SortPeaksWorkspace(
             InputWorkspace=peaks,
             ColumnNameToSortBy="PeakNumber",
@@ -1338,7 +1350,21 @@ class Peaks:
             OutputWorkspace=peaks,
         )
 
-        self.calculate_statistics(peaks, filename + "_symm.txt")
+        stats_peaks = peaks
+        if self.max_order > 0:
+            # StatisticsOfPeaksWorkspace only understands integer HKL
+            # and has no modulation-vector concept; satellite peaks
+            # make its internal SortHKL step see 0 peaks and crash.
+            stats_peaks = peaks + "_fund"
+            FilterPeaks(
+                InputWorkspace=peaks,
+                OutputWorkspace=stats_peaks,
+                FilterVariable="m^2+n^2+p^2",
+                FilterValue=0,
+                Operator="=",
+            )
+
+        self.calculate_statistics(stats_peaks, filename + "_symm.txt")
 
         self.renumber_peaks(peaks)
 
@@ -1534,6 +1560,12 @@ class Peaks:
             FilterValue=2,
             Operator=">=",
         )
+
+        if mtd[name + "_stats"].getNumberPeaks() == 0:
+            raise RuntimeError(
+                "No peaks with Signal/Noise >= 2 remain in '{}'; "
+                "cannot calculate statistics.".format(name)
+            )
 
         point_groups, R_merge = [], []
         for point_group in self.point_groups:

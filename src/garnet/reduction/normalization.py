@@ -468,6 +468,14 @@ class Normalization(SubPlan):
         view_file = result_file
 
         if mtd.doesExist("bkg_data") and mtd.doesExist("bkg_norm"):
+            for ws in ["bkg_data", "bkg_norm"]:
+                data.add_UBW(
+                    ws,
+                    self.plan["UBFile"],
+                    self.params["Projections"],
+                    self.plan["Runs"][0],
+                )
+
             data_file = self.get_file(diag_file, "bkg_data")
             norm_file = self.get_file(diag_file, "bkg_norm")
 
@@ -477,7 +485,15 @@ class Normalization(SubPlan):
             bkg_output_file = self.get_file(output_file, "bkg")
 
             data.divide_histograms("bkg_result", "bkg_data", "bkg_norm")
-            data.save_histograms(bkg_output_file, "bkg_result")
+            data.add_UBW(
+                "bkg_result",
+                self.plan["UBFile"],
+                self.params["Projections"],
+                self.plan["Runs"][0],
+            )
+            data.save_histograms(
+                bkg_output_file, "bkg_result", sample_logs=True
+            )
 
             data.subtract_histograms("sub", "result", "bkg_result")
 

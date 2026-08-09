@@ -18,6 +18,7 @@ from mantid.simpleapi import (
     CompressEvents,
     NormaliseByCurrent,
     NormaliseSpectra,
+    Scale,
     SortEvents,
     IntegrateFlux,
     Rebin,
@@ -461,6 +462,7 @@ class Vanadium:
         N = mat.totalAtoms
 
         self.n = n
+        self.N = N
 
         V = np.abs(
             mtd[self.instrument].sample().getShape().volume() * 100**3
@@ -700,9 +702,20 @@ class Vanadium:
         """
         Wavelength-dependent, per-bank signal count rate derived from the
         background-subtracted, absorption-corrected vanadium workspace,
-        normalized by the accurate per-pixel geometric solid angle.
-        Intended as the incident-flux x detector-efficiency ingredient for
-        a forward count-rate simulator.
+        normalized by the accurate per-pixel geometric solid angle, the
+        illuminated vanadium atom count, and the vanadium scattering
+        cross section. This last division is what removes the per-
+        steradian dependence left over from the solid-angle
+        normalization (unlike generate_background_count_rate's result,
+        which has no such division and stays per-steradian): the
+        result is the calibrated bank response R_b(lambda) ~=
+        Phi(lambda) * epsilon_b(lambda), in counts / (charge * Angstrom
+        * barn) -- the incident-flux x detector-efficiency ingredient
+        for a forward count-rate simulator, independent of a
+        reflection's own solid-angle footprint.
+
+        set_sample_geometry must have been called first (self.N,
+        self.sigma_s).
         """
 
         self.calculate_pixel_solid_angle()
@@ -712,6 +725,13 @@ class Vanadium:
             "count_rate",
             self.count_rate_step,
             solid_angle="solid_angle_geom",
+        )
+
+        Scale(
+            InputWorkspace="count_rate",
+            OutputWorkspace="count_rate",
+            Factor=4.0 * np.pi / (self.N * self.sigma_s),
+            Operation="Multiply",
         )
 
     def generate_background_count_rate(self):

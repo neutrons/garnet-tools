@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Reduction Plan with Silicon Data &#8212; garnet  documentation</title>
+    <title>Generating Vanadium Normalization Files &#8212; garnet  documentation</title>
   
   
   
@@ -42,13 +42,12 @@
     <script src="../_static/documentation_options.js?v=5929fcd5"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
-    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'source/tutorial_garnet_TOPAZ_Si';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'source/tutorial_garnet_TOPAZ_vanadium';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Detector and Goniometer Calibration" href="tutorial_garnet_TOPAZ_calibration.html" />
-    <link rel="prev" title="garnet tutorials" href="garnet.tutorials.html" />
+    <link rel="next" title="Experiment Browser for TOPAZ" href="tutorial_browser_TOPAZ.html" />
+    <link rel="prev" title="Detector and Goniometer Calibration" href="tutorial_garnet_TOPAZ_calibration.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -333,9 +332,9 @@
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">TOPAZ Tutorials:</span></p>
 <ul class="current nav bd-sidenav">
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Reduction Plan with Silicon Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorial_garnet_TOPAZ_Si.html">Reduction Plan with Silicon Data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorial_garnet_TOPAZ_calibration.html">Detector and Goniometer Calibration</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorial_garnet_TOPAZ_vanadium.html">Generating Vanadium Normalization Files</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Generating Vanadium Normalization Files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorial_browser_TOPAZ.html">Experiment Browser for TOPAZ</a></li>
 </ul>
 </div>
@@ -380,7 +379,7 @@
     
     <li class="breadcrumb-item"><a href="garnet.tutorials.html" class="nav-link">garnet tutorials</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Reduction Plan with Silicon Data</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Generating Vanadium Normalization Files</span></li>
   </ul>
 </nav>
 </div>
@@ -397,66 +396,139 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="reduction-plan-with-silicon-data">
-<h1>Reduction Plan with Silicon Data<a class="headerlink" href="#reduction-plan-with-silicon-data" title="Link to this heading">#</a></h1>
-<p>This tutorial demonstrates how to use <em>garnet</em> to set up a complete
-data reduction plan for TOPAZ silicon calibration data
-(chemical formula <span class="math notranslate nohighlight">\(\mathrm{Si}\)</span>).</p>
-<section id="step-1-load-configuration">
-<h2>Step 1: Load Configuration<a class="headerlink" href="#step-1-load-configuration" title="Link to this heading">#</a></h2>
+  <section id="generating-vanadium-normalization-files">
+<h1>Generating Vanadium Normalization Files<a class="headerlink" href="#generating-vanadium-normalization-files" title="Link to this heading">#</a></h1>
+<p>This tutorial walks through the <strong>Vanadium</strong> sub-tab (inside the
+<strong>Calibration</strong> tab), which turns a vanadium run into the correction
+files used to normalize Bragg peak intensities in the main reduction
+pipeline.</p>
+<section id="the-physical-idea">
+<h2>The physical idea<a class="headerlink" href="#the-physical-idea" title="Link to this heading">#</a></h2>
+<p>A raw Bragg peak’s integrated counts depend on more than the sample’s
+crystal structure: how many neutrons of that wavelength the source and
+guide actually delivered that day, how efficiently the particular
+pixels the peak landed on convert a neutron into a recorded count, and
+how much solid angle those pixels subtend as seen from the sample.
+None of that is physics you want in your final structure - it’s
+instrumental, and it has to be measured and divided out.</p>
+<p>Vanadium is used to measure it because vanadium’s coherent (Bragg)
+scattering is almost zero. A vanadium sphere or rod in the beam
+produces an almost purely elastic, incoherent signal with no crystal
+structure of its own - a smooth, structureless response whose only
+remaining wavelength- and pixel-dependence comes from exactly the
+three instrumental effects above. That makes a vanadium run a flat
+field: divide a real sample’s data by it (after a few corrections) and
+what’s left over is the sample’s own scattering.</p>
+</section>
+<section id="step-1-runs-and-sample-geometry">
+<h2>Step 1: Runs and sample geometry<a class="headerlink" href="#step-1-runs-and-sample-geometry" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Launch the garnet application.</p></li>
-<li><p>Use <strong>File → Load Config</strong> to open a YAML reduction plan.</p></li>
-<li><p>Select the plan file <code class="docutils literal notranslate"><span class="pre">Si_AG_cal.yaml</span></code>.</p></li>
-<li><p>The reduction parameters will populate all three tabs.</p></li>
+<li><p>Switch to the <strong>Vanadium</strong> sub-tab.</p></li>
+<li><p>Set <strong>Instrument</strong>, <strong>Vanadium IPTS/Runs</strong>, and the matching
+<strong>No-Sample IPTS/Runs</strong> - a background run taken under the same beam
+conditions but with the vanadium standard removed. The background is
+subtracted from the vanadium run to strip out scattering from the
+sample environment itself (can walls, air, cryostat) that would
+otherwise contaminate the “pure vanadium” signal.</p></li>
+<li><p>Choose the <strong>Sample Shape</strong> (sphere or cylinder) and enter its
+<strong>Diameter</strong> (and <strong>Height</strong> for a cylinder) to match the physical
+standard actually mounted in the beam. This isn’t cosmetic - it
+drives the absorption correction below.</p></li>
+<li><p><strong>Beam Diameter</strong> matters when the beam is narrower than the
+standard: only the illuminated volume contributes signal, and a
+beam that’s smaller than the vanadium changes how much of the rod or
+sphere is actually seen.</p></li>
+<li><p>After running, check <code class="docutils literal notranslate"><span class="pre">absorption_parameters.txt</span></code> in the output
+folder: it reports the linear absorption/scattering coefficients and
+the equivalent mass and density it derived from your entered
+dimensions. Vanadium’s density is well known (~6.11 g/cm<sup>3</sup>),
+so a wildly different implied density is a quick sign the entered
+diameter/height doesn’t match the physical standard.</p></li>
 </ul>
 </section>
-<section id="step-2-normalization">
-<h2>Step 2: Normalization<a class="headerlink" href="#step-2-normalization" title="Link to this heading">#</a></h2>
+<section id="step-2-wavelength-range-and-pixel-grouping">
+<h2>Step 2: Wavelength range and pixel grouping<a class="headerlink" href="#step-2-wavelength-range-and-pixel-grouping" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Switch to the <strong>Normalization</strong> tab.</p></li>
-<li><p>Review the normalization parameters including vanadium runs,
-background runs, and flux correction settings.</p></li>
-<li><p>Click <strong>Run</strong> to execute the normalization step.</p></li>
+<li><p><strong>k(min)/k(max)</strong> set the momentum (equivalently wavelength) window
+the correction will cover; this should bracket the full band you
+intend to use for the actual sample reduction; it auto-populates
+from the instrument’s usable wavelength band when you change
+<strong>Instrument</strong>.</p></li>
+<li><p><strong>Rows/Cols</strong> sum neighboring pixels together before building the
+correction curves. Vanadium runs are typically much shorter than
+sample runs, so grouping trades a little spatial resolution for a
+correction surface with far less counting-statistics noise - and
+it’s applied consistently, so the same grouping should describe what
+you intend to do with your sample data downstream.</p></li>
+<li><p><strong>Mask Options</strong> exclude dead or noisy tubes/pixels/banks. This
+matters even more here than for a sample run: after grouping,
+one bad pixel can poison the smoothed signal of its whole
+neighborhood, leaving a visible artifact in the final correction
+map.</p></li>
 </ul>
-<figure class="align-center" id="id1">
-<a class="reference internal image-reference" href="../_images/Si_normalization.png"><img alt="../_images/Si_normalization.png" src="../_images/Si_normalization.png" style="width: 100%;" />
-</a>
-<figcaption>
-<p><span class="caption-text">Normalization tab with Silicon configuration loaded.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
-</figcaption>
-</figure>
 </section>
-<section id="step-3-parametrization">
-<h2>Step 3: Parametrization<a class="headerlink" href="#step-3-parametrization" title="Link to this heading">#</a></h2>
+<section id="step-3-run-and-inspect-the-correction">
+<h2>Step 3: Run and inspect the correction<a class="headerlink" href="#step-3-run-and-inspect-the-correction" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Switch to the <strong>Parametrization</strong> tab.</p></li>
-<li><p>Review peak shape parameters for the instrument geometry.</p></li>
-<li><p>Click <strong>Run</strong> to fit peak profiles and determine parametrization.</p></li>
+<li><p>Point <strong>Instrument Definition</strong>, <strong>Detector Calibration</strong>, and
+<strong>Tube Calibration</strong> at the same geometry you calibrated in the
+previous tutorial - the vanadium correction has to be computed on
+the exact panel geometry that will be used to reduce the sample
+data, since it depends on each pixel’s real position and solid
+angle.</p></li>
+<li><p>Click <strong>Run</strong>. Behind the scenes:</p>
+<ol class="arabic simple">
+<li><p>Vanadium and background are loaded, normalized by proton charge,
+grouped, and masked identically.</p></li>
+<li><p>The background is subtracted from the vanadium signal.</p></li>
+<li><p>An absorption correction is applied: a thicker or larger standard
+absorbs more of the slower (longer-wavelength) neutrons before
+they can scatter back out, especially along the longer path
+lengths seen at large scattering angles. This step estimates, for
+every pixel and wavelength, how much stronger the signal would
+have been without that self-absorption, and scales it back up
+accordingly, using the sample’s real size/shape and its known
+absorption coefficient.</p></li>
+<li><p>The now background-subtracted, absorption-corrected data is split
+into two physically distinct pieces: the incident spectrum
+(how much flux the source delivered at each wavelength, summed
+over the whole array) and a per-bank detector efficiency curve
+(how sensitive each bank is as a function of wavelength, cross
+calibrated bank to bank). Both are smoothed into stable curves
+rather than left as noisy raw histograms, since dividing sample
+data by a noisy correction would inject that noise into every
+peak.</p></li>
+<li><p>A purely geometric per-pixel solid-angle map is computed directly
+from the calibrated panel geometry (independent of counting
+statistics), used to correct for how much of the scattered beam
+each pixel actually catches.</p></li>
+</ol>
+</li>
 </ul>
-<figure class="align-center" id="id2">
-<a class="reference internal image-reference" href="../_images/Si_parametrization.png"><img alt="../_images/Si_parametrization.png" src="../_images/Si_parametrization.png" style="width: 100%;" />
-</a>
-<figcaption>
-<p><span class="caption-text">Parametrization tab with Silicon configuration loaded.</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
-</figcaption>
-</figure>
 </section>
-<section id="step-4-integration">
-<h2>Step 4: Integration<a class="headerlink" href="#step-4-integration" title="Link to this heading">#</a></h2>
+<section id="reading-the-output">
+<h2>Reading the output<a class="headerlink" href="#reading-the-output" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Switch to the <strong>Integration</strong> tab.</p></li>
-<li><p>Review the ellipsoidal integration parameters including
-peak radius, background shell, and projection settings.</p></li>
-<li><p>Click <strong>Run</strong> to perform peak integration.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">incident.nxs</span></code> / the <em>incident</em> plot - the delivered spectrum
+shape versus wavelength, used later to normalize every peak by how
+much flux was actually available at its wavelength.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">count_rate.nxs</span></code> / the <em>count_rate</em> plot - the per-bank detector
+efficiency curve; this is what removes “some banks read
+systematically higher than others” artifacts from the final data.
+Compare curves bank to bank - a tube or bank whose curve has a
+noticeably different shape from its neighbors usually means a mask
+or calibration issue worth revisiting.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">solid_angle_geom.nxs</span></code> - the geometric solid-angle map; instrument
+coverage maps (gamma/nu scatter plots) are also saved so you can
+visually spot-check for masked regions or panels that look
+discolored relative to their neighbors.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">background_count_rate.nxs</span></code> - the standalone background rate,
+useful for confirming the background run itself was clean.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">absorption_parameters.txt</span></code> - the sanity-check report described
+in Step 1.</p></li>
 </ul>
-<figure class="align-center" id="id3">
-<a class="reference internal image-reference" href="../_images/Si_integration.png"><img alt="../_images/Si_integration.png" src="../_images/Si_integration.png" style="width: 100%;" />
-</a>
-<figcaption>
-<p><span class="caption-text">Integration tab with Silicon configuration loaded.</span><a class="headerlink" href="#id3" title="Link to this image">#</a></p>
-</figcaption>
-</figure>
+<p>These files are then supplied as the vanadium normalization inputs to
+the <strong>Normalization</strong> tab of the main reduction plan.</p>
 </section>
 </section>
 
@@ -471,20 +543,20 @@ peak radius, background shell, and projection settings.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="garnet.tutorials.html"
+       href="tutorial_garnet_TOPAZ_calibration.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">garnet tutorials</p>
+        <p class="prev-next-title">Detector and Goniometer Calibration</p>
       </div>
     </a>
     <a class="right-next"
-       href="tutorial_garnet_TOPAZ_calibration.html"
+       href="tutorial_browser_TOPAZ.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Detector and Goniometer Calibration</p>
+        <p class="prev-next-title">Experiment Browser for TOPAZ</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -507,10 +579,11 @@ peak radius, background shell, and projection settings.</p></li>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-load-configuration">Step 1: Load Configuration</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-normalization">Step 2: Normalization</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-3-parametrization">Step 3: Parametrization</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-4-integration">Step 4: Integration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-physical-idea">The physical idea</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-runs-and-sample-geometry">Step 1: Runs and sample geometry</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-wavelength-range-and-pixel-grouping">Step 2: Wavelength range and pixel grouping</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-3-run-and-inspect-the-correction">Step 3: Run and inspect the correction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reading-the-output">Reading the output</a></li>
 </ul>
   </nav></div>
 

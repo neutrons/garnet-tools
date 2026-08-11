@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Reduction Plan with Silicon Data &#8212; garnet  documentation</title>
+    <title>Detector and Goniometer Calibration &#8212; garnet  documentation</title>
   
   
   
@@ -42,13 +42,12 @@
     <script src="../_static/documentation_options.js?v=5929fcd5"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
-    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'source/tutorial_garnet_TOPAZ_Si';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'source/tutorial_garnet_TOPAZ_calibration';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Detector and Goniometer Calibration" href="tutorial_garnet_TOPAZ_calibration.html" />
-    <link rel="prev" title="garnet tutorials" href="garnet.tutorials.html" />
+    <link rel="next" title="Generating Vanadium Normalization Files" href="tutorial_garnet_TOPAZ_vanadium.html" />
+    <link rel="prev" title="Reduction Plan with Silicon Data" href="tutorial_garnet_TOPAZ_Si.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -333,8 +332,8 @@
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">TOPAZ Tutorials:</span></p>
 <ul class="current nav bd-sidenav">
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Reduction Plan with Silicon Data</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorial_garnet_TOPAZ_calibration.html">Detector and Goniometer Calibration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorial_garnet_TOPAZ_Si.html">Reduction Plan with Silicon Data</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Detector and Goniometer Calibration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorial_garnet_TOPAZ_vanadium.html">Generating Vanadium Normalization Files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorial_browser_TOPAZ.html">Experiment Browser for TOPAZ</a></li>
 </ul>
@@ -380,7 +379,7 @@
     
     <li class="breadcrumb-item"><a href="garnet.tutorials.html" class="nav-link">garnet tutorials</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Reduction Plan with Silicon Data</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Detector and Goniometer Calibration</span></li>
   </ul>
 </nav>
 </div>
@@ -397,66 +396,148 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="reduction-plan-with-silicon-data">
-<h1>Reduction Plan with Silicon Data<a class="headerlink" href="#reduction-plan-with-silicon-data" title="Link to this heading">#</a></h1>
-<p>This tutorial demonstrates how to use <em>garnet</em> to set up a complete
-data reduction plan for TOPAZ silicon calibration data
-(chemical formula <span class="math notranslate nohighlight">\(\mathrm{Si}\)</span>).</p>
-<section id="step-1-load-configuration">
-<h2>Step 1: Load Configuration<a class="headerlink" href="#step-1-load-configuration" title="Link to this heading">#</a></h2>
+  <section id="detector-and-goniometer-calibration">
+<h1>Detector and Goniometer Calibration<a class="headerlink" href="#detector-and-goniometer-calibration" title="Link to this heading">#</a></h1>
+<p>This tutorial walks through the <strong>Peak/Shape/Refinement</strong> and
+<strong>Calibration</strong> tabs, which together turn a run (or set of runs) on a
+well-characterized standard crystal into an updated detector geometry
+and goniometer model for TOPAZ.</p>
+<section id="the-physical-idea">
+<h2>The physical idea<a class="headerlink" href="#the-physical-idea" title="Link to this heading">#</a></h2>
+<p>Every panel on the detector array, and the sample position itself, was
+installed by hand and only <em>approximately</em> matches the idealized
+geometry baked into the instrument definition. If you index Bragg
+peaks using that idealized geometry, the d-spacings you compute will
+disagree slightly from the true, tabulated d-spacings of the standard
+- and the size and pattern of that disagreement tells you exactly how
+each panel is out of place.</p>
+<p>A calibration standard is chosen specifically because its lattice
+spacings are known essentially exactly (the GUI defaults to a silicon
+sphere, a=5.431 Å cubic, but anything with a well-established
+structure works). That turns the crystal itself into a ruler: any
+residual between the predicted and observed peak position is
+attributed to the instrument geometry, not to uncertainty in the
+sample. The more strong peaks you have, spread across as many panels
+and as wide a d-spacing range as possible, the better constrained that
+geometry fit becomes.</p>
+<p>The same run set can also pin down the goniometer: once the detector
+geometry is trusted, comparing where a peak <em>should</em> land (from the
+motor angles logged for that run) against where it actually landed
+across many different rotation settings reveals whether the physical
+rotation stack is tilted relative to the axes the software assumes,
+and whether there’s a fixed offset baked into one of the encoders.</p>
+</section>
+<section id="step-1-find-strong-peaks-peak-shape-refinement-tab">
+<h2>Step 1: Find strong peaks (Peak/Shape/Refinement tab)<a class="headerlink" href="#step-1-find-strong-peaks-peak-shape-refinement-tab" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Launch the garnet application.</p></li>
-<li><p>Use <strong>File → Load Config</strong> to open a YAML reduction plan.</p></li>
-<li><p>Select the plan file <code class="docutils literal notranslate"><span class="pre">Si_AG_cal.yaml</span></code>.</p></li>
-<li><p>The reduction parameters will populate all three tabs.</p></li>
+<li><p>Switch to the <strong>Peak/Shape/Refinement</strong> tab.</p></li>
+<li><p>Set <strong>Instrument</strong> and <strong>IPTS</strong>, and enter the <strong>Runs</strong> collected on
+the standard (e.g. <code class="docutils literal notranslate"><span class="pre">12345:12360</span></code>). Using several runs at different
+goniometer settings gives the fit angular leverage; a single run
+only constrains the panels seen at that one orientation.</p></li>
+<li><p>Enter the standard’s <strong>unit cell</strong> (lengths/angles), <strong>Crystal
+System</strong>, <strong>Lattice System</strong>, and <strong>Centering</strong> - this is the “known
+ruler,” not a guess to be refined here.</p></li>
+<li><p><strong>Max Threshold</strong> and <strong>Peak Radius</strong> control how aggressively peaks
+are searched for and how large a region around each peak center is
+integrated; the defaults are reasonable starting points. Behind the
+scenes, each run is converted to reciprocal space and scanned for
+tight, locally dense clusters of scattered neutrons - real Bragg
+peaks - while automatically dialing the density threshold per run so
+that a run doesn’t get swamped by noise or starved by a threshold
+set for a differently-oriented run.</p></li>
+<li><p>Optionally supply an existing <strong>Detector Calibration</strong> / <strong>Tube
+Calibration</strong> / <strong>UB File</strong> if you already have a prior calibration
+or orientation to start from; otherwise the search works from the
+bare cell parameters alone.</p></li>
+<li><p>Click <strong>Run</strong>. For each run, garnet works out the crystal orientation
+from the found peaks and the known cell, indexes every peak to hkl,
+and integrates a small fixed region around each peak center. Runs
+are then merged into one combined peaks table and reoriented onto a
+common setting so peaks collected at different goniometer angles line
+up with each other.</p></li>
+<li><p>The output folder contains <code class="docutils literal notranslate"><span class="pre">peaks.nxs</span></code> (the peaks table you’ll feed
+into calibration), <code class="docutils literal notranslate"><span class="pre">peaks.mat</span></code> (the fitted orientation), and
+<code class="docutils literal notranslate"><span class="pre">mdhkl.nxs</span></code>, a merged reciprocal-space map you can inspect to check
+that coverage is reasonably complete and symmetric.</p></li>
 </ul>
 </section>
-<section id="step-2-normalization">
-<h2>Step 2: Normalization<a class="headerlink" href="#step-2-normalization" title="Link to this heading">#</a></h2>
+<section id="step-2-refine-the-detector-geometry-calibration-tab">
+<h2>Step 2: Refine the detector geometry (Calibration tab)<a class="headerlink" href="#step-2-refine-the-detector-geometry-calibration-tab" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Switch to the <strong>Normalization</strong> tab.</p></li>
-<li><p>Review the normalization parameters including vanadium runs,
-background runs, and flux correction settings.</p></li>
-<li><p>Click <strong>Run</strong> to execute the normalization step.</p></li>
+<li><p>Switch to the <strong>Calibration</strong> tab (inside the <strong>Calibration</strong>
+sub-tab).</p></li>
+<li><p>Point <strong>Peaks Table</strong> at the <code class="docutils literal notranslate"><span class="pre">peaks.nxs</span></code> produced above (or any
+other already-indexed peaks file), and re-enter the standard’s unit
+cell, crystal system, and lattice system.</p></li>
+<li><p>Leave <strong>Refine Goniometer</strong> unchecked for now - the first pass is
+purely about panel geometry.</p></li>
+<li><p>Click <strong>Run</strong>. Each pass:</p>
+<ol class="arabic simple">
+<li><p>Strips the goniometer setting out of every peak first, so peaks
+from every run are pooled onto the crystal’s own frame regardless
+of what angle they were collected at. This lets every run
+contribute statistics to every panel it touched.</p></li>
+<li><p>Adjusts each panel’s position and tilt, and the overall
+sample-to-moderator distance, to minimize the mismatch between
+the observed and the true, tabulated d-spacing across every peak
+on every panel simultaneously.</p></li>
+<li><p>Re-centers the geometry on the fitted sample position, since a
+shift in the sample position is otherwise indistinguishable from
+a shift of every panel at once.</p></li>
+<li><p>Writes a diagnostic PDF with one plot per detector bank showing
+percent d-spacing residual versus d-spacing, before and after the
+fit, plus an instrument-wide coverage map. A well-calibrated
+panel should show its points collapse onto the zero line; a panel
+that still trends up or down, or is offset from its neighbors,
+usually means that panel needs another look (bad peaks, wrong
+mask, or a genuinely stubborn misalignment).</p></li>
+</ol>
+</li>
+<li><p>Repeat with more <strong>Iterations</strong> if a panel’s residual hasn’t
+flattened out after one pass - each iteration re-derives peak
+positions from the newly calibrated geometry before fitting again.</p></li>
 </ul>
-<figure class="align-center" id="id1">
-<a class="reference internal image-reference" href="../_images/Si_normalization.png"><img alt="../_images/Si_normalization.png" src="../_images/Si_normalization.png" style="width: 100%;" />
-</a>
-<figcaption>
-<p><span class="caption-text">Normalization tab with Silicon configuration loaded.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
-</figcaption>
-</figure>
 </section>
-<section id="step-3-parametrization">
-<h2>Step 3: Parametrization<a class="headerlink" href="#step-3-parametrization" title="Link to this heading">#</a></h2>
+<section id="step-3-refine-the-goniometer-optional">
+<h2>Step 3: Refine the goniometer (optional)<a class="headerlink" href="#step-3-refine-the-goniometer-optional" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Switch to the <strong>Parametrization</strong> tab.</p></li>
-<li><p>Review peak shape parameters for the instrument geometry.</p></li>
-<li><p>Click <strong>Run</strong> to fit peak profiles and determine parametrization.</p></li>
+<li><p>Once the panel residuals look flat, re-run with <strong>Refine
+Goniometer</strong> checked.</p></li>
+<li><p>This step no longer touches panel positions. Instead, it uses the
+peaks in their now-trusted lab-frame positions, together with the
+motor angles that were logged for each run, to fit a single rigid
+rotation-axis tilt and encoder offset that best explains every peak
+in every run at once. Physically, this captures a goniometer cradle
+that isn’t perfectly plumb - a small, fixed tilt of the rotation
+axis relative to what the software assumes, plus a fixed angular
+offset on one axis (e.g. chi) between the encoder reading and the
+true zero.</p></li>
+<li><p>The tilt direction is constrained to be consistent with how a
+horizontal shaft would sag under its own weight, which removes an
+otherwise-ambiguous rotational degree of freedom in the fit (without
+that constraint, an arbitrary combination of tilt and beam-axis
+rotation would fit the data equally well).</p></li>
+<li><p>The fitted tilt and offset are written into the instrument
+parameters alongside the panel geometry, and a new diagnostic PDF is
+generated the same way as in Step 2 so you can confirm the goniometer
+pass didn’t reintroduce any panel residual.</p></li>
 </ul>
-<figure class="align-center" id="id2">
-<a class="reference internal image-reference" href="../_images/Si_parametrization.png"><img alt="../_images/Si_parametrization.png" src="../_images/Si_parametrization.png" style="width: 100%;" />
-</a>
-<figcaption>
-<p><span class="caption-text">Parametrization tab with Silicon configuration loaded.</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
-</figcaption>
-</figure>
 </section>
-<section id="step-4-integration">
-<h2>Step 4: Integration<a class="headerlink" href="#step-4-integration" title="Link to this heading">#</a></h2>
+<section id="reading-the-output">
+<h2>Reading the output<a class="headerlink" href="#reading-the-output" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Switch to the <strong>Integration</strong> tab.</p></li>
-<li><p>Review the ellipsoidal integration parameters including
-peak radius, background shell, and projection settings.</p></li>
-<li><p>Click <strong>Run</strong> to perform peak integration.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">calibration.xml</span></code> / <code class="docutils literal notranslate"><span class="pre">calibration.DetCal</span></code> - the refined panel
+geometry, ready to feed into the <strong>Peak/Shape/Refinement</strong>,
+<strong>Vanadium</strong>, and main reduction tabs as the <strong>Detector Calibration</strong>
+input for subsequent experiments on the same cycle.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">calibration_goniometer.xml</span></code> - the fitted rotation-axis tilt and
+encoder offset, present only if goniometer refinement was run.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">calibration_&lt;n&gt;.pdf</span></code> - per-iteration diagnostics; compare the last
+one to the first to see how much the fit actually improved.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">goniometer.txt</span></code> - the fitted tilt angles and chi offset in plain
+text, useful for tracking calibration drift across cycles.</p></li>
 </ul>
-<figure class="align-center" id="id3">
-<a class="reference internal image-reference" href="../_images/Si_integration.png"><img alt="../_images/Si_integration.png" src="../_images/Si_integration.png" style="width: 100%;" />
-</a>
-<figcaption>
-<p><span class="caption-text">Integration tab with Silicon configuration loaded.</span><a class="headerlink" href="#id3" title="Link to this image">#</a></p>
-</figcaption>
-</figure>
 </section>
 </section>
 
@@ -471,20 +552,20 @@ peak radius, background shell, and projection settings.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="garnet.tutorials.html"
+       href="tutorial_garnet_TOPAZ_Si.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">garnet tutorials</p>
+        <p class="prev-next-title">Reduction Plan with Silicon Data</p>
       </div>
     </a>
     <a class="right-next"
-       href="tutorial_garnet_TOPAZ_calibration.html"
+       href="tutorial_garnet_TOPAZ_vanadium.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Detector and Goniometer Calibration</p>
+        <p class="prev-next-title">Generating Vanadium Normalization Files</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -507,10 +588,11 @@ peak radius, background shell, and projection settings.</p></li>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-load-configuration">Step 1: Load Configuration</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-normalization">Step 2: Normalization</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-3-parametrization">Step 3: Parametrization</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-4-integration">Step 4: Integration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-physical-idea">The physical idea</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-find-strong-peaks-peak-shape-refinement-tab">Step 1: Find strong peaks (Peak/Shape/Refinement tab)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-refine-the-detector-geometry-calibration-tab">Step 2: Refine the detector geometry (Calibration tab)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-3-refine-the-goniometer-optional">Step 3: Refine the goniometer (optional)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reading-the-output">Reading the output</a></li>
 </ul>
   </nav></div>
 

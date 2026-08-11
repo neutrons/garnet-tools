@@ -146,6 +146,7 @@ class Parametrization(SubPlan):
                     "data",
                     self.plan.get("DetectorCalibration"),
                     self.plan.get("TubeCalibration"),
+                    self.plan.get("GoniometerCalibration"),
                 )
 
                 data.update_logs_for_time("data")

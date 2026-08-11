@@ -65,7 +65,7 @@ beamlines = {
             "sigma_alpha_f": 0.630,
             "sigma_beta_f": 0.509,
             "sigma_dl_mod": 0.017,
-            "sigma_mosaic": 0.201,
+            "sigma_mosaic": 0.3,
         },
     },
     "TOPAZ": {
@@ -105,7 +105,7 @@ beamlines = {
             "sigma_alpha_f": 0.414,
             "sigma_beta_f": 0.288,
             "sigma_dl_mod": 0.006,
-            "sigma_mosaic": 0.223,
+            "sigma_mosaic": 0.3,
         },
     },
     "MANDI": {
@@ -144,6 +144,14 @@ beamlines = {
         "Banks": 42,
         "DeltaTheta": 0.0420,
         "Processes": 4,
+        "DivergenceParams": {
+            "sigma_alpha_i": 0.3564,
+            "sigma_beta_i": 0.3525,
+            "sigma_alpha_f": 0.2685,
+            "sigma_beta_f": 0.1470,
+            "sigma_dl_mod": 0.005672,
+            "sigma_mosaic": 0.3,
+        },
     },
     "IMAGINE": {
         "Facility": "HFIR",

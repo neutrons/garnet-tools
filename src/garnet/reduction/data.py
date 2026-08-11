@@ -85,6 +85,11 @@ from mantid.kernel import FloatTimeSeriesProperty
 
 from mantid import config
 
+from garnet.utilities.goniometer import (
+    setup_goniometer_calibration,
+    correct_goniometer,
+)
+
 config["Q.convention"] = "Crystallography"
 
 
@@ -310,11 +315,6 @@ class BaseDataModel:
         )
 
         mtd[self.instrument] *= np.inf
-
-        CloneWorkspace(
-            InputWorkspace=self.instrument,
-            OutputWorkspace="goniometer",
-        )
 
     def combine_files(self, IPTS, process_map):
         """
@@ -1673,6 +1673,7 @@ class LaueData(BaseDataModel):
         event_name,
         detector_calibration,
         tube_calibration=None,
+        goniometer_calibration=None,
     ):
         """
         Apply detector calibration.
@@ -1685,6 +1686,8 @@ class LaueData(BaseDataModel):
             Detector calibration as either .xml or .DetCal.
         tube_calibration : str, optional
             CORELLI-only tube calibration. The default is None.
+        goniometer_calibration : str, optional
+            Goniometer calibration as .xml. The default is None.
 
         """
 
@@ -1709,16 +1712,30 @@ class LaueData(BaseDataModel):
                     InputWorkspace=event_name, Filename=detector_calibration
                 )
 
+        if goniometer_calibration is not None:
+            if os.path.splitext(goniometer_calibration)[1] == ".xml":
+                setup_goniometer_calibration(
+                    self.ref_inst, goniometer_calibration
+                )
+                axes = [a for a in self.gon_axis[:3] if a is not None]
+                correct_goniometer(event_name, axes)
+
         if mtd.doesExist("sa") and not self.sa_cal:
             self.sa_cal = True
             self.apply_calibration(
-                "sa", detector_calibration, tube_calibration
+                "sa",
+                detector_calibration,
+                tube_calibration,
+                goniometer_calibration,
             )
 
         if mtd.doesExist("flux") and not self.flux_cal:
             self.flux_cal = True
             self.apply_calibration(
-                "flux", detector_calibration, tube_calibration
+                "flux",
+                detector_calibration,
+                tube_calibration,
+                goniometer_calibration,
             )
 
     def preprocess_detector_banks(self, bank):

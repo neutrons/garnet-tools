@@ -54,6 +54,7 @@ class Calibration:
             "CrystalSystem": "Cubic",
             "LatticeSystem": "Cubic",
             "RefineGoniometer": False,
+            "Iterations": 1,
         }
 
         defaults.update(config)
@@ -77,7 +78,7 @@ class Calibration:
 
         self.refine_off = defaults.get("RefineGoniometer")
 
-        self.iterations = 1
+        self.iterations = defaults.get("Iterations")
 
     def load_peaks(self):
         ext = os.path.splitext(self.peaks)[1]
@@ -283,7 +284,7 @@ class Calibration:
 
         mtd["peaks"].sample().getOrientedLattice().setU(np.eye(3))
 
-        IndexPeaks(PeaksWorkspace="peaks")
+        IndexPeaks(PeaksWorkspace="peaks", Tolerance=0.2)
 
         mtd["peaks"].run().getGoniometer().setR(np.eye(3))
 
@@ -336,7 +337,7 @@ class Calibration:
             SearchRadiusRotZBank=3 if self.instrument != "CORELLI" else 0,
             VerboseOutput=True,
             SearchRadiusSamplePos=0.01,
-            TuneSamplePosition=True,
+            TuneSamplePosition=False,
             CalibrateSize=False,
             SearchRadiusSize=0.0,
             FixAspectRatio=True,
@@ -396,7 +397,7 @@ class Calibration:
             gamma=self.gamma,
         )
 
-        IndexPeaks(PeaksWorkspace="peaks_ws")
+        IndexPeaks(PeaksWorkspace="peaks_ws", Tolerance=0.2)
 
         SaveNexus(
             InputWorkspace="peaks_ws",
@@ -538,7 +539,7 @@ class Calibration:
             gamma=self.gamma,
         )
 
-        IndexPeaks(PeaksWorkspace="peaks_ws")
+        IndexPeaks(PeaksWorkspace="peaks_ws", Tolerance=0.2)
 
         SaveNexus(
             InputWorkspace="peaks_ws",
@@ -605,7 +606,12 @@ class Calibration:
             Filename=self._get_ouput(".xml"),
         )
 
-    def generate_diagnostic(self, iteration):
+    def generate_diagnostic(self, iteration, label=None, show_calibrated=None):
+        if show_calibrated is None:
+            show_calibrated = iteration > 0
+        if label is None:
+            label = str(iteration)
+
         uc = UnitCell(
             self.a, self.b, self.c, self.alpha, self.beta, self.gamma
         )
@@ -637,7 +643,7 @@ class Calibration:
 
         d_dict = {key: d_dict[key] for key in sorted(d_dict)}
 
-        with PdfPages(self._get_ouput("_{}.pdf".format(iteration))) as pdf:
+        with PdfPages(self._get_ouput("_{}.pdf".format(label))) as pdf:
             for key in d_dict.keys():
                 fig, ax = plt.subplots(1, 1, layout="constrained")
 
@@ -650,7 +656,7 @@ class Calibration:
                     x, (y / x - 1) * 100, ".", color="C0", label="Uncalibrated"
                 )
 
-                if iteration > 0:
+                if show_calibrated:
                     x, y = d_dict[key]
 
                     x = np.array(x)
@@ -699,7 +705,7 @@ class Calibration:
         ax.minorticks_on()
         ax.set_xlabel(r"$\gamma$ [$^\circ$]")
         ax.set_ylabel(r"$\nu$ [$^\circ$]")
-        fig.savefig(self._get_ouput("_instrument_{}.pdf".format(iteration)))
+        fig.savefig(self._get_ouput("_instrument_{}.pdf".format(label)))
 
     def refine_goniometer(self):
         self.peak_dict = {}
@@ -824,6 +830,11 @@ class Calibration:
             self.initialize_peaks()
             self.generate_diagnostic(iteration)
             self.calibrate_instrument(iteration)
+            self.generate_diagnostic(
+                iteration,
+                label="{}_panel".format(iteration),
+                show_calibrated=True,
+            )
             self.calibrate_goniometer(iteration)
         self.generate_diagnostic(self.iterations)
 

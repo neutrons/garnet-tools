@@ -7,6 +7,8 @@ import numpy as np
 
 import scipy.signal
 
+import matplotlib.pyplot as plt
+
 from mantid.simpleapi import (
     Load,
     LoadNexus,
@@ -43,6 +45,7 @@ from mantid.simpleapi import (
     SetSample,
     SetBeam,
     SolidAngle,
+    PreprocessDetectorsToMD,
     AbsorptionCorrection,
     MultipleScatteringCorrection,
     CreateSingleValuedWorkspace,
@@ -126,6 +129,12 @@ class Vanadium:
 
         self.mult_scatt = False
 
+    def _output_path(self, filename):
+        vanadium_folder = self.vanadium_folder.format(self.instrument)
+        output_folder = os.path.join(vanadium_folder, self.output_folder)
+        os.makedirs(output_folder, exist_ok=True)
+        return os.path.join(output_folder, filename)
+
     def load_instrument(self):
         LoadEmptyInstrument(
             Filename=self.instrument_definition,
@@ -140,10 +149,7 @@ class Vanadium:
             GroupDetectorsBy="bank",
             OutputWorkspace="group",
         )
-        vanadium_folder = self.vanadium_folder.format(self.instrument)
-        output_folder = os.path.join(vanadium_folder, self.output_folder)
-
-        self.grouping = os.path.join(output_folder, "grouping.xml")
+        self.grouping = self._output_path("grouping.xml")
 
         SaveDetectorsGrouping(InputWorkspace="group", OutputFile=self.grouping)
 
@@ -358,7 +364,7 @@ class Vanadium:
                 OutputWorkspace=workspace,
                 GroupingFile=self.grouping,
                 PercentMin=0,
-                PercentMax=95,
+                PercentMax=99,
             )
 
             logs = ["gd_prtn_chrg", "NormalizationFactor"]
@@ -479,22 +485,30 @@ class Vanadium:
             mat.totalScatterXSection() + mat.absorbXSection(1.8)
         )
 
-        print("V\n")
-        print("absoption cross section: {:.4f} barn\n".format(sigma_a))
-        print("scattering cross section: {:.4f} barn\n".format(sigma_s))
+        lines = [
+            "V",
+            "absoption cross section: {:.4f} barn".format(sigma_a),
+            "scattering cross section: {:.4f} barn".format(sigma_s),
+            "",
+            "linear absorption coefficient: {:.4f} 1/cm".format(mu_a),
+            "linear scattering coefficient: {:.4f} 1/cm".format(mu_s),
+            "absorption parameter: {:.4f}".format(mu * r),
+            "",
+            "total atoms: {:.4f}".format(N),
+            "molar mass: {:.4f} g/mol".format(M),
+            "number density: {:.4f} 1/A^3".format(n),
+            "",
+            "mass density: {:.4f} g/cm^3".format(rho),
+            "volume: {:.4f} cm^3".format(V),
+            "mass: {:.4f} g".format(m),
+            "equivalent radius: {:.4f} cm".format(r),
+        ]
 
-        print("linear absorption coefficient: {:.4f} 1/cm\n".format(mu_a))
-        print("linear scattering coefficient: {:.4f} 1/cm\n".format(mu_s))
-        print("absorption parameter: {:.4f} \n".format(mu * r))
+        for line in lines:
+            print(line)
 
-        print("total atoms: {:.4f}\n".format(N))
-        print("molar mass: {:.4f} g/mol\n".format(M))
-        print("number density: {:.4f} 1/A^3\n".format(n))
-
-        print("mass density: {:.4f} g/cm^3\n".format(rho))
-        print("volume: {:.4f} cm^3\n".format(V))
-        print("mass: {:.4f} g\n".format(m))
-        print("equivalent radius: {:.4} cm".format(r))
+        with open(self._output_path("absorption_parameters.txt"), "w") as f:
+            f.write("\n".join(lines) + "\n")
 
         self.r = r * 10
 
@@ -827,23 +841,113 @@ class Vanadium:
             OutputWorkspace="solid_angle",
         )
 
-    def finalize_and_save(self):
-        vanadium_folder = self.vanadium_folder.format(self.instrument)
-        output_folder = os.path.join(vanadium_folder, self.output_folder)
-        workspaces = [
+    def _plot_bank_curves(self, workspace, xlabel, ylabel):
+        x = mtd[workspace].extractX()
+        y = mtd[workspace].extractY()
+
+        if x.shape[1] == y.shape[1] + 1:
+            x = 0.5 * (x[:, 1:] + x[:, :-1])
+
+        fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+
+        for i in range(y.shape[0]):
+            ax.plot(x[i], y[i], linewidth=0.75)
+
+        ax.minorticks_on()
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_title(workspace)
+
+        fig.savefig(self._output_path(workspace + ".pdf"))
+        plt.close(fig)
+
+    def _plot_instrument_map(self, workspace, label):
+        """
+        Per-pixel value plotted at its detector position in the gamma/nu
+        convention (gamma: in-plane angle from the beam, nu: out-of-plane
+        elevation), matching the convention used elsewhere in garnet-tools
+        (see calibration.py, reduction/data.py, reduction/resolution.py).
+        Workspaces with more than one bin are collapsed to a single
+        per-pixel value by averaging over the bin axis first.
+        """
+
+        y = mtd[workspace].extractY().mean(axis=1)
+
+        PreprocessDetectorsToMD(
+            InputWorkspace=workspace, OutputWorkspace="_detectors_map"
+        )
+
+        two_theta = np.array(mtd["_detectors_map"].column("TwoTheta"))
+        azimuthal = np.array(mtd["_detectors_map"].column("Azimuthal"))
+
+        gamma = np.rad2deg(
+            np.arctan2(
+                np.sin(two_theta) * np.cos(azimuthal), np.cos(two_theta)
+            )
+        )
+        nu = np.rad2deg(np.arcsin(np.sin(two_theta) * np.sin(azimuthal)))
+
+        fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+
+        sc = ax.scatter(gamma, nu, c=y, rasterized=True)
+
+        ax.set_aspect(1)
+        ax.minorticks_on()
+        ax.set_xlabel(r"$\gamma$ [$^\circ$]")
+        ax.set_ylabel(r"$\nu$ [$^\circ$]")
+        ax.set_title(workspace)
+        fig.colorbar(sc, ax=ax, label=label)
+
+        fig.savefig(self._output_path(workspace + ".pdf"))
+        plt.close(fig)
+
+    def generate_plots(self):
+        curves = [
+            ("incident", "k [1/A]", "counts"),
+            ("flux", "k [1/A]", "flux"),
+            ("spectra", "wavelength [A]", "normalized shape"),
+            ("count_rate", "wavelength [A]", r"$R_b(\lambda)$ [a.u.]"),
+            (
+                "background_count_rate",
+                "wavelength [A]",
+                "counts / (charge Angstrom)",
+            ),
+        ]
+
+        for workspace, xlabel, ylabel in curves:
+            self._plot_bank_curves(workspace, xlabel, ylabel)
+
+        maps = [
+            ("background", "counts"),
+            ("solid_angle", "counts"),
+            ("solid_angle_geom", "sr"),
+            ("correction", "correction"),
+            ("scale", "scale"),
+        ]
+
+        for workspace, label in maps:
+            self._plot_instrument_map(workspace, label)
+
+    def _output_workspaces(self):
+        return [
             "background",
             "incident",
             "flux",
             "spectra",
             "solid_angle",
+            "solid_angle_geom",
             "correction",
             "scale",
             "count_rate",
             "background_count_rate",
         ]
-        for workspace in workspaces:
-            filename = os.path.join(output_folder, workspace + ".nxs")
-            SaveNexus(InputWorkspace=workspace, Filename=filename)
+
+    def finalize_and_save(self):
+        for workspace in self._output_workspaces():
+            SaveNexus(
+                InputWorkspace=workspace,
+                Filename=self._output_path(workspace + ".nxs"),
+            )
 
     def run(self):
         self.load_instrument()
@@ -862,6 +966,7 @@ class Vanadium:
         self.generate_count_rate()
         self.generate_background_count_rate()
         self.finalize_and_save()
+        self.generate_plots()
 
 
 if __name__ == "__main__":

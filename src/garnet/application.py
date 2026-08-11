@@ -999,6 +999,7 @@ class FormView(QWidget):
         self.setLayout(outer_layout)
 
         self.process = QProcess(self)
+        self._on_process_success = None
         self.process.readyReadStandardOutput.connect(self.handle_stdout)
         self.process.readyReadStandardError.connect(self.handle_stderr)
         self.process.finished.connect(self.process_finished)
@@ -1587,6 +1588,9 @@ class FormView(QWidget):
         tube_cal_line, tube_cal_button = self._make_file_picker(
             "Path to tube calibration (.h5/.nxs)", "Tube files (*.h5 *.nxs)"
         )
+        ub_file_line, ub_file_button = self._make_file_picker(
+            "Path to UB file (.mat)", "UB files (*.mat)"
+        )
 
         grid.addWidget(QLabel("Instrument:"), 0, 0)
         grid.addWidget(instrument_combo, 0, 1)
@@ -1633,6 +1637,10 @@ class FormView(QWidget):
         grid.addWidget(tube_cal_line, 7, 1, 1, 4)
         grid.addWidget(tube_cal_button, 7, 5)
 
+        grid.addWidget(QLabel("UB File:"), 8, 0)
+        grid.addWidget(ub_file_line, 8, 1, 1, 4)
+        grid.addWidget(ub_file_button, 8, 5)
+
         fields_widget = QWidget()
         fields_widget.setLayout(grid)
 
@@ -1665,6 +1673,8 @@ class FormView(QWidget):
                 params["DetectorCalibration"] = det_cal_line.text()
             if tube_cal_line.text():
                 params["TubeCalibration"] = tube_cal_line.text()
+            if ub_file_line.text():
+                params["UBFile"] = ub_file_line.text()
             return params
 
         def from_config(params):
@@ -1691,6 +1701,7 @@ class FormView(QWidget):
             peak_radius_line.setText(str(params.get("PeakRadius", 0.25)))
             det_cal_line.setText(params.get("DetectorCalibration") or "")
             tube_cal_line.setText(params.get("TubeCalibration") or "")
+            ub_file_line.setText(params.get("UBFile") or "")
 
         runner = ScriptRunnerWidget(
             "garnet.utilities.peaks",
@@ -3386,6 +3397,10 @@ class FormView(QWidget):
         self.cal_line.setPlaceholderText("Path to detector calibration (.xml)")
         self.tube_line = QLineEdit("")
         self.tube_line.setPlaceholderText("Path to tube calibration (.nxs)")
+        self.gonio_line = QLineEdit("")
+        self.gonio_line.setPlaceholderText(
+            "Path to goniometer calibration (.xml)"
+        )
         self.mask_line = QLineEdit("")
         self.mask_line.setPlaceholderText("Path to mask file (.xml)")
         self.output_line = QLineEdit("")
@@ -3411,6 +3426,7 @@ class FormView(QWidget):
         self.flux_browse_button = QPushButton("Flux", self)
         self.cal_browse_button = QPushButton("Detector", self)
         self.tube_browse_button = QPushButton("Tube", self)
+        self.gonio_browse_button = QPushButton("Goniometer", self)
         self.mask_browse_button = QPushButton("Mask", self)
 
         browse_icon = _qicon("fa6s.folder-open")
@@ -3420,6 +3436,7 @@ class FormView(QWidget):
         self.flux_browse_button.setIcon(browse_icon)
         self.cal_browse_button.setIcon(browse_icon)
         self.tube_browse_button.setIcon(browse_icon)
+        self.gonio_browse_button.setIcon(browse_icon)
         self.mask_browse_button.setIcon(browse_icon)
 
         experiment_params_layout.addWidget(self.instrument_combo)
@@ -3453,6 +3470,8 @@ class FormView(QWidget):
         instrument_params_layout.addWidget(self.cal_browse_button, 6, 1)
         instrument_params_layout.addWidget(self.tube_line, 7, 0)
         instrument_params_layout.addWidget(self.tube_browse_button, 7, 1)
+        instrument_params_layout.addWidget(self.gonio_line, 8, 0)
+        instrument_params_layout.addWidget(self.gonio_browse_button, 8, 1)
 
         layout.addLayout(experiment_params_layout)
         layout.addLayout(run_params_layout)
@@ -3463,13 +3482,14 @@ class FormView(QWidget):
 
         return tab
 
-    def run_command(self, command):
+    def run_command(self, command, on_success=None):
         self.output.appendPlainText("Running shell command...\n")
         if isinstance(command, list):
             script, args = command[0], command[1:]
         else:
             script, *args = command.split(" ")
         if self.process.state() == QProcess.NotRunning:
+            self._on_process_success = on_success
             self._elapsed_timer = QElapsedTimer()
             self._elapsed_timer.start()
             self.process.start(script, args)
@@ -3486,7 +3506,7 @@ class FormView(QWidget):
         text = bytes(data).decode("utf-8")
         self.output.appendPlainText(f"[stderr] {text}")
 
-    def process_finished(self):
+    def process_finished(self, exit_code=0, exit_status=None):
         if hasattr(self, "_elapsed_timer"):
             ms = self._elapsed_timer.elapsed()
             h = ms // 3_600_000
@@ -3497,6 +3517,12 @@ class FormView(QWidget):
             )
         else:
             self.output.appendPlainText("Command finished.\n")
+
+        on_success = self._on_process_success
+        self._on_process_success = None
+        if on_success is not None and exit_code == 0:
+            self.output.appendPlainText("Auto-generating output...\n")
+            on_success()
 
     def connect_int_run_button(self, run):
         self.int_run_button.clicked.connect(run)
@@ -3539,6 +3565,9 @@ class FormView(QWidget):
 
     def connect_load_tube(self, load_tube_cal):
         self.tube_browse_button.clicked.connect(load_tube_cal)
+
+    def connect_load_goniometer(self, load_goniometer_cal):
+        self.gonio_browse_button.clicked.connect(load_goniometer_cal)
 
     def connect_load_background(self, load_background):
         self.bkg_browse_button.clicked.connect(load_background)
@@ -3794,6 +3823,7 @@ class FormView(QWidget):
         self.exp_line.setText("")
         self.cal_line.setText("")
         self.tube_line.setText("")
+        self.gonio_line.setText("")
         self.flux_line.setText("")
 
         self.elastic_box.setChecked(False)
@@ -3807,6 +3837,8 @@ class FormView(QWidget):
         if "SNS" in filepath:
             self.cal_line.setEnabled(True)
             self.cal_browse_button.setEnabled(True)
+            self.gonio_line.setEnabled(True)
+            self.gonio_browse_button.setEnabled(True)
             self.tube_line.setEnabled(False)
             self.tube_browse_button.setEnabled(False)
             if "CORELLI" in filepath:
@@ -3818,6 +3850,8 @@ class FormView(QWidget):
         else:
             self.cal_line.setEnabled(False)
             self.cal_browse_button.setEnabled(False)
+            self.gonio_line.setEnabled(False)
+            self.gonio_browse_button.setEnabled(False)
             self.tube_line.setEnabled(False)
             self.tube_browse_button.setEnabled(False)
             self.flux_line.setEnabled(False)
@@ -3945,6 +3979,27 @@ class FormView(QWidget):
 
         filename, _ = file_dialog.getOpenFileName(
             self, "Load calibration file", path, file_filters, options=options
+        )
+
+        return filename
+
+    def get_goniometer_calibration(self):
+        return self.gonio_line.text()
+
+    def set_goniometer_calibration(self, filename):
+        return self.gonio_line.setText(filename)
+
+    def load_goniometer_cal_dialog(self, path=""):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+
+        file_dialog = QFileDialog()
+        file_dialog.setFileMode(QFileDialog.AnyFile)
+
+        file_filters = "Calibration files (*.xml)"
+
+        filename, _ = file_dialog.getOpenFileName(
+            self, "Load goniometer file", path, file_filters, options=options
         )
 
         return filename
@@ -4772,6 +4827,7 @@ class FormPresenter:
         self.view.connect_load_mask(self.load_mask)
         self.view.connect_load_detector(self.load_detector)
         self.view.connect_load_tube(self.load_tube)
+        self.view.connect_load_goniometer(self.load_goniometer)
         self.view.connect_load_background(self.load_background)
         self.view.connect_load_vanadium(self.load_vanadium)
         self.view.connect_load_flux(self.load_flux)
@@ -4914,7 +4970,7 @@ class FormPresenter:
             dev = self.view.get_development()
             dev_flag = "-d " if dev else ""
             command = self.model.command.format(dev_flag, arg, filename, proc)
-            self.view.run_command(command)
+            self.view.run_command(command, on_success=self.generate_output)
 
     def clear_satellite(self):
         self.view.clear_satellite()
@@ -5088,6 +5144,13 @@ class FormPresenter:
         if filename:
             self.view.set_tube_calibration(filename)
 
+    def load_goniometer(self):
+        path = self.model.get_calibration_file_path()
+        filename = self.view.load_goniometer_cal_dialog(path)
+
+        if filename:
+            self.view.set_goniometer_calibration(filename)
+
     def load_background(self):
         path = self.model.get_vanadium_file_path()
         filename = self.view.load_background_file_dialog(path)
@@ -5158,6 +5221,10 @@ class FormPresenter:
             tube = self.model.get_tube_calibration()
             if tube is not None:
                 self.view.set_tube_calibration(tube)
+
+            gonio = self.model.get_goniometer_calibration()
+            if gonio is not None:
+                self.view.set_goniometer_calibration(gonio)
 
             flux = self.model.get_flux()
             if flux is not None:
@@ -5238,6 +5305,10 @@ class FormPresenter:
             tube = self.view.get_tube_calibration()
             if tube is not None:
                 self.model.set_tube_calibration(tube)
+
+            gonio = self.view.get_goniometer_calibration()
+            if gonio is not None:
+                self.model.set_goniometer_calibration(gonio)
 
             flux = self.view.get_flux()
             if flux is not None:
@@ -5766,6 +5837,18 @@ class FormModel:
             self.reduction.plan.pop("TubeCalibration", None)
             if cal is not None:
                 self.reduction.plan["TubeCalibration"] = cal
+
+    def get_goniometer_calibration(self):
+        if self.reduction.plan is not None:
+            cal = self.reduction.plan.get("GoniometerCalibration")
+            return cal
+
+    def set_goniometer_calibration(self, cal):
+        cal = None if cal == "" else cal
+        if self.reduction.plan is not None:
+            self.reduction.plan.pop("GoniometerCalibration", None)
+            if cal is not None:
+                self.reduction.plan["GoniometerCalibration"] = cal
 
     def get_background(self):
         if self.reduction.plan is not None:

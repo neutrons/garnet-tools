@@ -385,6 +385,10 @@ class ReductionPlan:
             detcal = self.plan["DetectorCalibration"]
             self.validate_file(detcal, [".xml", ".detcal"])
 
+        if self.plan.get("GoniometerCalibration") is not None:
+            gonio = self.plan["GoniometerCalibration"]
+            self.validate_file(gonio, ".xml")
+
         if self.plan.get("Elastic") is not None:
             self.check(
                 self.plan["Instrument"],
@@ -594,6 +598,7 @@ class ReductionPlan:
             plan["FluxFile"] = ""
             plan["MaskFile"] = None
             plan["DetectorCalibration"] = None
+            plan["GoniometerCalibration"] = None
 
         if instrument == "CORELLI":
             plan["TubeCalibration"] = (

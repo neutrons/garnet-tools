@@ -21,6 +21,7 @@ from mantid.simpleapi import (
     LoadEmptyInstrument,
     ExtractMonitors,
     LoadIsawDetCal,
+    LoadIsawUB,
     LoadParameterFile,
     ApplyCalibration,
     ConvertUnits,
@@ -96,15 +97,7 @@ def scan_threshold(
     found = np.array(found)
 
     i_max = np.argmax(found)
-    thr_at_max = thresholds[i_max]
-
-    meets_min = np.where(found <= min_found)[0]
-    thr_at_min = thresholds[meets_min[0]] if meets_min.size else thresholds[-1]
-
-    target_threshold = np.sqrt(thr_at_max * thr_at_min)
-
-    i_best = np.nanargmin(np.abs(thresholds - target_threshold))
-    threshold = thresholds[i_best]
+    threshold = thresholds[i_max]
 
     FindPeaksMD(
         InputWorkspace=md,
@@ -226,23 +219,29 @@ def _process_run(config, ipts, run, idx, tol):
 
     ub = UBModel(strong_ws)
 
-    (
-        a_p,
-        b_p,
-        c_p,
-        alpha_p,
-        beta_p,
-        gamma_p,
-    ) = ub.convert_conventional_to_primitive(
-        a, b, c, alpha, beta, gamma, centering
+    # (
+    #     a_p,
+    #     b_p,
+    #     c_p,
+    #     alpha_p,
+    #     beta_p,
+    #     gamma_p,
+    # ) = ub.convert_conventional_to_primitive(
+    #     a, b, c, alpha, beta, gamma, centering
+    # )
+
+    # min_d = 0.9 * min(a_p, b_p, c_p)
+    # max_d = 1.1 * max(a_p, b_p, c_p)
+
+    # try:
+    #     ub.determine_UB_with_primitive_cell(min_d, max_d, tol=tol)
+    #     ub.select_type(cell_type, centering, tol)
+    # except:
+    # ub.determine_UB_with_lattice_parameters(a, b, c, alpha, beta, gamma, tol)
+
+    ub.determine_UB_from_conventional_cell(
+        a, b, c, alpha, beta, gamma, centering, tol
     )
-
-    min_d = 0.9 * min(a_p, b_p, c_p)
-    max_d = 1.1 * max(a_p, b_p, c_p)
-
-    ub.determine_UB_with_primitive_cell(min_d, max_d, tol=tol)
-
-    ub.select_type(cell_type, centering, tol)
 
     ub.index_peaks(tol)
 
@@ -268,7 +267,7 @@ def _process_run(config, ipts, run, idx, tol):
         +config["l_max"] / 2,
     ]
 
-    bins = [501, 501, 501]
+    bins = [201, 201, 201]
 
     ConvertQtoHKLMDHisto(
         InputWorkspace=md_ws,
@@ -306,6 +305,7 @@ class Peaks:
             "Centering": "P",
             "CrystalSystem": "Cubic",
             "LatticeSystem": "Cubic",
+            "UBFile": None,
             "MaxThreshold": 1e5,
             "PeakRadius": 0.25,
         }
@@ -335,13 +335,15 @@ class Peaks:
         self.lattice_system = defaults.get("LatticeSystem")
 
         if self.crystal_system != "Trigonal":
-            self.lattice_system = "Rhombohedral"
+            self.lattice_system = None
 
         self.cell_type = (
-            self.crystal_system
-            if self.lattice_system != "Trigonal"
-            else self.lattice_system
+            self.lattice_system
+            if self.crystal_system == "Trigonal"
+            else self.crystal_system
         )
+
+        self.ub_file = defaults.get("UBFile")
 
         self.max_threshold = defaults.get("MaxThreshold")
         self.peak_radius = defaults.get("PeakRadius")
@@ -400,15 +402,18 @@ class Peaks:
 
         CreateSingleValuedWorkspace(OutputWorkspace="sample")
 
-        SetUB(
-            Workspace="sample",
-            a=self.a,
-            b=self.b,
-            c=self.c,
-            alpha=self.alpha,
-            beta=self.beta,
-            gamma=self.gamma,
-        )
+        if self.ub_file:
+            LoadIsawUB(InputWorkspace="sample", Filename=self.ub_file)
+        else:
+            SetUB(
+                Workspace="sample",
+                a=self.a,
+                b=self.b,
+                c=self.c,
+                alpha=self.alpha,
+                beta=self.beta,
+                gamma=self.gamma,
+            )
 
         ol = mtd["sample"].sample().getOrientedLattice()
         astar, bstar, cstar = ol.astar(), ol.bstar(), ol.cstar()
@@ -460,7 +465,7 @@ class Peaks:
 
         return runs
 
-    def load_convert_runs(self, ipts, run_nos, tol=0.2, n_proc=10):
+    def load_convert_runs(self, ipts, run_nos, tol=0.25, n_proc=16):
         if not isinstance(run_nos, list):
             run_nos = self._runs_string_to_list(run_nos)
 

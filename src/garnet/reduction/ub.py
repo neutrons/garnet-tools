@@ -280,7 +280,7 @@ class UBModel:
             MaxD=max_d,
             Tolerance=tol,
             Iterations=20,
-            DegreesPerStep=0.4,
+            DegreesPerStep=0.3,
         )
 
     def determine_UB_with_lattice_parameters(
@@ -317,7 +317,7 @@ class UBModel:
             gamma=gamma,
             Tolerance=tol,
             FixParameters=True,
-            NumInitial=50,
+            NumInitial=1000,
             Iterations=5,
         )
 

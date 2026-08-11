@@ -4,6 +4,8 @@ import shutil
 import subprocess
 import tempfile
 import traceback
+import logging
+import functools
 
 import yaml
 
@@ -89,6 +91,9 @@ try:
     import qtawesome as qta
 except ImportError:
     qta = None
+
+
+logger = logging.getLogger(__name__)
 
 
 def _qicon(name, **kwargs):
@@ -4962,6 +4967,16 @@ class FormPresenter:
         self.run_command("n")
 
     def run_command(self, arg):
+        # 0 = Normalization, 1 = Parametrization, 2 = Integration
+        tab = {"i": 2, "p": 1, "n": 0}[arg]
+        mode = {
+            "i": "Integration",
+            "p": "Parametrization",
+            "n": "Normalization",
+        }[arg]
+        logger.info(
+            "Run %s clicked; will auto-generate output on success", mode
+        )
         filename = self.view.get_config()
         self.save_config()
         filename = self.view.get_config()
@@ -4970,7 +4985,10 @@ class FormPresenter:
             dev = self.view.get_development()
             dev_flag = "-d " if dev else ""
             command = self.model.command.format(dev_flag, arg, filename, proc)
-            self.view.run_command(command, on_success=self.generate_output)
+            self.view.run_command(
+                command,
+                on_success=functools.partial(self.generate_output, tab),
+            )
 
     def clear_satellite(self):
         self.view.clear_satellite()
@@ -5352,7 +5370,7 @@ class FormPresenter:
 
         self.model.save_autoreduce_config(ipts, ub)
 
-    def generate_output(self):
+    def generate_output(self, tab=None):
         self.save_config()
 
         filename = self.view.get_config()
@@ -5363,14 +5381,20 @@ class FormPresenter:
             os.path.dirname(os.path.abspath(__file__)), "utilities"
         )
 
-        tab = self.view.get_plan_tab_index()
+        # tab is the mode that was actually run; when called directly from
+        # the Generate Output button (tab=None) fall back to whichever tab
+        # is currently active, since no run just happened to pin it down.
+        if tab is None:
+            tab = self.view.get_plan_tab_index()
         # 0 = Normalization, 1 = Parametrization, 2 = Integration
         if tab == 2:
+            logger.info("Generating output for Integration tab")
             script = os.path.join(_utils, "structure.py")
             cmd = [sys.executable, script, filename]
         else:
-            script = os.path.join(_utils, "view.py")
             mode = "normalization" if tab == 0 else "parametrization"
+            logger.info("Generating output for %s tab", mode)
+            script = os.path.join(_utils, "view.py")
             cmd = [sys.executable, script, filename, mode]
 
         self.view.run_command(cmd)

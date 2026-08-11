@@ -65,18 +65,16 @@ def assemble(instance, plan, mode):
 
 
 def view(result_file):
-    try:
-        process = subprocess.Popen(
-            ["python", SLICEVIEW, result_file],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        out, err = process.communicate()
-        if process.returncode != 0:
-            raise subprocess.SubprocessError(err.decode().strip())
-        print("Opened:", result_file)
-    except (FileNotFoundError, subprocess.SubprocessError):
-        subprocess.Popen(["python", SLICEVIEW, result_file])
+    process = subprocess.Popen(
+        [sys.executable, SLICEVIEW, result_file],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    out, err = process.communicate()
+    if process.returncode != 0:
+        print(err.decode().strip())
+        sys.exit(process.returncode)
+    print("Opened:", result_file)
 
 
 if __name__ == "__main__":

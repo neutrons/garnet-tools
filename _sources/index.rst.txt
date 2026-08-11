@@ -30,4 +30,5 @@ diffraction data reduction at neutron spallation sources.
    :caption: Contents:
 
    source/garnet
+   source/garnet.guides
    source/garnet.tutorials

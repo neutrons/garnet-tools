@@ -369,7 +369,7 @@ class Vanadium:
                 OutputWorkspace=workspace,
                 GroupingFile=self.grouping,
                 PercentMin=0,
-                PercentMax=99,
+                PercentMax=50,
             )
 
             logs = ["gd_prtn_chrg", "NormalizationFactor"]

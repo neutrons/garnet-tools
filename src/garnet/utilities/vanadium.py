@@ -291,7 +291,7 @@ class Vanadium:
         if not isinstance(run_nos, list):
             run_nos = self._runs_string_to_list(run_nos)
 
-        files_to_load = "+".join(
+        files_to_load = ",".join(
             [
                 os.path.join(
                     self.file_folder.format(self.instrument, ipts),
@@ -369,7 +369,7 @@ class Vanadium:
                 OutputWorkspace=workspace,
                 GroupingFile=self.grouping,
                 PercentMin=0,
-                PercentMax=50,
+                PercentMax=75,
             )
 
             logs = ["gd_prtn_chrg", "NormalizationFactor"]

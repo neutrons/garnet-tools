@@ -22,6 +22,7 @@ from mantid.simpleapi import (
     SetInstrumentParameter,
     ClearInstrumentParameters,
     LoadIsawPeaks,
+    LoadIsawDetCal,
     FilterPeaks,
     IndexPeaks,
     CombinePeaksWorkspaces,
@@ -344,9 +345,9 @@ class Calibration:
             MaxFitIterations=100000,
         )
 
-        LoadParameterFile(
-            Workspace=self.instrument,
-            Filename=self._get_ouput(".xml"),
+        LoadIsawDetCal(
+            InputWorkspace=self.instrument,
+            Filename=self._get_ouput(".DetCal"),
         )
 
         inst = mtd[self.instrument].getInstrument()

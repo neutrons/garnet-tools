@@ -37,6 +37,7 @@ from mantid.simpleapi import (
     ConvertQtoHKLMDHisto,
     PreprocessDetectorsToMD,
     CloneWorkspace,
+    DeleteWorkspace,
     CombinePeaksWorkspaces,
     mtd,
 )
@@ -145,7 +146,7 @@ def _process_run(config, ipts, run, idx, tol):
     strong_ws = "strong"
     combine_ws = "combine"
 
-    Load(Filename=file_to_load, OutputWorkspace=data_ws)
+    Load(Filename=file_to_load, OutputWorkspace=data_ws, NumberOfBins=1)
 
     if tube_calibration is not None:
         LoadNexus(
@@ -215,29 +216,13 @@ def _process_run(config, ipts, run, idx, tol):
         OutputWorkspace=md_ws,
     )
 
+    DeleteWorkspace(Workspace=data_ws)
+
     scan_threshold(md_ws, strong_ws, Q_min, max_peaks, max_threshold)
 
+    DeleteWorkspace(Workspace=md_ws)
+
     ub = UBModel(strong_ws)
-
-    # (
-    #     a_p,
-    #     b_p,
-    #     c_p,
-    #     alpha_p,
-    #     beta_p,
-    #     gamma_p,
-    # ) = ub.convert_conventional_to_primitive(
-    #     a, b, c, alpha, beta, gamma, centering
-    # )
-
-    # min_d = 0.9 * min(a_p, b_p, c_p)
-    # max_d = 1.1 * max(a_p, b_p, c_p)
-
-    # try:
-    #     ub.determine_UB_with_primitive_cell(min_d, max_d, tol=tol)
-    #     ub.select_type(cell_type, centering, tol)
-    # except:
-    # ub.determine_UB_with_lattice_parameters(a, b, c, alpha, beta, gamma, tol)
 
     ub.determine_UB_from_conventional_cell(
         a, b, c, alpha, beta, gamma, centering, tol
@@ -257,6 +242,8 @@ def _process_run(config, ipts, run, idx, tol):
 
     peaks_file = os.path.join(output_folder, "peaks_{}.nxs".format(run))
     SaveNexus(InputWorkspace=strong_ws, Filename=peaks_file)
+
+    DeleteWorkspace(Workspace=strong_ws)
 
     extents = [
         -config["h_max"] / 2,
@@ -285,6 +272,8 @@ def _process_run(config, ipts, run, idx, tol):
         SaveLogs=False,
         SaveInstrument=False,
     )
+
+    DeleteWorkspace(Workspace=combine_ws)
 
 
 from garnet.config.instruments import beamlines

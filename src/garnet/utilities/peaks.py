@@ -240,8 +240,6 @@ def _process_run(config, ipts, run, idx, tol):
     peaks_file = os.path.join(output_folder, "peaks_{}.nxs".format(run))
     SaveNexus(InputWorkspace=strong_ws, Filename=peaks_file)
 
-    DeleteWorkspace(Workspace=strong_ws)
-
     extents = [
         -config["h_max"] / 2,
         +config["h_max"] / 2,
@@ -260,6 +258,9 @@ def _process_run(config, ipts, run, idx, tol):
         Bins=bins,
         OutputWorkspace=combine_ws,
     )
+
+    DeleteWorkspace(Workspace=md_ws)
+    DeleteWorkspace(Workspace=strong_ws)
 
     md_filename = os.path.join(output_folder, "mdhkl_{}.nxs".format(run))
     SaveMD(

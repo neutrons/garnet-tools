@@ -1093,7 +1093,7 @@ def centering_mask(h, k, l, centering):
     if centering == "C":
         return (h + k) % 2 == 0
     if centering == "R":
-        return (-h + k + l) % 3 == 0
+        return (h + k + l) % 3 == 0
     raise ValueError("Unknown centering '{}'.".format(centering))
 
 
@@ -1233,21 +1233,29 @@ class FindUBFromConventionalCell(PythonAlgorithm):
         if peaks.getNumberPeaks() < 3:
             issues["PeaksWorkspace"] = "At least 3 peaks are required."
         else:
-            non_coincident_pairs = 0
-            for i in range(peaks.getNumberPeaks() - 1):
-                q0 = peaks.getPeak(i).getQSampleFrame()
-                q1 = peaks.getPeak(i + 1).getQSampleFrame()
-                cos_theta = np.clip(
-                    np.dot(q0, q1) / np.linalg.norm(q0) / np.linalg.norm(q1),
-                    -1.0,
-                    1.0,
-                )
-                if np.abs(np.rad2deg(np.arccos(cos_theta))) > 10:
-                    non_coincident_pairs += 1
-            if non_coincident_pairs < 2:
+            q_hats = []
+            for i in range(peaks.getNumberPeaks()):
+                q = np.asarray(peaks.getPeak(i).getQSampleFrame())
+                norm = np.linalg.norm(q)
+                if norm > 1e-10:
+                    q_hats.append(q / norm)
+
+            if len(q_hats) < 3:
                 issues[
                     "PeaksWorkspace"
-                ] = "At least 3 non-coplanar peaks are required."
+                ] = "At least 3 non-coincident peaks are required."
+            else:
+                # Smallest singular value vanishes iff all Q-directions lie
+                # in a common plane through the origin, regardless of peak
+                # ordering; a pairwise consecutive-angle check cannot detect
+                # this.
+                singular_values = np.linalg.svd(
+                    np.array(q_hats), compute_uv=False
+                )
+                if singular_values[-1] < 0.1 * singular_values[0]:
+                    issues[
+                        "PeaksWorkspace"
+                    ] = "At least 3 non-coplanar peaks are required."
 
         for name in ["alpha", "beta", "gamma"]:
             ang = self.getProperty(name).value

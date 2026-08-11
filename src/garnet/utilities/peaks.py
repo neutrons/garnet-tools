@@ -213,8 +213,6 @@ def _process_run(config, ipts, run, idx, tol):
         OutputWorkspace=md_ws,
     )
 
-    DeleteWorkspace(Workspace=data_ws)
-
     scan_threshold(md_ws, strong_ws, Q_min, max_peaks, max_threshold)
 
     DeleteWorkspace(Workspace=md_ws)
@@ -232,6 +230,8 @@ def _process_run(config, ipts, run, idx, tol):
     Reorient(strong_ws, UB_ref, crystal_system, lattice_system)
 
     peaks_model.integrate_ellipsoids(data_ws, strong_ws, peak_radius)
+
+    DeleteWorkspace(Workspace=data_ws)
 
     mat_file = os.path.join(output_folder, "{}.mat".format(run))
 

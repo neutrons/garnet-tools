@@ -1237,8 +1237,10 @@ class FindUBFromConventionalCell(PythonAlgorithm):
             for i in range(peaks.getNumberPeaks() - 1):
                 q0 = peaks.getPeak(i).getQSampleFrame()
                 q1 = peaks.getPeak(i + 1).getQSampleFrame()
-                cos_theta = (
-                    np.dot(q0, q1) / np.linalg.norm(q0) / np.linalg.norm(q1)
+                cos_theta = np.clip(
+                    np.dot(q0, q1) / np.linalg.norm(q0) / np.linalg.norm(q1),
+                    -1.0,
+                    1.0,
                 )
                 if np.abs(np.rad2deg(np.arccos(cos_theta))) > 10:
                     non_coincident_pairs += 1

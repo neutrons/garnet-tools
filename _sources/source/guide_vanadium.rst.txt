@@ -42,7 +42,12 @@ Step 1: Runs and sample geometry
   standard: only the illuminated volume contributes signal, and a beam
   smaller than the vanadium changes how much of the rod or sphere is
   actually seen.
-- ``absorption_parameters.txt`` in the output folder reports the
+- **Output Folder** is a short name, not a full path: results are
+  written to ``/SNS/<Instrument>/shared/Vanadium/<Output Folder>/``, a
+  facility location shared by everyone working on that instrument -
+  not a personal or scratch directory. Pick a descriptive name (e.g.
+  the cycle or sample geometry).
+- ``absorption_parameters.txt`` in that output folder reports the
   linear absorption/scattering coefficients and the equivalent mass
   and density derived from the entered dimensions. Vanadium's density
   is well known (~6.11 g/cm\ :sup:`3`), so a wildly different implied
@@ -102,23 +107,46 @@ Step 3: Run and inspect the correction
 
 Reading the output
 -------------------
+Everything below lives under
+``/SNS/<Instrument>/shared/Vanadium/<Output Folder>/``. Two files are
+the actual normalization inputs consumed by the **Normalization** tab
+of the main reduction plan - everything else in that folder is a
+diagnostic for checking the run, not something later steps read.
+
+- ``flux.nxs`` - the background-subtracted, absorption-corrected
+  incident spectrum, per bank, expressed as a cumulative distribution
+  over wavelength. For a peak observed at a given wavelength on a
+  given bank, this is what supplies "how much flux was actually
+  available at that wavelength."
+- ``solid_angle.nxs`` - the per-pixel vanadium response integrated
+  over the full wavelength band: a single number per pixel folding
+  together its detector efficiency and the geometric solid angle it
+  subtends. This is what supplies "how strongly would this specific
+  pixel respond."
+
+Together, evaluating the flux at a peak's wavelength/bank and scaling
+by the solid angle of the pixels it landed on is the full flat-field
+correction described above.
+
+Diagnostics only - the remaining files are written for visual
+inspection of the run and are never read back in by the software:
+
 - ``incident.nxs`` / the *incident* plot - the delivered spectrum
-  shape versus wavelength, used later to normalize every peak by how
-  much flux was actually available at its wavelength.
+  shape versus wavelength, prior to the cumulative-flux conversion in
+  ``flux.nxs``.
 - ``count_rate.nxs`` / the *count_rate* plot - the per-bank detector
-  efficiency curve; this is what removes "some banks read
-  systematically higher than others" artifacts from the final data. A
-  tube or bank whose curve has a noticeably different shape from its
-  neighbors usually indicates a mask or calibration issue worth
-  revisiting.
-- ``solid_angle_geom.nxs`` - the geometric solid-angle map; instrument
-  coverage maps (gamma/nu scatter plots) are also saved for visually
-  spot-checking masked regions or panels that look discolored relative
-  to their neighbors.
-- ``background_count_rate.nxs`` - the standalone background rate,
-  useful for confirming the background run itself was clean.
+  efficiency curve; a tube or bank whose curve has a noticeably
+  different shape from its neighbors usually indicates a mask or
+  calibration issue worth revisiting.
+- ``solid_angle_geom.nxs`` - the purely geometric solid-angle map
+  (efficiency factored out); instrument coverage maps (gamma/nu
+  scatter plots) are also saved for visually spot-checking masked
+  regions or panels that look discolored relative to their neighbors.
+- ``background.nxs``, ``background_count_rate.nxs`` - the standalone
+  background run and its rate, useful for confirming the background
+  run itself was clean.
+- ``spectra.nxs``, ``correction.nxs``, ``scale.nxs`` - intermediate
+  absorption-correction workspaces, useful for tracing a suspicious
+  result back to a specific correction step.
 - ``absorption_parameters.txt`` - the sanity-check report described
   in Step 1.
-
-These files are then supplied as the vanadium normalization inputs to
-the **Normalization** tab of the main reduction plan.

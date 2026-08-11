@@ -470,8 +470,13 @@ common setting so peaks collected at different goniometer angles
 line up with each other.</p></li>
 <li><p>The output folder contains <code class="docutils literal notranslate"><span class="pre">peaks.nxs</span></code> (the peaks table used as
 input to calibration), <code class="docutils literal notranslate"><span class="pre">peaks.mat</span></code> (the fitted orientation), and
-<code class="docutils literal notranslate"><span class="pre">mdhkl.nxs</span></code>, a merged reciprocal-space map for checking that
-coverage is reasonably complete and symmetric.</p></li>
+<code class="docutils literal notranslate"><span class="pre">mdhkl.nxs</span></code>, a merged reciprocal-space map for checking that the
+same reciprocal-space point, measured through different runs and
+wavelengths, lands in the same place and stays sharp - smeared or
+split spots are a sign the runs aren’t yet on a consistent geometry
+or orientation. This tab has no <strong>Output Folder</strong> field of its own:
+the results land in a folder named after the saved YAML config file,
+next to it - not in the shared instrument area used by Step 2.</p></li>
 </ul>
 </section>
 <section id="step-2-refine-the-detector-geometry-calibration-tab">
@@ -482,6 +487,11 @@ sub-tab).</p></li>
 <li><p>Point <strong>Peaks Table</strong> at the <code class="docutils literal notranslate"><span class="pre">peaks.nxs</span></code> produced above (or any
 other already-indexed peaks file), and re-enter the standard’s unit
 cell, crystal system, and lattice system.</p></li>
+<li><p><strong>Output Folder</strong> is a short name, not a full path: results are
+written to <code class="docutils literal notranslate"><span class="pre">/SNS/&lt;Instrument&gt;/shared/calibration/&lt;Output</span> <span class="pre">Folder&gt;/</span></code>,
+a facility location shared by everyone working on that instrument -
+not a personal or scratch directory. Pick a descriptive name (e.g.
+the standard and cycle) so other users can find it later.</p></li>
 <li><p>Leave <strong>Refine Goniometer</strong> unchecked for now - the first pass is
 purely about panel geometry.</p></li>
 <li><p>Click <strong>Run</strong>. Each pass:</p>
@@ -537,6 +547,8 @@ pass did not reintroduce any panel residual.</p></li>
 </section>
 <section id="reading-the-output">
 <h2>Reading the output<a class="headerlink" href="#reading-the-output" title="Link to this heading">#</a></h2>
+<p>All of the following live under
+<code class="docutils literal notranslate"><span class="pre">/SNS/&lt;Instrument&gt;/shared/calibration/&lt;Output</span> <span class="pre">Folder&gt;/</span></code>:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">calibration.xml</span></code> / <code class="docutils literal notranslate"><span class="pre">calibration.DetCal</span></code> - the refined panel
 geometry, used as the <strong>Detector Calibration</strong> input for the

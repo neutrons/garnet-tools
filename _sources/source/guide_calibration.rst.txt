@@ -63,8 +63,13 @@ Step 1: Find strong peaks (Peak/Shape/Refinement tab)
   line up with each other.
 - The output folder contains ``peaks.nxs`` (the peaks table used as
   input to calibration), ``peaks.mat`` (the fitted orientation), and
-  ``mdhkl.nxs``, a merged reciprocal-space map for checking that
-  coverage is reasonably complete and symmetric.
+  ``mdhkl.nxs``, a merged reciprocal-space map for checking that the
+  same reciprocal-space point, measured through different runs and
+  wavelengths, lands in the same place and stays sharp - smeared or
+  split spots are a sign the runs aren't yet on a consistent geometry
+  or orientation. This tab has no **Output Folder** field of its own:
+  the results land in a folder named after the saved YAML config file,
+  next to it - not in the shared instrument area used by Step 2.
 
 Step 2: Refine the detector geometry (Calibration tab)
 ---------------------------------------------------------
@@ -73,6 +78,11 @@ Step 2: Refine the detector geometry (Calibration tab)
 - Point **Peaks Table** at the ``peaks.nxs`` produced above (or any
   other already-indexed peaks file), and re-enter the standard's unit
   cell, crystal system, and lattice system.
+- **Output Folder** is a short name, not a full path: results are
+  written to ``/SNS/<Instrument>/shared/calibration/<Output Folder>/``,
+  a facility location shared by everyone working on that instrument -
+  not a personal or scratch directory. Pick a descriptive name (e.g.
+  the standard and cycle) so other users can find it later.
 - Leave **Refine Goniometer** unchecked for now - the first pass is
   purely about panel geometry.
 - Click **Run**. Each pass:
@@ -124,6 +134,9 @@ Step 3: Refine the goniometer (optional)
 
 Reading the output
 -------------------
+All of the following live under
+``/SNS/<Instrument>/shared/calibration/<Output Folder>/``:
+
 - ``calibration.xml`` / ``calibration.DetCal`` - the refined panel
   geometry, used as the **Detector Calibration** input for the
   **Peak/Shape/Refinement**, **Vanadium**, and main reduction tabs for

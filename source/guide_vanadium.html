@@ -450,7 +450,12 @@ drives the absorption correction below.</p></li>
 standard: only the illuminated volume contributes signal, and a beam
 smaller than the vanadium changes how much of the rod or sphere is
 actually seen.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">absorption_parameters.txt</span></code> in the output folder reports the
+<li><p><strong>Output Folder</strong> is a short name, not a full path: results are
+written to <code class="docutils literal notranslate"><span class="pre">/SNS/&lt;Instrument&gt;/shared/Vanadium/&lt;Output</span> <span class="pre">Folder&gt;/</span></code>, a
+facility location shared by everyone working on that instrument -
+not a personal or scratch directory. Pick a descriptive name (e.g.
+the cycle or sample geometry).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">absorption_parameters.txt</span></code> in that output folder reports the
 linear absorption/scattering coefficients and the equivalent mass
 and density derived from the entered dimensions. Vanadium’s density
 is well known (~6.11 g/cm<sup>3</sup>), so a wildly different implied
@@ -517,27 +522,49 @@ each pixel actually catches.</p></li>
 </section>
 <section id="reading-the-output">
 <h2>Reading the output<a class="headerlink" href="#reading-the-output" title="Link to this heading">#</a></h2>
+<p>Everything below lives under
+<code class="docutils literal notranslate"><span class="pre">/SNS/&lt;Instrument&gt;/shared/Vanadium/&lt;Output</span> <span class="pre">Folder&gt;/</span></code>. Two files are
+the actual normalization inputs consumed by the <strong>Normalization</strong> tab
+of the main reduction plan - everything else in that folder is a
+diagnostic for checking the run, not something later steps read.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">flux.nxs</span></code> - the background-subtracted, absorption-corrected
+incident spectrum, per bank, expressed as a cumulative distribution
+over wavelength. For a peak observed at a given wavelength on a
+given bank, this is what supplies “how much flux was actually
+available at that wavelength.”</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">solid_angle.nxs</span></code> - the per-pixel vanadium response integrated
+over the full wavelength band: a single number per pixel folding
+together its detector efficiency and the geometric solid angle it
+subtends. This is what supplies “how strongly would this specific
+pixel respond.”</p></li>
+</ul>
+<p>Together, evaluating the flux at a peak’s wavelength/bank and scaling
+by the solid angle of the pixels it landed on is the full flat-field
+correction described above.</p>
+<p>Diagnostics only - the remaining files are written for visual
+inspection of the run and are never read back in by the software:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">incident.nxs</span></code> / the <em>incident</em> plot - the delivered spectrum
-shape versus wavelength, used later to normalize every peak by how
-much flux was actually available at its wavelength.</p></li>
+shape versus wavelength, prior to the cumulative-flux conversion in
+<code class="docutils literal notranslate"><span class="pre">flux.nxs</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">count_rate.nxs</span></code> / the <em>count_rate</em> plot - the per-bank detector
-efficiency curve; this is what removes “some banks read
-systematically higher than others” artifacts from the final data. A
-tube or bank whose curve has a noticeably different shape from its
-neighbors usually indicates a mask or calibration issue worth
-revisiting.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">solid_angle_geom.nxs</span></code> - the geometric solid-angle map; instrument
-coverage maps (gamma/nu scatter plots) are also saved for visually
-spot-checking masked regions or panels that look discolored relative
-to their neighbors.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">background_count_rate.nxs</span></code> - the standalone background rate,
-useful for confirming the background run itself was clean.</p></li>
+efficiency curve; a tube or bank whose curve has a noticeably
+different shape from its neighbors usually indicates a mask or
+calibration issue worth revisiting.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">solid_angle_geom.nxs</span></code> - the purely geometric solid-angle map
+(efficiency factored out); instrument coverage maps (gamma/nu
+scatter plots) are also saved for visually spot-checking masked
+regions or panels that look discolored relative to their neighbors.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">background.nxs</span></code>, <code class="docutils literal notranslate"><span class="pre">background_count_rate.nxs</span></code> - the standalone
+background run and its rate, useful for confirming the background
+run itself was clean.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spectra.nxs</span></code>, <code class="docutils literal notranslate"><span class="pre">correction.nxs</span></code>, <code class="docutils literal notranslate"><span class="pre">scale.nxs</span></code> - intermediate
+absorption-correction workspaces, useful for tracing a suspicious
+result back to a specific correction step.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">absorption_parameters.txt</span></code> - the sanity-check report described
 in Step 1.</p></li>
 </ul>
-<p>These files are then supplied as the vanadium normalization inputs to
-the <strong>Normalization</strong> tab of the main reduction plan.</p>
 </section>
 </section>
 

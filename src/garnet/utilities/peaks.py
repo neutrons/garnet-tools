@@ -11,6 +11,9 @@ import yaml
 
 import numpy as np
 
+import scipy.linalg
+from scipy.spatial.transform import Rotation
+
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 
@@ -108,6 +111,78 @@ def scan_threshold(
     return threshold
 
 
+def _B_matrix(a, b, c, alpha, beta, gamma):
+    alpha, beta, gamma = np.deg2rad([alpha, beta, gamma])
+
+    G = np.array(
+        [
+            [a**2, a * b * np.cos(gamma), a * c * np.cos(beta)],
+            [b * a * np.cos(gamma), b**2, b * c * np.cos(alpha)],
+            [c * a * np.cos(beta), c * b * np.cos(alpha), c**2],
+        ]
+    )
+
+    return scipy.linalg.cholesky(np.linalg.inv(G), lower=False)
+
+
+def _max_predicted_peaks(
+    data_ws,
+    peaks,
+    centering,
+    d_min,
+    lamda_min,
+    lamda_max,
+    B,
+    n_orient,
+    seed=1234,
+):
+    """
+    Predict peaks over random trial orientations and return the largest
+    predicted count, for use as a robust MaxPeaks bound when the true
+    orientation is unknown -- the number of reflections that fall within
+    the accessible Q-coverage depends on orientation, so a single guess
+    can under-estimate it.
+
+    Parameters
+    ----------
+    data_ws : str
+        Name of workspace to predict peaks with UB.
+    peaks : str
+        Name of output peaks table (overwritten each trial).
+    centering : str
+        Lattice centering that provides the reflection condition.
+    d_min : float
+        The lower d-spacing resolution to predict peaks.
+    lamda_min, lamda_max : float
+        The wavelength band over which to predict peaks.
+    B : 2d-array
+        B-matrix from the known lattice parameters.
+    n_orient : int
+        Number of random trial orientations to test.
+    seed : int, optional
+        Random seed for reproducibility. The default is 1234.
+
+    Returns
+    -------
+    max_peaks : int
+        Largest number of predicted peaks over all trial orientations.
+
+    """
+
+    peaks_model = PeaksModel()
+
+    max_peaks = 0
+
+    for U in Rotation.random(n_orient, random_state=seed).as_matrix():
+        SetUB(Workspace=data_ws, UB=U @ B)
+        peaks_model.predict_peaks(
+            data_ws, peaks, centering, d_min, lamda_min, lamda_max
+        )
+        max_peaks = max(max_peaks, mtd[peaks].getNumberPeaks())
+
+    return max_peaks
+
+
 def _process_run(config, ipts, run, idx, tol):
     instrument = config["instrument"]
     file_folder = config["file_folder"]
@@ -131,6 +206,8 @@ def _process_run(config, ipts, run, idx, tol):
     crystal_system = config["crystal_system"]
     lattice_system = config["lattice_system"]
     UB_ref = config["UB_ref"]
+    has_ub_ref = config["has_ub_ref"]
+    n_orient = config["n_orient"]
     tube_calibration = config["tube_calibration"]
     detector_calibration = config["detector_calibration"]
 
@@ -151,6 +228,7 @@ def _process_run(config, ipts, run, idx, tol):
             OutputWorkspace="tube_table",
         )
         ApplyCalibration(Workspace=data_ws, CalibrationTable="tube_table")
+        DeleteWorkspace(Workspace="tube_table")
 
     if detector_calibration is not None:
         ext = os.path.splitext(detector_calibration)[1]
@@ -188,19 +266,31 @@ def _process_run(config, ipts, run, idx, tol):
         Average=True,
     )
 
-    SetUB(Workspace=data_ws, UB=UB_ref)
-
     peaks_model = PeaksModel()
-    peaks_model.predict_peaks(
-        data_ws,
-        strong_ws,
-        centering,
-        d_min,
-        wavelength_band[0],
-        wavelength_band[1],
-    )
 
-    max_peaks = mtd[strong_ws].getNumberPeaks()
+    if has_ub_ref:
+        SetUB(Workspace=data_ws, UB=UB_ref)
+        peaks_model.predict_peaks(
+            data_ws,
+            strong_ws,
+            centering,
+            d_min,
+            wavelength_band[0],
+            wavelength_band[1],
+        )
+        max_peaks = mtd[strong_ws].getNumberPeaks()
+    else:
+        B = _B_matrix(a, b, c, alpha, beta, gamma)
+        max_peaks = _max_predicted_peaks(
+            data_ws,
+            strong_ws,
+            centering,
+            d_min,
+            wavelength_band[0],
+            wavelength_band[1],
+            B,
+            n_orient,
+        )
 
     ConvertToMD(
         InputWorkspace=data_ws,
@@ -214,8 +304,6 @@ def _process_run(config, ipts, run, idx, tol):
     )
 
     scan_threshold(md_ws, strong_ws, Q_min, max_peaks, max_threshold)
-
-    DeleteWorkspace(Workspace=md_ws)
 
     ub = UBModel(strong_ws)
 
@@ -249,7 +337,7 @@ def _process_run(config, ipts, run, idx, tol):
         +config["l_max"] / 2,
     ]
 
-    bins = [201, 201, 201]
+    bins = [256, 256, 256]
 
     ConvertQtoHKLMDHisto(
         InputWorkspace=md_ws,
@@ -295,6 +383,7 @@ class Peaks:
             "UBFile": None,
             "MaxThreshold": 1e5,
             "PeakRadius": 0.25,
+            "NumberOfOrientations": 20,
         }
         defaults.update(config)
 
@@ -334,6 +423,7 @@ class Peaks:
 
         self.max_threshold = defaults.get("MaxThreshold")
         self.peak_radius = defaults.get("PeakRadius")
+        self.n_orient = defaults.get("NumberOfOrientations")
 
         inst_config = beamlines[self.instrument]
 
@@ -387,6 +477,8 @@ class Peaks:
         lamda = min(self.wavelength_band)
         self.Q_max = 4 * np.pi / lamda * np.sin(0.5 * two_theta)
 
+        DeleteWorkspace(Workspace="detectors")
+
         CreateSingleValuedWorkspace(OutputWorkspace="sample")
 
         if self.ub_file:
@@ -414,6 +506,8 @@ class Peaks:
         self.h_max = np.floor(1 / self.d_min / astar)
         self.k_max = np.floor(1 / self.d_min / bstar)
         self.l_max = np.floor(1 / self.d_min / cstar)
+
+        DeleteWorkspace(Workspace="sample")
 
     def _runs_string_to_list(self, runs_str):
         """
@@ -479,6 +573,8 @@ class Peaks:
             "crystal_system": self.crystal_system,
             "lattice_system": self.lattice_system,
             "UB_ref": self.UB_ref,
+            "has_ub_ref": self.ub_file is not None,
+            "n_orient": self.n_orient,
             "h_max": self.h_max,
             "k_max": self.k_max,
             "l_max": self.l_max,

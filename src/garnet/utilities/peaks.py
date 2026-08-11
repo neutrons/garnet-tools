@@ -54,11 +54,6 @@ def scan_threshold(
     Scan the peak-finding density threshold and select one that yields
     a balanced number of found peaks.
 
-    Unlike ``PeaksModel.scan_threshold``, this does not index the found
-    peaks at each threshold (no UB exists yet at this point), so the
-    selection is based on found-peak count alone rather than indexed
-    count.
-
     Parameters
     ----------
     md : str
@@ -97,8 +92,10 @@ def scan_threshold(
 
     found = np.array(found)
 
-    i_max = np.argmax(found)
-    threshold = thresholds[i_max]
+    valid = np.argwhere(found < 0.9 * max_peaks).ravel()
+
+    ind = valid[0] if valid.size > 0 else np.argmin(np.abs(found - min_found))
+    threshold = thresholds[ind]
 
     FindPeaksMD(
         InputWorkspace=md,

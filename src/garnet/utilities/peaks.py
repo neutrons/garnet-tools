@@ -80,7 +80,7 @@ def scan_threshold(
 
     """
 
-    thresholds = np.logspace(1, np.log10(max_threshold), 50)
+    thresholds = np.logspace(1, np.log10(max_threshold), 20)
     found = []
 
     for threshold in thresholds:
@@ -383,7 +383,6 @@ class Peaks:
             "UBFile": None,
             "MaxThreshold": 1e5,
             "PeakRadius": 0.25,
-            "NumberOfOrientations": 20,
         }
         defaults.update(config)
 
@@ -423,7 +422,6 @@ class Peaks:
 
         self.max_threshold = defaults.get("MaxThreshold")
         self.peak_radius = defaults.get("PeakRadius")
-        self.n_orient = defaults.get("NumberOfOrientations")
 
         inst_config = beamlines[self.instrument]
 
@@ -574,7 +572,7 @@ class Peaks:
             "lattice_system": self.lattice_system,
             "UB_ref": self.UB_ref,
             "has_ub_ref": self.ub_file is not None,
-            "n_orient": self.n_orient,
+            "n_orient": 10,
             "h_max": self.h_max,
             "k_max": self.k_max,
             "l_max": self.l_max,

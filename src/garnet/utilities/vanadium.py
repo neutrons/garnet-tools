@@ -164,6 +164,11 @@ class Vanadium:
         else:
             return str(items)
 
+    def _join_token(self, token):
+        if isinstance(token, list):
+            return "{}-{}".format(*token)
+        return str(token)
+
     def apply_masks(self):
         if self.mask_options.get("Banks") is not None:
             MaskBTP(
@@ -187,17 +192,17 @@ class Vanadium:
             for bank, tube in self.mask_options["BankTube"]:
                 MaskBTP(
                     Workspace=self.instrument,
-                    Bank=self._join(bank),
-                    Tube=self._join(tube),
+                    Bank=self._join_token(bank),
+                    Tube=self._join_token(tube),
                 )
 
         if self.mask_options.get("BankTubePixel") is not None:
             for bank, tube, pixel in self.mask_options["BankTubePixel"]:
                 MaskBTP(
                     Workspace=self.instrument,
-                    Bank=self._join(bank),
-                    Tube=self._join(tube),
-                    Pixel=self._join(pixel),
+                    Bank=self._join_token(bank),
+                    Tube=self._join_token(tube),
+                    Pixel=self._join_token(pixel),
                 )
 
         ExtractMask(

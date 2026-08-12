@@ -21,6 +21,8 @@ SLICEVIEW = os.path.abspath(filename)
 
 assert os.path.exists(SLICEVIEW)
 
+SLICEVIEW_SH = "/SNS/software/scd/sliceview.sh"
+
 
 class Parametrization(SubPlan):
     def __init__(self, plan):
@@ -104,19 +106,30 @@ class Parametrization(SubPlan):
         return instance.parametrize()
 
     def view(self, result_file):
+        # SliceViewer needs mantidqt, which lives in a separate pixi
+        # environment from the one running this reduction code -- the
+        # deployed wrapper script activates that environment. Fall back
+        # to running sliceview.py directly (e.g. on machines without
+        # that wrapper) if it's missing or fails.
         try:
+            process = subprocess.Popen(
+                [SLICEVIEW_SH, result_file],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            out, err = process.communicate()
+            if process.returncode != 0:
+                raise subprocess.SubprocessError(err.decode().strip())
+        except (FileNotFoundError, subprocess.SubprocessError) as e:
+            print(f"{SLICEVIEW_SH} failed ({e}); falling back to {SLICEVIEW}")
             process = subprocess.Popen(
                 ["python", SLICEVIEW, result_file],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
             out, err = process.communicate()
-            if process.returncode == 0:
-                print("First command succeeded:", out.decode().strip())
-            else:
-                raise subprocess.SubprocessError(err.decode().strip())
-        except (FileNotFoundError, subprocess.SubprocessError):
-            subprocess.Popen(["python", SLICEVIEW, result_file])
+            if process.returncode != 0:
+                print(err.decode().strip())
 
     def parametrize(self):
         data = DataModel(beamlines[self.plan["Instrument"]])

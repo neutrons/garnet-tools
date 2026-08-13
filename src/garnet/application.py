@@ -1019,6 +1019,9 @@ class FormView(QWidget):
         self.plan_widget.currentChanged.connect(
             lambda *_: self.update_mem_estimate()
         )
+        self.plan_widget.currentChanged.connect(
+            self.update_generate_button_label
+        )
         self.centering_combo.activated.connect(
             lambda *_: self.update_mem_estimate()
         )
@@ -1035,6 +1038,12 @@ class FormView(QWidget):
             _line.editingFinished.connect(self.update_mem_estimate)
 
         self.update_mem_estimate()
+        self.update_generate_button_label(self.plan_widget.currentIndex())
+
+    def update_generate_button_label(self, index):
+        self.generate_button.setText(
+            "Generate Output ({})".format(self.plan_widget.tabText(index))
+        )
 
     def stop_process(self):
         self._on_process_success = None

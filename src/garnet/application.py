@@ -1037,6 +1037,7 @@ class FormView(QWidget):
         self.update_mem_estimate()
 
     def stop_process(self):
+        self._on_process_success = None
         self.process.terminate()
         if not self.process.waitForFinished(3000):
             self.process.kill()
@@ -3499,7 +3500,10 @@ class FormView(QWidget):
             self._elapsed_timer.start()
             self.process.start(script, args)
         else:
-            print("Process already running!")
+            self.output.appendPlainText(
+                "A process is already running; stop it before starting "
+                "another.\n"
+            )
 
     def handle_stdout(self):
         data = self.process.readAllStandardOutput()

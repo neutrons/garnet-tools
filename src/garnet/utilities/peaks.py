@@ -28,6 +28,7 @@ from mantid.simpleapi import (
     LoadParameterFile,
     ApplyCalibration,
     ConvertUnits,
+    CompressEvents,
     CropWorkspace,
     SetGoniometer,
     CreateSingleValuedWorkspace,
@@ -245,6 +246,12 @@ def _process_run(config, ipts, run, idx, tol):
 
     ConvertUnits(
         InputWorkspace=data_ws, OutputWorkspace=data_ws, Target="Wavelength"
+    )
+
+    CompressEvents(
+        InputWorkspace=data_ws,
+        Tolerance=1e-2,
+        OutputWorkspace=data_ws,
     )
 
     CropWorkspace(

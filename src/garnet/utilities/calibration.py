@@ -795,7 +795,7 @@ class Calibration:
             T = G @ R @ UB * 2 * np.pi
             diff += (np.einsum("ij,lj->li", T, hkl) - Q).flatten().tolist()
 
-        return diff
+        return diff + [chi_off]
 
     def fix_offsets(self, x):
         return *x, 0

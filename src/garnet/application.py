@@ -5343,6 +5343,7 @@ class FormPresenter:
             self.save_int()
             self.save_param()
             self.save_norm()
+            self.save_mat()
 
             self.model.save_config(filename)
 

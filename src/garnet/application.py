@@ -3543,7 +3543,7 @@ class FormView(QWidget):
         self.norm_run_button.clicked.connect(run)
 
     def connect_generate_output(self, generate_output):
-        self.generate_button.clicked.connect(generate_output)
+        self.generate_button.clicked.connect(lambda *_: generate_output())
 
     def connect_load_config(self, load_config):
         self.load_button.clicked.connect(load_config)

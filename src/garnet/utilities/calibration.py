@@ -315,7 +315,7 @@ class Calibration:
         SCDCalibratePanels(
             PeakWorkspace="peaks",
             RecalculateUB=False,
-            WavelengthFromUB=True,
+            WavelengthFromUB=False,
             Tolerance=0.2,
             a=self.a,
             b=self.b,
@@ -410,7 +410,7 @@ class Calibration:
         SCDCalibratePanels(
             PeakWorkspace="peaks",
             RecalculateUB=False,
-            WavelengthFromUB=True,
+            WavelengthFromUB=False,
             Tolerance=0.2,
             a=self.a,
             b=self.b,

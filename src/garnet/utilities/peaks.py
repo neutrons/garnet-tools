@@ -31,7 +31,7 @@ from mantid.simpleapi import (
     CompressEvents,
     CropWorkspace,
     SetGoniometer,
-    CreateSingleValuedWorkspace,
+    CreatePeaksWorkspace,
     SetUB,
     IndexPeaks,
     FindPeaksMD,
@@ -482,7 +482,11 @@ class Peaks:
 
         DeleteWorkspace(Workspace="detectors")
 
-        CreateSingleValuedWorkspace(OutputWorkspace="sample")
+        CreatePeaksWorkspace(
+            NumberOfPeaks=0,
+            OutputType="LeanElasticPeak",
+            OutputWorkspace="sample",
+        )
 
         if self.ub_file:
             LoadIsawUB(InputWorkspace="sample", Filename=self.ub_file)
@@ -502,7 +506,9 @@ class Peaks:
 
         self.UB_ref = ol.getUB().copy()
 
-        self.Q_min = 2 * np.pi * min([astar, bstar, cstar])
+        ub = UBModel("sample")
+        self.Q_min, _ = ub.shortest_reciprocal_spacing(self.centering)
+
         self.d_max = 2 * np.pi / self.Q_min
         self.d_min = 2 * np.pi / self.Q_max
 

@@ -1149,7 +1149,7 @@
 <span id="garnet-utilities-peaks-module"></span><h2>garnet.utilities.peaks module<a class="headerlink" href="#module-garnet.utilities.peaks" title="Link to this heading">#</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="garnet.utilities.peaks.Peaks">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/peaks.py#L413-L731"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.peaks.Peaks" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/peaks.py#L331-L631"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.peaks.Peaks" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -1174,61 +1174,29 @@
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.peaks.Peaks.calculate_limits">
-<span class="sig-name descname"><span class="pre">calculate_limits</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/peaks.py#L513-L558"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.peaks.Peaks.calculate_limits" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">calculate_limits</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/peaks.py#L415-L460"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.peaks.Peaks.calculate_limits" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.peaks.Peaks.finalize_and_save">
-<span class="sig-name descname"><span class="pre">finalize_and_save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_proc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/peaks.py#L642-L725"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.peaks.Peaks.finalize_and_save" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">finalize_and_save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_proc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/peaks.py#L540-L625"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.peaks.Peaks.finalize_and_save" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.peaks.Peaks.load_convert_runs">
-<span class="sig-name descname"><span class="pre">load_convert_runs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ipts</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_nos</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.25</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_proc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">16</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/peaks.py#L597-L640"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.peaks.Peaks.load_convert_runs" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">load_convert_runs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ipts</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_nos</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.25</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_proc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">16</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/peaks.py#L499-L538"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.peaks.Peaks.load_convert_runs" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.peaks.Peaks.load_instrument">
-<span class="sig-name descname"><span class="pre">load_instrument</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/peaks.py#L503-L511"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.peaks.Peaks.load_instrument" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">load_instrument</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/peaks.py#L405-L413"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.peaks.Peaks.load_instrument" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.peaks.Peaks.run">
-<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_proc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/peaks.py#L727-L731"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.peaks.Peaks.run" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_proc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/peaks.py#L627-L631"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.peaks.Peaks.run" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="garnet.utilities.peaks.scan_threshold">
-<span class="sig-name descname"><span class="pre">scan_threshold</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">md</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_Q</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_found</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/peaks.py#L54-L112"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.peaks.scan_threshold" title="Link to this definition">#</a></dt>
-<dd><p>Scan the peak-finding density threshold and select one that yields
-a balanced number of found peaks.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><dl class="simple">
-<dt><strong>md</strong><span class="classifier">str</span></dt><dd><p>Name of Q-sample MD workspace.</p>
-</dd>
-<dt><strong>peaks</strong><span class="classifier">str</span></dt><dd><p>Name of output peaks table.</p>
-</dd>
-<dt><strong>min_Q</strong><span class="classifier">float</span></dt><dd><p>Minimum Q-spacing enforcing lower limit of peak spacing.</p>
-</dd>
-<dt><strong>max_peaks</strong><span class="classifier">int</span></dt><dd><p>Maximum number of peaks to find.</p>
-</dd>
-<dt><strong>max_threshold</strong><span class="classifier">float, optional</span></dt><dd><p>Upper bound of the density threshold scan. The default is 1e5.</p>
-</dd>
-<dt><strong>min_found</strong><span class="classifier">int, optional</span></dt><dd><p>Minimum number of found peaks desired for UB determination.
-The default is 50.</p>
-</dd>
-</dl>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><dl class="simple">
-<dt><strong>threshold</strong><span class="classifier">float</span></dt><dd><p>Selected density threshold.</p>
-</dd>
-</dl>
-</dd>
-</dl>
 </dd></dl>
 
 </section>
@@ -2449,7 +2417,6 @@ self.sigma_s).</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.peaks.Peaks.run"><code class="docutils literal notranslate"><span class="pre">Peaks.run()</span></code></a></li>
 </ul>
 </li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.utilities.peaks.scan_threshold"><code class="docutils literal notranslate"><span class="pre">scan_threshold()</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet-utilities-peakview-module">garnet.utilities.peakview module</a></li>

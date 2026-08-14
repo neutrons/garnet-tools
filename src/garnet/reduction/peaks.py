@@ -180,7 +180,7 @@ class PeaksModel:
 
         FindPeaksMD(
             InputWorkspace=md,
-            PeakDistanceThreshold=min_Q * 0.5,
+            PeakDistanceThreshold=min_Q,
             MaxPeaks=max_peaks,
             PeakFindingStrategy="VolumeNormalization",
             DensityThresholdFactor=density,

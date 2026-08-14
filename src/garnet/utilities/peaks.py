@@ -11,31 +11,19 @@ import yaml
 
 import numpy as np
 
-import scipy.linalg
 from scipy.spatial.transform import Rotation
 
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 
 from mantid.simpleapi import (
-    Load,
     LoadNexus,
     SaveNexus,
     LoadEmptyInstrument,
     ExtractMonitors,
-    LoadIsawDetCal,
     LoadIsawUB,
-    LoadParameterFile,
-    ApplyCalibration,
-    ConvertUnits,
-    CompressEvents,
-    CropWorkspace,
-    SetGoniometer,
     CreatePeaksWorkspace,
     SetUB,
-    IndexPeaks,
-    FindPeaksMD,
-    ConvertToMD,
     SaveMD,
     LoadMD,
     ConvertQtoHKLMDHisto,
@@ -46,84 +34,11 @@ from mantid.simpleapi import (
     mtd,
 )
 
-from garnet.reduction.ub import UBModel, Optimization, Reorient
+from garnet.config.instruments import beamlines
+from garnet.reduction.data import DataModel, _read_signal_error_squared
+from garnet.reduction.ub import UBModel, Optimization, Reorient, _B_matrix
 from garnet.reduction.peaks import PeaksModel
 from garnet.reduction.resolution import ResolutionEllipsoid
-
-
-def scan_threshold(
-    md, peaks, min_Q, max_peaks, max_threshold=1e5, min_found=50
-):
-    """
-    Scan the peak-finding density threshold and select one that yields
-    a balanced number of found peaks.
-
-    Parameters
-    ----------
-    md : str
-        Name of Q-sample MD workspace.
-    peaks : str
-        Name of output peaks table.
-    min_Q : float
-        Minimum Q-spacing enforcing lower limit of peak spacing.
-    max_peaks : int
-        Maximum number of peaks to find.
-    max_threshold : float, optional
-        Upper bound of the density threshold scan. The default is 1e5.
-    min_found : int, optional
-        Minimum number of found peaks desired for UB determination.
-        The default is 50.
-
-    Returns
-    -------
-    threshold : float
-        Selected density threshold.
-
-    """
-
-    thresholds = np.logspace(1, np.log10(max_threshold), 20)
-    found = []
-
-    for threshold in thresholds:
-        FindPeaksMD(
-            InputWorkspace=md,
-            MaxPeaks=max_peaks,
-            PeakDistanceThreshold=min_Q,
-            DensityThresholdFactor=threshold,
-            OutputWorkspace=peaks,
-        )
-        found.append(mtd[peaks].getNumberPeaks())
-
-    found = np.array(found)
-
-    valid = np.argwhere(found < 0.9 * max_peaks).ravel()
-
-    ind = valid[0] if valid.size > 0 else np.argmin(np.abs(found - min_found))
-    threshold = thresholds[ind]
-
-    FindPeaksMD(
-        InputWorkspace=md,
-        MaxPeaks=max_peaks,
-        PeakDistanceThreshold=min_Q,
-        DensityThresholdFactor=threshold,
-        OutputWorkspace=peaks,
-    )
-
-    return threshold
-
-
-def _B_matrix(a, b, c, alpha, beta, gamma):
-    alpha, beta, gamma = np.deg2rad([alpha, beta, gamma])
-
-    G = np.array(
-        [
-            [a**2, a * b * np.cos(gamma), a * c * np.cos(beta)],
-            [b * a * np.cos(gamma), b**2, b * c * np.cos(alpha)],
-            [c * a * np.cos(beta), c * b * np.cos(alpha), c**2],
-        ]
-    )
-
-    return scipy.linalg.cholesky(np.linalg.inv(G), lower=False)
 
 
 def _max_predicted_peaks(
@@ -184,17 +99,61 @@ def _max_predicted_peaks(
     return max_peaks
 
 
+def _scan_threshold(peaks_model, md, peaks, min_Q, max_peaks, min_found=50):
+    """
+    Scan the peak-finding density threshold and select one that yields a
+    balanced number of found peaks, by raw found-peak count rather than
+    indexing quality -- unlike PeaksModel.scan_threshold, this must work
+    before any UB is known, so there is no HKL to index against yet.
+
+    Parameters
+    ----------
+    peaks_model : PeaksModel
+        Peaks model providing the find_peaks wrapper.
+    md : str
+        Name of Q-sample MD workspace.
+    peaks : str
+        Name of output peaks table.
+    min_Q : float
+        Minimum Q-spacing enforcing lower limit of peak spacing.
+    max_peaks : int
+        Maximum number of peaks to find.
+    min_found : int, optional
+        Minimum number of found peaks desired for UB determination.
+        The default is 50.
+
+    Returns
+    -------
+    threshold : float
+        Selected density threshold.
+
+    """
+
+    thresholds = np.logspace(1, 6, 50)
+    found = []
+
+    for threshold in thresholds:
+        peaks_model.find_peaks(md, peaks, min_Q, threshold, max_peaks)
+        found.append(mtd[peaks].getNumberPeaks())
+
+    found = np.array(found)
+
+    valid = np.argwhere(found < 0.9 * max_peaks).ravel()
+
+    ind = valid[0] if valid.size > 0 else np.argmin(np.abs(found - min_found))
+    threshold = thresholds[ind]
+
+    peaks_model.find_peaks(md, peaks, min_Q, threshold, max_peaks)
+
+    return threshold
+
+
 def _process_run(config, ipts, run, idx, tol):
     instrument = config["instrument"]
-    file_folder = config["file_folder"]
-    file_name = config["file_name"]
     output_folder = config["output_folder"]
     wavelength_band = config["wavelength_band"]
-    gon_axis = config["gon_axis"]
-    Q_max = config["Q_max"]
     Q_min = config["Q_min"]
     d_min = config["d_min"]
-    max_threshold = config["max_threshold"]
     peak_radius = config["peak_radius"]
     a = config["a"]
     b = config["b"]
@@ -211,67 +170,26 @@ def _process_run(config, ipts, run, idx, tol):
     n_orient = config["n_orient"]
     tube_calibration = config["tube_calibration"]
     detector_calibration = config["detector_calibration"]
-
-    file_to_load = os.path.join(
-        file_folder.format(instrument, ipts), file_name.format(instrument, run)
-    )
+    goniometer_calibration = config["goniometer_calibration"]
 
     data_ws = "data"
     md_ws = "md"
     strong_ws = "strong"
     combine_ws = "combine"
 
-    Load(Filename=file_to_load, OutputWorkspace=data_ws, NumberOfBins=1)
+    data = DataModel(beamlines[instrument])
+    data.update_wavelength(wavelength_band)
 
-    if tube_calibration is not None:
-        LoadNexus(
-            Filename=tube_calibration,
-            OutputWorkspace="tube_table",
-        )
-        ApplyCalibration(Workspace=data_ws, CalibrationTable="tube_table")
-        DeleteWorkspace(Workspace="tube_table")
+    data.load_data(data_ws, ipts, run)
 
-    if detector_calibration is not None:
-        ext = os.path.splitext(detector_calibration)[1]
-        if ext == ".xml":
-            LoadParameterFile(
-                Workspace=data_ws,
-                Filename=detector_calibration,
-            )
-        else:
-            LoadIsawDetCal(
-                InputWorkspace=data_ws,
-                Filename=detector_calibration,
-            )
-
-    ConvertUnits(
-        InputWorkspace=data_ws, OutputWorkspace=data_ws, Target="Wavelength"
+    data.apply_calibration(
+        data_ws,
+        detector_calibration,
+        tube_calibration,
+        goniometer_calibration,
     )
 
-    CompressEvents(
-        InputWorkspace=data_ws,
-        Tolerance=1e-2,
-        OutputWorkspace=data_ws,
-    )
-
-    CropWorkspace(
-        InputWorkspace=data_ws,
-        OutputWorkspace=data_ws,
-        XMin=wavelength_band[0],
-        XMax=wavelength_band[1],
-    )
-
-    SetGoniometer(
-        Workspace=data_ws,
-        Goniometers="None, Specify Individually",
-        Axis0=gon_axis[0],
-        Axis1=gon_axis[1],
-        Axis2=gon_axis[2],
-        Axis3=gon_axis[3],
-        Axis4=gon_axis[4],
-        Axis5=gon_axis[5],
-        Average=True,
-    )
+    data.crop_for_normalization(data_ws)
 
     peaks_model = PeaksModel()
 
@@ -299,16 +217,7 @@ def _process_run(config, ipts, run, idx, tol):
             n_orient,
         )
 
-    ConvertToMD(
-        InputWorkspace=data_ws,
-        QDimensions="Q3D",
-        dEAnalysisMode="Elastic",
-        Q3DFrames="Q_sample",
-        LorentzCorrection=True,
-        MinValues=[-Q_max] * 3,
-        MaxValues=[+Q_max] * 3,
-        OutputWorkspace=md_ws,
-    )
+    data.convert_to_Q_sample(data_ws, md_ws, lorentz_corr=True)
 
     params = {
         "a": a,
@@ -319,13 +228,18 @@ def _process_run(config, ipts, run, idx, tol):
         "gamma": gamma,
     }
 
-    scan_threshold(md_ws, strong_ws, Q_min, max_peaks, max_threshold)
+    _scan_threshold(peaks_model, md_ws, strong_ws, Q_min, max_peaks)
 
     ub = UBModel(strong_ws)
 
     min_d, max_d = ub.get_primitive_cell_length_range(centering)
 
     ub.determine_UB_with_primitive_cell(min_d, max_d, tol)
+
+    print("run {}: expected".format(run), a, b, c, alpha, beta, gamma)
+    print(
+        "run {}: FFT primitive cell".format(run), *ub.get_lattice_parameters()
+    )
 
     ub.index_peaks(tol)
 
@@ -351,6 +265,8 @@ def _process_run(config, ipts, run, idx, tol):
             a, b, c, alpha, beta, gamma, tol
         )
 
+    print("run {}: seeded cell".format(run), *ub.get_lattice_parameters())
+
     peaks_model.remove_unindexed_peaks(strong_ws)
 
     peaks_model.integrate_ellipsoids(data_ws, strong_ws, peak_radius)
@@ -360,6 +276,8 @@ def _process_run(config, ipts, run, idx, tol):
     ub.index_peaks(tol)
 
     ub.refine_UB_with_constraints(cell_type, tol)
+
+    print("run {}: refined cell".format(run), *ub.get_lattice_parameters())
 
     Reorient(strong_ws, UB_ref, crystal_system, lattice_system)
 
@@ -405,9 +323,9 @@ def _process_run(config, ipts, run, idx, tol):
 
     DeleteWorkspace(Workspace=combine_ws)
 
-
-from garnet.config.instruments import beamlines
-from garnet.reduction.data import _read_signal_error_squared
+    data.delete_workspace("detectors")
+    data.delete_workspace("solid_angle")
+    data.delete_workspace("group")
 
 
 class Peaks:
@@ -427,6 +345,7 @@ class Peaks:
             "UBFile": None,
             "MaxThreshold": 1e5,
             "PeakRadius": 0.25,
+            "GoniometerCalibration": None,
         }
         defaults.update(config)
 
@@ -440,9 +359,8 @@ class Peaks:
 
         self.detector_calibration = defaults.get("DetectorCalibration")
         self.tube_calibration = defaults.get("TubeCalibration")
+        self.goniometer_calibration = defaults.get("GoniometerCalibration")
 
-        self.file_folder = "/SNS/{}/IPTS-{}/nexus/"
-        self.file_name = "{}_{}.nxs.h5"
         self.calibration_folder = "/SNS/{}/shared/calibration"
 
         self.a, self.b, self.c = defaults.get("UnitCellLengths")
@@ -468,22 +386,6 @@ class Peaks:
         self.peak_radius = defaults.get("PeakRadius")
 
         inst_config = beamlines[self.instrument]
-
-        self.gon_axis = 6 * [None]
-        gon = inst_config.get("Goniometer")
-        gon_axis_names = inst_config.get("GoniometerAxisNames")
-        if gon_axis_names is None:
-            gon_axis_names = list(gon.keys())
-        axes = list(gon.items())
-
-        gon_ind = 0
-        for i, name in enumerate(gon_axis_names):
-            axis = axes[i][1]
-            if name is not None:
-                self.gon_axis[gon_ind] = ",".join(5 * ["{}"]).format(
-                    name, *axis
-                )
-                gon_ind += 1
 
         self.wavelength_band = defaults.get(
             "Wavelength", inst_config["Wavelength"]
@@ -600,15 +502,10 @@ class Peaks:
 
         config = {
             "instrument": self.instrument,
-            "file_folder": self.file_folder,
-            "file_name": self.file_name,
             "output_folder": self.output_folder,
             "wavelength_band": self.wavelength_band,
-            "gon_axis": self.gon_axis,
-            "Q_max": self.Q_max,
             "Q_min": self.Q_min,
             "d_min": self.d_min,
-            "max_threshold": self.max_threshold,
             "peak_radius": self.peak_radius,
             "a": self.a,
             "b": self.b,
@@ -628,6 +525,7 @@ class Peaks:
             "l_max": self.l_max,
             "tube_calibration": self.tube_calibration,
             "detector_calibration": self.detector_calibration,
+            "goniometer_calibration": self.goniometer_calibration,
         }
 
         args_list = [
@@ -706,12 +604,14 @@ class Peaks:
             SaveInstrument=False,
         )
 
-        IndexPeaks(PeaksWorkspace="peaks", Tolerance=tol, RoundHKLs=True)
+        peaks_model = PeaksModel()
+
+        peaks_model.index_peaks("peaks", tol)
 
         opt = Optimization("peaks", tol=tol)
         opt.optimize_lattice(self.cell_type)
 
-        IndexPeaks(PeaksWorkspace="peaks", Tolerance=tol, RoundHKLs=True)
+        peaks_model.index_peaks("peaks", tol)
 
         filename = os.path.join(self.output_folder, "peaks.mat")
         ub = UBModel("peaks")

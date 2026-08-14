@@ -279,7 +279,7 @@ class UBModel:
             MinD=min_d,
             MaxD=max_d,
             Tolerance=tol,
-            Iterations=20,
+            Iterations=4,
             DegreesPerStep=0.3,
         )
 
@@ -713,7 +713,7 @@ class UBModel:
 
         self.transform_primitive_to_conventional(centering)
 
-        return qmin, hmin
+        return qmin / np.cbrt(2), hmin
 
 
 class Optimization:

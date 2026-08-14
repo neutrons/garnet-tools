@@ -316,9 +316,9 @@ class UBModel:
             beta=beta,
             gamma=gamma,
             Tolerance=tol,
-            FixParameters=False,
+            FixParameters=True,
             NumInitial=1000,
-            Iterations=5,
+            Iterations=1,
         )
 
     def determine_UB_from_conventional_cell(

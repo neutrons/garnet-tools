@@ -836,7 +836,8 @@ class Calibration:
                 label="{}_panel".format(iteration),
                 show_calibrated=True,
             )
-            self.calibrate_goniometer(iteration)
+            if self.refine_goniometer:
+                self.calibrate_goniometer(iteration)
         self.generate_diagnostic(self.iterations)
 
 

@@ -310,6 +310,15 @@ def _process_run(config, ipts, run, idx, tol):
         OutputWorkspace=md_ws,
     )
 
+    params = {
+        "a": a,
+        "b": b,
+        "c": c,
+        "alpha": alpha,
+        "beta": beta,
+        "gamma": gamma,
+    }
+
     scan_threshold(md_ws, strong_ws, Q_min, max_peaks, max_threshold)
 
     ub = UBModel(strong_ws)
@@ -320,13 +329,33 @@ def _process_run(config, ipts, run, idx, tol):
 
     ub.index_peaks(tol)
 
+    results = ub.possible_conventional_cells()
+
+    success = False
+    for result in results:
+        if (
+            result["CellType"] == cell_type
+            and result["Centering"] == centering
+        ):
+            if np.all(
+                [
+                    np.abs(result[key] - params[key]) / params[key] < 0.02
+                    for key in params.keys()
+                ]
+            ):
+                ub.select_type(cell_type, centering, tol)
+                success = True
+
+    if not success:
+        ub.determine_UB_with_lattice_parameters(
+            a, b, c, alpha, beta, gamma, tol
+        )
+
     peaks_model.remove_unindexed_peaks(strong_ws)
 
     peaks_model.integrate_ellipsoids(data_ws, strong_ws, peak_radius)
 
     peaks_model.remove_weak_peaks(strong_ws, 20)
-
-    ub.select_type(cell_type, centering, tol)
 
     ub.index_peaks(tol)
 

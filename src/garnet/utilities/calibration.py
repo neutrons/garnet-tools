@@ -337,7 +337,7 @@ class Calibration:
             SearchRadiusRotYBank=3,
             SearchRadiusRotZBank=3 if self.instrument != "CORELLI" else 0,
             VerboseOutput=True,
-            SearchRadiusSamplePos=0.01,
+            SearchRadiusSamplePos=0.00,
             TuneSamplePosition=False,
             CalibrateSize=False,
             SearchRadiusSize=0.0,
@@ -474,9 +474,9 @@ class Calibration:
             Filename=self._get_ouput(".txt"),
         )
 
-        LoadParameterFile(
-            Workspace=self.instrument,
-            Filename=self._get_ouput(".xml"),
+        LoadIsawDetCal(
+            InputWorkspace=self.instrument,
+            Filename=self._get_ouput(".DetCal"),
         )
 
         inst = mtd[self.instrument].getInstrument()
@@ -602,9 +602,9 @@ class Calibration:
             Filename=self._get_ouput("_goniometer.xml"),
         )
 
-        LoadParameterFile(
-            Workspace=self.instrument,
-            Filename=self._get_ouput(".xml"),
+        LoadIsawDetCal(
+            InputWorkspace=self.instrument,
+            Filename=self._get_ouput(".DetCal"),
         )
 
     def generate_diagnostic(self, iteration, label=None, show_calibrated=None):

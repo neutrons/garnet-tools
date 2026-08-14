@@ -320,7 +320,7 @@ def _process_run(config, ipts, run, idx, tol):
 
     ub.index_peaks(tol)
 
-    peaks.model.remove_unindexed_peaks(strong_ws)
+    peaks_model.remove_unindexed_peaks(strong_ws)
 
     peaks_model.integrate_ellipsoids(data_ws, strong_ws, peak_radius)
 

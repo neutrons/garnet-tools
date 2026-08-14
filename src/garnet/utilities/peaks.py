@@ -314,9 +314,7 @@ def _process_run(config, ipts, run, idx, tol):
 
     ub = UBModel(strong_ws)
 
-    ub.determine_UB_from_conventional_cell(
-        a, b, c, alpha, beta, gamma, centering, tol
-    )
+    ub.determine_UB_with_lattice_parameters(a, b, c, alpha, beta, gamma, tol)
 
     ub.index_peaks(tol)
 

@@ -316,7 +316,7 @@ class UBModel:
             beta=beta,
             gamma=gamma,
             Tolerance=tol,
-            FixParameters=True,
+            FixParameters=False,
             NumInitial=1000,
             Iterations=5,
         )

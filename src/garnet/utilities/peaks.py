@@ -314,15 +314,25 @@ def _process_run(config, ipts, run, idx, tol):
 
     ub = UBModel(strong_ws)
 
-    ub.determine_UB_with_lattice_parameters(a, b, c, alpha, beta, gamma, tol)
+    min_d, max_d = ub.get_primitive_cell_length_range(centering)
+
+    ub.determine_UB_with_primitive_cell(min_d, max_d, tol)
+
+    ub.index_peaks(tol)
+
+    peaks.model.remove_unindexed_peaks(strong_ws)
+
+    peaks_model.integrate_ellipsoids(data_ws, strong_ws, peak_radius)
+
+    peaks_model.remove_weak_peaks(strong_ws, 20)
+
+    ub.select_type(cell_type, centering, tol)
 
     ub.index_peaks(tol)
 
     ub.refine_UB_with_constraints(cell_type, tol)
 
     Reorient(strong_ws, UB_ref, crystal_system, lattice_system)
-
-    peaks_model.integrate_ellipsoids(data_ws, strong_ws, peak_radius)
 
     DeleteWorkspace(Workspace=data_ws)
 

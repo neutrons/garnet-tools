@@ -285,7 +285,7 @@ class Calibration:
 
         mtd["peaks"].sample().getOrientedLattice().setU(np.eye(3))
 
-        IndexPeaks(PeaksWorkspace="peaks", Tolerance=0.2)
+        # IndexPeaks(PeaksWorkspace="peaks", Tolerance=0.2)
 
         mtd["peaks"].run().getGoniometer().setR(np.eye(3))
 

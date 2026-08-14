@@ -285,7 +285,7 @@ class Calibration:
 
         mtd["peaks"].sample().getOrientedLattice().setU(np.eye(3))
 
-        # IndexPeaks(PeaksWorkspace="peaks", Tolerance=0.2)
+        IndexPeaks(PeaksWorkspace="peaks", Tolerance=0.2)
 
         mtd["peaks"].run().getGoniometer().setR(np.eye(3))
 
@@ -836,7 +836,7 @@ class Calibration:
                 label="{}_panel".format(iteration),
                 show_calibrated=True,
             )
-            if self.refine_goniometer:
+            if self.refine_off:
                 self.calibrate_goniometer(iteration)
         self.generate_diagnostic(self.iterations)
 

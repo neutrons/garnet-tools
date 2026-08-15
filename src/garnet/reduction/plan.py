@@ -365,6 +365,16 @@ class ReductionPlan:
             for run in self.runs_string_to_list(self.plan["Runs"]):
                 self.validate_file(UB.replace("*", str(run)), ".mat")
 
+        if self.plan.get("RawFile") is not None:
+            raw_file = self.plan["RawFile"]
+            runs = self.plan["Runs"]
+            if type(runs) is str:
+                runs = self.runs_string_to_list(runs)
+            elif type(runs) is not list:
+                runs = [int(runs)]
+            for run in runs:
+                self.validate_file(raw_file.format(run), [".nxs", ".h5"])
+
         for item in (
             "VanadiumFile",
             "FluxFile",

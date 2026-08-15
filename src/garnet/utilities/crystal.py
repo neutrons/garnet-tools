@@ -40,7 +40,7 @@ class CrystalStructure:
     def get_space_group(self):
         cryst_struct = mtd["crystal"].sample().getCrystalStructure()
 
-        return cryst_struct.getSpaceGroup().getHMSymbol().strip()
+        return cryst_struct.getSpaceGroup().getHMSymbol().replace(" ", "")
 
     def get_lattice_constants(self):
         cryst_struct = mtd["crystal"].sample().getCrystalStructure()

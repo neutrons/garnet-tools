@@ -3418,6 +3418,10 @@ class FormView(QWidget):
         )
         self.mask_line = QLineEdit("")
         self.mask_line.setPlaceholderText("Path to mask file (.xml)")
+        self.data_path_line = QLineEdit("")
+        self.data_path_line.setPlaceholderText(
+            "Custom raw data directory (optional, default: facility path)"
+        )
         self.output_line = QLineEdit("")
         self.output_line.setPlaceholderText("Path to config file (.yaml)")
 
@@ -3443,6 +3447,7 @@ class FormView(QWidget):
         self.tube_browse_button = QPushButton("Tube", self)
         self.gonio_browse_button = QPushButton("Goniometer", self)
         self.mask_browse_button = QPushButton("Mask", self)
+        self.data_path_browse_button = QPushButton("Data Path", self)
 
         browse_icon = _qicon("fa6s.folder-open")
         self.ub_browse_button.setIcon(browse_icon)
@@ -3453,6 +3458,7 @@ class FormView(QWidget):
         self.tube_browse_button.setIcon(browse_icon)
         self.gonio_browse_button.setIcon(browse_icon)
         self.mask_browse_button.setIcon(browse_icon)
+        self.data_path_browse_button.setIcon(browse_icon)
 
         experiment_params_layout.addWidget(self.instrument_combo)
         experiment_params_layout.addWidget(ipts_label)
@@ -3487,6 +3493,8 @@ class FormView(QWidget):
         instrument_params_layout.addWidget(self.tube_browse_button, 7, 1)
         instrument_params_layout.addWidget(self.gonio_line, 8, 0)
         instrument_params_layout.addWidget(self.gonio_browse_button, 8, 1)
+        instrument_params_layout.addWidget(self.data_path_line, 9, 0)
+        instrument_params_layout.addWidget(self.data_path_browse_button, 9, 1)
 
         layout.addLayout(experiment_params_layout)
         layout.addLayout(run_params_layout)
@@ -3577,6 +3585,9 @@ class FormView(QWidget):
 
     def connect_load_mask(self, load_mask):
         self.mask_browse_button.clicked.connect(load_mask)
+
+    def connect_load_data_path(self, load_data_path):
+        self.data_path_browse_button.clicked.connect(load_data_path)
 
     def connect_load_detector(self, load_detector_cal):
         self.cal_browse_button.clicked.connect(load_detector_cal)
@@ -3937,6 +3948,24 @@ class FormView(QWidget):
         )
 
         return filename
+
+    def get_data_path(self):
+        return self.data_path_line.text()
+
+    def set_data_path(self, path):
+        return self.data_path_line.setText(path)
+
+    def load_data_path_dialog(self, path=""):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+
+        file_dialog = QFileDialog()
+
+        dirname = file_dialog.getExistingDirectory(
+            self, "Select custom raw data directory", path, options=options
+        )
+
+        return dirname
 
     def get_background(self):
         return self.bkg_line.text()
@@ -4843,6 +4872,7 @@ class FormPresenter:
         self.view.connect_wavelength(self.update_wavelength)
         self.view.connect_load_UB(self.load_UB)
         self.view.connect_load_mask(self.load_mask)
+        self.view.connect_load_data_path(self.load_data_path)
         self.view.connect_load_detector(self.load_detector)
         self.view.connect_load_tube(self.load_tube)
         self.view.connect_load_goniometer(self.load_goniometer)
@@ -5161,6 +5191,14 @@ class FormPresenter:
         if filename:
             self.view.set_mask(filename)
 
+    def load_data_path(self):
+        ipts = self.view.get_IPTS()
+        path = self.model.get_shared_file_path(ipts)
+        dirname = self.view.load_data_path_dialog(path)
+
+        if dirname:
+            self.view.set_data_path(dirname)
+
     def load_detector(self):
         path = self.model.get_calibration_file_path()
         filename = self.view.load_detector_cal_dialog(path)
@@ -5269,6 +5307,10 @@ class FormPresenter:
             if grouping is not None:
                 self.view.set_grouping(grouping)
 
+            data_path = self.model.get_data_path()
+            if data_path is not None:
+                self.view.set_data_path(data_path)
+
             self.load_int()
             self.load_param()
             self.load_norm()
@@ -5352,6 +5394,10 @@ class FormPresenter:
             grouping = self.view.get_grouping()
             if grouping is not None:
                 self.model.set_grouping(grouping)
+
+            data_path = self.view.get_data_path()
+            if data_path is not None:
+                self.model.set_data_path(data_path)
 
             self.save_int()
             self.save_param()
@@ -6326,6 +6372,20 @@ class FormModel:
         grouping = None if grouping == "" else grouping
         if self.reduction.plan is not None:
             self.reduction.plan["Grouping"] = grouping
+
+    def get_data_path(self):
+        if self.reduction.plan is not None:
+            raw_file = self.reduction.plan.get("RawFile")
+            if raw_file:
+                return os.path.dirname(raw_file)
+
+    def set_data_path(self, path):
+        path = None if path == "" else path
+        if self.reduction.plan is not None:
+            self.reduction.plan.pop("RawFile", None)
+            if path is not None:
+                basename = os.path.basename(self.beamline["RawFile"])
+                self.reduction.plan["RawFile"] = os.path.join(path, basename)
 
     def get_raw_file_path(self):
         return os.path.join(

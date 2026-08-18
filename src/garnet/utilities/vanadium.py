@@ -716,8 +716,28 @@ class Vanadium:
         if solid_angle is not None:
             solid_angle_banks = "{}_by_bank".format(solid_angle)
 
-            GroupDetectors(
+            # GroupDetectors' Behaviour="Sum" adds Y arrays element-wise,
+            # so it requires literally matching bin boundaries across
+            # spectra -- unlike Divide (used before this was grouped),
+            # which just broadcasts each spectrum's single bin
+            # independently regardless of its numeric edges. Collapse
+            # every spectrum onto one common bin spanning the full
+            # range actually present (not a hardcoded range, which
+            # could silently drop data whose real bin edges -- TOF,
+            # momentum, whatever unit it inherited -- fall outside it).
+            n_hist = mtd[solid_angle].getNumberHistograms()
+            x_lo = min(mtd[solid_angle].readX(i)[0] for i in range(n_hist))
+            x_hi = max(mtd[solid_angle].readX(i)[-1] for i in range(n_hist))
+
+            Rebin(
                 InputWorkspace=solid_angle,
+                OutputWorkspace=solid_angle_banks,
+                Params=[x_lo, 2 * (x_hi - x_lo), x_hi],
+                PreserveEvents=False,
+            )
+
+            GroupDetectors(
+                InputWorkspace=solid_angle_banks,
                 CopyGroupingFromWorkspace="group",
                 Behaviour="Sum",
                 OutputWorkspace=solid_angle_banks,

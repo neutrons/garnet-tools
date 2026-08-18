@@ -716,6 +716,8 @@
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ub.UBModel.determine_UB_with_primitive_cell">determine_UB_with_primitive_cell() (UBModel method)</a>
 </li>
+      <li><a href="source/garnet.reduction.html#garnet.reduction.parallel.dethread_environment">dethread_environment() (in module garnet.reduction.parallel)</a>
+</li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.resolution.ResolutionEllipsoid.diagnostics">diagnostics() (ResolutionEllipsoid method)</a>
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.data.BaseDataModel.divide_histograms">divide_histograms() (BaseDataModel method)</a>
@@ -951,6 +953,13 @@
 </li>
       </ul></li>
       <li>
+    garnet.reduction.parallel
+
+      <ul>
+        <li><a href="source/garnet.reduction.html#module-garnet.reduction.parallel">module</a>
+</li>
+      </ul></li>
+      <li>
     garnet.reduction.parametrization
 
       <ul>
@@ -1076,6 +1085,13 @@
         <li><a href="source/garnet.utilities.html#module-garnet.utilities.vanadium">module</a>
 </li>
       </ul></li>
+      <li>
+    garnet.workflow
+
+      <ul>
+        <li><a href="source/garnet.html#module-garnet.workflow">module</a>
+</li>
+      </ul></li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.gaussian">gaussian() (PeakEllipsoid method)</a>
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.gaussian_integral">gaussian_integral() (PeakEllipsoid method)</a>
@@ -1084,12 +1100,12 @@
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.gaussian_jac_c">gaussian_jac_c() (PeakEllipsoid method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.gaussian_jac_S">gaussian_jac_S() (PeakEllipsoid method)</a>
 </li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.vanadium.Vanadium.generate_background_count_rate">generate_background_count_rate() (Vanadium method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="source/garnet.utilities.html#garnet.utilities.vanadium.Vanadium.generate_count_rate">generate_count_rate() (Vanadium method)</a>
 </li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.calibration.Calibration.generate_diagnostic">generate_diagnostic() (Calibration method)</a>
@@ -1494,6 +1510,8 @@
 </li>
         <li><a href="source/garnet.reduction.html#module-garnet.reduction.normalization">garnet.reduction.normalization</a>
 </li>
+        <li><a href="source/garnet.reduction.html#module-garnet.reduction.parallel">garnet.reduction.parallel</a>
+</li>
         <li><a href="source/garnet.reduction.html#module-garnet.reduction.parametrization">garnet.reduction.parametrization</a>
 </li>
         <li><a href="source/garnet.reduction.html#module-garnet.reduction.peaks">garnet.reduction.peaks</a>
@@ -1529,6 +1547,8 @@
         <li><a href="source/garnet.utilities.html#module-garnet.utilities.structure">garnet.utilities.structure</a>
 </li>
         <li><a href="source/garnet.utilities.html#module-garnet.utilities.vanadium">garnet.utilities.vanadium</a>
+</li>
+        <li><a href="source/garnet.html#module-garnet.workflow">garnet.workflow</a>
 </li>
       </ul></li>
   </ul></td>
@@ -1624,6 +1644,10 @@
       <li><a href="source/garnet.reduction.html#garnet.reduction.integration.Integration.pad_to_shape">pad_to_shape() (Integration method)</a>
 </li>
       <li><a href="source/garnet.plots.html#garnet.plots.base.Pages">Pages (class in garnet.plots.base)</a>
+</li>
+      <li><a href="source/garnet.reduction.html#garnet.reduction.parallel.ParallelProcessor">ParallelProcessor (class in garnet.reduction.parallel)</a>
+</li>
+      <li><a href="source/garnet.reduction.html#garnet.reduction.parallel.ParallelTasks">ParallelTasks (class in garnet.reduction.parallel)</a>
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.parametrization.Parametrization">Parametrization (class in garnet.reduction.parametrization)</a>
 </li>
@@ -1723,6 +1747,8 @@
 </li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.vanadium.Vanadium.process_data">process_data() (Vanadium method)</a>
 </li>
+      <li><a href="source/garnet.reduction.html#garnet.reduction.parallel.ParallelProcessor.process_dict">process_dict() (ParallelProcessor method)</a>
+</li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.profile_fit">profile_fit() (PeakEllipsoid method)</a>
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.profile_project">profile_project() (PeakEllipsoid method)</a>
@@ -1809,13 +1835,15 @@
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ub.Reorient">Reorient (class in garnet.reduction.ub)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="source/garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.report">report() (NuclearStructureRefinement method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="source/garnet.reduction.html#garnet.reduction.plan.Dumper.represent_list">represent_list() (Dumper method)</a>
 </li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.reflections.Peaks.rescale_intensities">rescale_intensities() (Peaks method)</a>
+</li>
+      <li><a href="source/garnet.reduction.html#garnet.reduction.parallel.reset_environment">reset_environment() (in module garnet.reduction.parallel)</a>
 </li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.reflections.Peaks.reset_satellite">reset_satellite() (Peaks method)</a>
 </li>
@@ -1871,6 +1899,8 @@
       </ul></li>
       <li><a href="source/garnet.utilities.html#garnet.utilities.refinement.NuclearStructureRefinement.run_angle_scale_factors">run_angle_scale_factors() (NuclearStructureRefinement method)</a>
 </li>
+      <li><a href="source/garnet.reduction.html#garnet.reduction.parallel.ParallelTasks.run_tasks">run_tasks() (ParallelTasks method)</a>
+</li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.plan.ReductionPlan.runs_list_to_string">runs_list_to_string() (ReductionPlan method)</a>
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.plan.ReductionPlan.runs_string_to_list">runs_string_to_list() (ReductionPlan method)</a>
@@ -1882,6 +1912,8 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="source/garnet.reduction.html#garnet.reduction.ellipsoid.PeakEllipsoid.S_matrix">S_matrix() (PeakEllipsoid method)</a>
+</li>
+      <li><a href="source/garnet.reduction.html#garnet.reduction.parallel.ParallelTasks.safe_function_wrapper">safe_function_wrapper() (ParallelTasks method)</a>
 </li>
       <li><a href="source/garnet.reduction.html#garnet.reduction.sample.SampleMaterial">SampleMaterial (class in garnet.reduction.sample)</a>
 </li>

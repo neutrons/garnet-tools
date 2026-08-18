@@ -4953,8 +4953,82 @@ Spaces are removed and slashes are replaced with underscore.</p>
 </dd></dl>
 
 </section>
-<section id="garnet-reduction-parallel-module">
-<h2>garnet.reduction.parallel module<a class="headerlink" href="#garnet-reduction-parallel-module" title="Link to this heading">#</a></h2>
+<section id="module-garnet.reduction.parallel">
+<span id="garnet-reduction-parallel-module"></span><h2>garnet.reduction.parallel module<a class="headerlink" href="#module-garnet.reduction.parallel" title="Link to this heading">#</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="garnet.reduction.parallel.ParallelProcessor">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">ParallelProcessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_proc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/parallel.py#L133-L189"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.parallel.ParallelProcessor" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p class="rubric">Methods</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<tbody>
+<tr class="row-odd"><td><p><strong>process_dict</strong></p></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="garnet.reduction.parallel.ParallelProcessor.process_dict">
+<span class="sig-name descname"><span class="pre">process_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">func</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/parallel.py#L137-L189"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.parallel.ParallelProcessor.process_dict" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="garnet.reduction.parallel.ParallelTasks">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">ParallelTasks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">function</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">combine</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/parallel.py#L54-L130"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.parallel.ParallelTasks" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p class="rubric">Methods</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#garnet.reduction.parallel.ParallelTasks.run_tasks" title="garnet.reduction.parallel.ParallelTasks.run_tasks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_tasks</span></code></a>(plan, n_proc)</p></td>
+<td><p>Run parallel tasks with processing pool.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="pst-scrollable-table-container"><table class="table">
+<tbody>
+<tr class="row-odd"><td><p><strong>safe_function_wrapper</strong></p></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="garnet.reduction.parallel.ParallelTasks.run_tasks">
+<span class="sig-name descname"><span class="pre">run_tasks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plan</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_proc</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/parallel.py#L60-L122"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.parallel.ParallelTasks.run_tasks" title="Link to this definition">#</a></dt>
+<dd><p>Run parallel tasks with processing pool.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>plan</strong><span class="classifier">dict</span></dt><dd><p>Data reduction plan split over each process.</p>
+</dd>
+<dt><strong>n_proc</strong><span class="classifier">int</span></dt><dd><p>Number of processes.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="garnet.reduction.parallel.ParallelTasks.safe_function_wrapper">
+<span class="sig-name descname"><span class="pre">safe_function_wrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/parallel.py#L124-L130"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.parallel.ParallelTasks.safe_function_wrapper" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="garnet.reduction.parallel.dethread_environment">
+<span class="sig-name descname"><span class="pre">dethread_environment</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/parallel.py#L28-L34"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.parallel.dethread_environment" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="garnet.reduction.parallel.reset_environment">
+<span class="sig-name descname"><span class="pre">reset_environment</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/parallel.py#L37-L43"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.parallel.reset_environment" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
 </section>
 <section id="module-garnet.reduction.parametrization">
 <span id="garnet-reduction-parametrization-module"></span><h2>garnet.reduction.parametrization module<a class="headerlink" href="#module-garnet.reduction.parametrization" title="Link to this heading">#</a></h2>
@@ -6168,7 +6242,7 @@ Ellipsoid integration adapts itself to the peak distribution.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.peaks.PeaksModel.integrate_peaks">
-<span class="sig-name descname"><span class="pre">integrate_peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">md</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peak_radius</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">radius_scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">background_inner_fact</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">np.float64(1.2599210498948732)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">background_outer_fact</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">np.float64(1.4422495703074083)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'ellipsoid'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">centroid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/peaks.py#L304-L390"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.peaks.PeaksModel.integrate_peaks" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">integrate_peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">md</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peak_radius</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">radius_scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">background_inner_fact</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">np.float64(1.2599210498948734)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">background_outer_fact</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">np.float64(1.4422495703074083)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'ellipsoid'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">centroid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/peaks.py#L304-L390"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.peaks.PeaksModel.integrate_peaks" title="Link to this definition">#</a></dt>
 <dd><p>Integrate peaks using spherical or ellipsoidal regions.
 Ellipsoid integration adapts itself to the peak distribution.</p>
 <dl class="field-list simple">
@@ -6199,7 +6273,7 @@ Ellipsoid integration adapts itself to the peak distribution.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.reduction.peaks.PeaksModel.integrate_peaks_with_radii">
-<span class="sig-name descname"><span class="pre">integrate_peaks_with_radii</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">md</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peak_radii</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">background_inner_fact</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">np.float64(1.2599210498948732)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">background_outer_fact</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">np.float64(1.4422495703074083)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">centroid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/peaks.py#L428-L494"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.peaks.PeaksModel.integrate_peaks_with_radii" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">integrate_peaks_with_radii</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">md</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peak_radii</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">background_inner_fact</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">np.float64(1.2599210498948734)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">background_outer_fact</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">np.float64(1.4422495703074083)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">centroid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/reduction/peaks.py#L428-L494"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.reduction.peaks.PeaksModel.integrate_peaks_with_radii" title="Link to this definition">#</a></dt>
 <dd><p>Integrate peaks using sp ellipsoidal regions.
 Ellipsoid integration adapts itself to the peak distribution.</p>
 <dl class="field-list simple">
@@ -9212,7 +9286,20 @@ their uncertainties.</p>
 </li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet-reduction-parallel-module">garnet.reduction.parallel module</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#module-garnet.reduction.parallel">garnet.reduction.parallel module</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.parallel.ParallelProcessor"><code class="docutils literal notranslate"><span class="pre">ParallelProcessor</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.parallel.ParallelProcessor.process_dict"><code class="docutils literal notranslate"><span class="pre">ParallelProcessor.process_dict()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.parallel.ParallelTasks"><code class="docutils literal notranslate"><span class="pre">ParallelTasks</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.parallel.ParallelTasks.run_tasks"><code class="docutils literal notranslate"><span class="pre">ParallelTasks.run_tasks()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.parallel.ParallelTasks.safe_function_wrapper"><code class="docutils literal notranslate"><span class="pre">ParallelTasks.safe_function_wrapper()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.parallel.dethread_environment"><code class="docutils literal notranslate"><span class="pre">dethread_environment()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.parallel.reset_environment"><code class="docutils literal notranslate"><span class="pre">reset_environment()</span></code></a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#module-garnet.reduction.parametrization">garnet.reduction.parametrization module</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.parametrization.Parametrization"><code class="docutils literal notranslate"><span class="pre">Parametrization</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.reduction.parametrization.Parametrization.append_name"><code class="docutils literal notranslate"><span class="pre">Parametrization.append_name()</span></code></a></li>

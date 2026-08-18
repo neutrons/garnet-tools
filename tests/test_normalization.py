@@ -11,11 +11,11 @@ benchmark = "shared/benchmark/norm"
 
 
 def test_get_file():
-
     file = "/tmp/test.nxs"
 
     rp = ReductionPlan()
     rp.generate_plan("TOPAZ")
+    rp.plan["OutputName"] = "test"
 
     data = Normalization(rp.plan).get_file(file, ws="")
 
@@ -42,14 +42,12 @@ def test_get_file():
 
 
 def test_corelli():
-
     config_file = "corelli_reduction_plan.yaml"
     reduction_plan = os.path.abspath(os.path.join("./tests/data", config_file))
     script = os.path.abspath("./src/garnet/workflow.py")
     command = ["python", script, config_file, "norm", "16"]
 
     with tempfile.TemporaryDirectory() as tmpdir:
-
         os.chdir(tmpdir)
 
         rp = ReductionPlan()
@@ -70,14 +68,12 @@ def test_corelli():
 
 
 def test_topaz():
-
     config_file = "topaz_reduction_plan.yaml"
     reduction_plan = os.path.abspath(os.path.join("./tests/data", config_file))
     script = os.path.abspath("./src/garnet/workflow.py")
     command = ["python", script, config_file, "norm", "6"]
 
     with tempfile.TemporaryDirectory() as tmpdir:
-
         os.chdir(tmpdir)
 
         rp = ReductionPlan()
@@ -98,14 +94,12 @@ def test_topaz():
 
 
 def test_demand():
-
     config_file = "demand_reduction_plan.yaml"
     reduction_plan = os.path.abspath(os.path.join("./tests/data", config_file))
     script = os.path.abspath("./src/garnet/workflow.py")
     command = ["python", script, config_file, "norm", "4"]
 
     with tempfile.TemporaryDirectory() as tmpdir:
-
         os.chdir(tmpdir)
 
         rp = ReductionPlan()
@@ -126,14 +120,12 @@ def test_demand():
 
 
 def test_wand2():
-
     config_file = "wand2_reduction_plan.yaml"
     reduction_plan = os.path.abspath(os.path.join("./tests/data", config_file))
     script = os.path.abspath("./src/garnet/workflow.py")
     command = ["python", script, config_file, "norm", "48"]
 
     with tempfile.TemporaryDirectory() as tmpdir:
-
         os.chdir(tmpdir)
 
         rp = ReductionPlan()

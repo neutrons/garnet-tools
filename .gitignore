@@ -161,3 +161,6 @@ cython_debug/
 
 # Large local-only test data, too big for GitHub
 tests/data/macro.nxs
+
+# versioningit-generated version file (regenerated on every install/build)
+src/garnet/_version.py

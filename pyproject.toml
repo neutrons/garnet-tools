@@ -46,7 +46,7 @@ where = ["src"]
 exclude = ["tests*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.yml","*.yaml","*.ini"]
+"*" = ["*.yml","*.yaml","*.ini","*.ui"]
 
 [tool.pylint]
 max-line-length = 79

@@ -13,6 +13,9 @@ dependencies:
   - lmfit
   - mantidqt
   - multiprocess
+  - pillow
+  - plotly
+  - pyyaml
   - pytest
   - conda
   - qtpy

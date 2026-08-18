@@ -40,6 +40,9 @@ requirements:
     - qtawesome
     - qdarkstyle
     - multiprocess
+    - pillow
+    - plotly
+    - pyyaml
 
 test:
   imports:

@@ -2,6 +2,13 @@ import sys
 import os
 import tempfile
 
+# When run as a standalone script (not via an installed garnet-tools
+# package), sys.path[0] is this file's own directory, so the local
+# `workbench` shim (a sibling of `garnet` under src/) wouldn't otherwise
+# be importable by mantidqt's sliceviewer.
+directory = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.abspath(os.path.join(directory, "../..")))
+
 from qtpy.QtWidgets import QApplication, QComboBox, QMainWindow
 from qtpy.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QPalette
 from qtpy.QtCore import Qt, QSettings

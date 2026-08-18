@@ -1,0 +1,51 @@
+{% set version = version if version is defined else environ.get('PKG_VERSION', '0.0.1') %}
+
+package:
+  name: garnet
+  version: {{ version }}
+
+source:
+  path: ..
+
+build:
+  noarch: python
+  number: 0
+  script: {{ PYTHON }} -m pip install . --no-deps --ignore-installed -vv
+  entry_points:
+    - garnet = garnet.application:gui
+
+requirements:
+  host:
+    - python >=3.10
+    - pip
+    - setuptools
+    - wheel
+    - versioningit
+  run:
+    - python >=3.10
+    - mantidworkbench >=6.7.20230830
+    - pyoncat
+    - qtpy
+    - numpy
+    - scipy
+    - matplotlib
+    - pycifrw
+    - h5py
+    - lmfit
+    - pyvista
+    - pyvistaqt
+    - scikit-learn
+    - scikit-image
+    - gemmi
+    - qtawesome
+    - qdarkstyle
+
+test:
+  imports:
+    - garnet
+
+about:
+  home: https://github.com/neutrons/garnet-tools
+  license: GPL-3.0-or-later
+  license_file: LICENSE
+  summary: Single Crystal Graphical Advanced Reduction Neutron Event Toolkit

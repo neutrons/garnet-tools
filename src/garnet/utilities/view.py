@@ -14,7 +14,6 @@ from garnet.reduction.plan import ReductionPlan
 from garnet.reduction.normalization import Normalization
 from garnet.reduction.parametrization import Parametrization
 
-SLICEVIEW_SH = "/SNS/software/scd/sliceview.sh"
 SLICEVIEW_PY = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), "sliceview.py"
 )
@@ -66,31 +65,15 @@ def assemble(instance, plan, mode):
 
 
 def view(result_file):
-    # SliceViewer needs mantidqt, which lives in a separate pixi
-    # environment from the one running this GUI/reduction code -- the
-    # deployed wrapper script activates that environment. Fall back to
-    # running sliceview.py directly (e.g. on machines without that
-    # wrapper) if it's missing or fails.
-    try:
-        process = subprocess.Popen(
-            [SLICEVIEW_SH, result_file],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        out, err = process.communicate()
-        if process.returncode != 0:
-            raise subprocess.SubprocessError(err.decode().strip())
-    except (FileNotFoundError, subprocess.SubprocessError) as e:
-        print(f"{SLICEVIEW_SH} failed ({e}); falling back to {SLICEVIEW_PY}")
-        process = subprocess.Popen(
-            [sys.executable, SLICEVIEW_PY, result_file],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        out, err = process.communicate()
-        if process.returncode != 0:
-            print(err.decode().strip())
-            sys.exit(process.returncode)
+    process = subprocess.Popen(
+        [sys.executable, SLICEVIEW_PY, result_file],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    out, err = process.communicate()
+    if process.returncode != 0:
+        print(err.decode().strip())
+        sys.exit(process.returncode)
     print("Opened:", result_file)
 
 

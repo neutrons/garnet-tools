@@ -11,7 +11,7 @@ dependencies:
   - pycifrw
   - h5py
   - lmfit
-  - mantidworkbench
+  - mantidqt
   - pytest
   - conda
   - qtpy

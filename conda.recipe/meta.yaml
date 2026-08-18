@@ -23,7 +23,7 @@ requirements:
     - versioningit
   run:
     - python >=3.10
-    - mantidworkbench >=6.7.20230830
+    - mantidqt >=6.7.20230830
     - pyoncat
     - qtpy
     - numpy

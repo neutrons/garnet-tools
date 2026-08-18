@@ -12,6 +12,7 @@ dependencies:
   - h5py
   - lmfit
   - mantidqt
+  - multiprocess
   - pytest
   - conda
   - qtpy

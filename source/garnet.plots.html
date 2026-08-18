@@ -520,8 +520,93 @@
 </dd></dl>
 
 </section>
-<section id="garnet-plots-monitor-module">
-<h2>garnet.plots.monitor module<a class="headerlink" href="#garnet-plots-monitor-module" title="Link to this heading">#</a></h2>
+<section id="module-garnet.plots.monitor">
+<span id="garnet-plots-monitor-module"></span><h2>garnet.plots.monitor module<a class="headerlink" href="#module-garnet.plots.monitor" title="Link to this heading">#</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="garnet.plots.monitor.SlicePlot">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">SlicePlot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">UB</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/monitor.py#L7-L354"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.monitor.SlicePlot" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Plotly version of the reciprocal-space slice plot.</p>
+<p>This version resamples the oblique slice grid onto a rectangular
+display grid and draws it with a standard Plotly Heatmap.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>UB</strong><span class="classifier">ndarray, shape (3, 3)</span></dt><dd><p>UB matrix.</p>
+</dd>
+<dt><strong>W</strong><span class="classifier">ndarray, shape (3, 3)</span></dt><dd><p>Basis or transform matrix used to construct the metric tensor
+in the slice frame.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#garnet.plots.monitor.SlicePlot.calculate_transforms" title="garnet.plots.monitor.SlicePlot.calculate_transforms"><code class="xref py py-obj docutils literal notranslate"><span class="pre">calculate_transforms</span></code></a>(axes, labels, normal[, ...])</p></td>
+<td><p>Precompute the display transform and build the Plotly heatmap.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#garnet.plots.monitor.SlicePlot.make_slice" title="garnet.plots.monitor.SlicePlot.make_slice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_slice</span></code></a>(data_signal, norm_signal, value)</p></td>
+<td><p>Update the figure to show the slice nearest the requested value.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="garnet.plots.monitor.SlicePlot.MAX_DISPLAY_BINS">
+<span class="sig-name descname"><span class="pre">MAX_DISPLAY_BINS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">201</span></span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/monitor.py"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.monitor.SlicePlot.MAX_DISPLAY_BINS" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="garnet.plots.monitor.SlicePlot.calculate_transforms">
+<span class="sig-name descname"><span class="pre">calculate_transforms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">axes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normal</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">oversample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interpolation</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'nearest'</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/monitor.py#L63-L223"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.monitor.SlicePlot.calculate_transforms" title="Link to this definition">#</a></dt>
+<dd><p>Precompute the display transform and build the Plotly heatmap.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>axes</strong><span class="classifier">sequence of ndarray</span></dt><dd><p>Axis arrays for the 3 dimensions.</p>
+</dd>
+<dt><strong>labels</strong><span class="classifier">sequence of str</span></dt><dd><p>Axis labels for the 3 dimensions.</p>
+</dd>
+<dt><strong>normal</strong><span class="classifier">array-like of length 3</span></dt><dd><p>Slice normal selector. This follows the same convention
+as the original code: the dimension with value 1 is taken
+as the sliced dimension.</p>
+</dd>
+<dt><strong>oversample</strong><span class="classifier">float, optional</span></dt><dd><p>Display oversampling factor for the rectangular grid.
+A value of 1.0 is usually fine.</p>
+</dd>
+<dt><strong>interpolation</strong><span class="classifier">{“nearest”, “linear”}, optional</span></dt><dd><p>Interpolation used when resampling onto the display grid.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="garnet.plots.monitor.SlicePlot.make_slice">
+<span class="sig-name descname"><span class="pre">make_slice</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_signal</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">norm_signal</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/monitor.py#L285-L354"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.monitor.SlicePlot.make_slice" title="Link to this definition">#</a></dt>
+<dd><p>Update the figure to show the slice nearest the requested value.</p>
+<p>Counts and normalization are resampled onto the display grid
+separately, then divided – resampling their ratio directly
+produces artifacts near masked/zero-exposure bins, since a
+single missing/zero normalization value would otherwise corrupt
+the interpolated ratio in its whole interpolation neighborhood.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>data_signal</strong><span class="classifier">ndarray, shape (n0, n1, n2)</span></dt><dd><p>3D raw-counts signal array.</p>
+</dd>
+<dt><strong>norm_signal</strong><span class="classifier">ndarray, shape (n0, n1, n2)</span></dt><dd><p>3D normalization signal array, matching data_signal’s shape.</p>
+</dd>
+<dt><strong>value</strong><span class="classifier">float</span></dt><dd><p>Requested slice coordinate.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
 </section>
 <section id="module-garnet.plots.peaks">
 <span id="garnet-plots-peaks-module"></span><h2>garnet.plots.peaks module<a class="headerlink" href="#module-garnet.plots.peaks" title="Link to this heading">#</a></h2>
@@ -944,7 +1029,15 @@ mask =</p>
 </li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet-plots-monitor-module">garnet.plots.monitor module</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#module-garnet.plots.monitor">garnet.plots.monitor module</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.monitor.SlicePlot"><code class="docutils literal notranslate"><span class="pre">SlicePlot</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.monitor.SlicePlot.MAX_DISPLAY_BINS"><code class="docutils literal notranslate"><span class="pre">SlicePlot.MAX_DISPLAY_BINS</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.monitor.SlicePlot.calculate_transforms"><code class="docutils literal notranslate"><span class="pre">SlicePlot.calculate_transforms()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.monitor.SlicePlot.make_slice"><code class="docutils literal notranslate"><span class="pre">SlicePlot.make_slice()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#module-garnet.plots.peaks">garnet.plots.peaks module</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.peaks.PeakCentroidPlot"><code class="docutils literal notranslate"><span class="pre">PeakCentroidPlot</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.peaks.PeakEstimatePlot"><code class="docutils literal notranslate"><span class="pre">PeakEstimatePlot</span></code></a><ul class="nav section-nav flex-column">

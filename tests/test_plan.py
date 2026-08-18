@@ -9,7 +9,6 @@ filepath = os.path.dirname(os.path.abspath(__file__))
 
 
 def test_runs():
-
     garnet_plan = ReductionPlan()
 
     assert garnet_plan.plan is None
@@ -24,10 +23,11 @@ def test_runs():
 
 
 def test_load_plan():
-
     garnet_plan = ReductionPlan()
 
-    reduction_plan = os.path.join(filepath, "data/corelli_reduction_plan.yaml")
+    reduction_plan = os.path.join(
+        filepath, "data/corelli_reduction_plan_local.yaml"
+    )
 
     garnet_plan.load_plan(reduction_plan)
 
@@ -35,23 +35,23 @@ def test_load_plan():
 
     assert plan is not None
 
-    assert os.path.splitext(plan["DetectorCalibration"])[1] == ".xml"
+    assert os.path.splitext(plan["UBFile"])[1] == ".mat"
 
 
 def test_save_plan():
-
     garnet_plan = ReductionPlan()
 
-    reduction_plan = os.path.join(filepath, "data/corelli_reduction_plan.yaml")
+    reduction_plan = os.path.join(
+        filepath, "data/corelli_reduction_plan_local.yaml"
+    )
 
     garnet_plan.load_plan(reduction_plan)
 
     with tempfile.TemporaryDirectory() as tmpdir:
-
         tmp_name = "tmp_plan.yaml"
         tmp_plan = os.path.join(tmpdir, tmp_name)
 
-        assert garnet_plan.plan["OutputName"] == "corelli_reduction_plan"
+        assert garnet_plan.plan["OutputName"] == "corelli_reduction_plan_local"
         assert garnet_plan.plan["OutputPath"] == os.path.join(filepath, "data")
 
         garnet_plan.save_plan(tmp_plan)
@@ -70,10 +70,11 @@ def test_save_plan():
 
 
 def test_integration_plan():
-
     garnet_plan = ReductionPlan()
 
-    reduction_plan = os.path.join(filepath, "data/corelli_reduction_plan.yaml")
+    reduction_plan = os.path.join(
+        filepath, "data/corelli_reduction_plan_local.yaml"
+    )
 
     garnet_plan.load_plan(reduction_plan)
 
@@ -97,10 +98,11 @@ def test_integration_plan():
 
 
 def test_normalization_plan():
-
     garnet_plan = ReductionPlan()
 
-    reduction_plan = os.path.join(filepath, "data/corelli_reduction_plan.yaml")
+    reduction_plan = os.path.join(
+        filepath, "data/corelli_reduction_plan_local.yaml"
+    )
 
     garnet_plan.load_plan(reduction_plan)
 

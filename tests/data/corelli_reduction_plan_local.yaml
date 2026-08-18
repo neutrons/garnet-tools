@@ -1,0 +1,28 @@
+Instrument: CORELLI
+IPTS: 31429
+Runs: 324246:324422
+UBFile: ./tests/data/corelli_YAG_ub.mat
+VanadiumFile: null
+BackgroundFile: null
+FluxFile: null
+MaskFile: null
+DetectorCalibration: null
+TubeCalibration: null
+Elastic: false
+TimeOffset: null
+Integration:
+  Cell: Cubic
+  Centering: I
+  ModVec1: [0, 0, 0]
+  ModVec2: [0, 0, 0]
+  ModVec3: [0, 0, 0]
+  MaxOrder: 0
+  CrossTerms: false
+  MinD: 0.7
+  Radius: 0.25
+Normalization:
+  Symmetry: m-3m
+  Projections: [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+  Extents: [[-10, 10], [-10, 10], [-10, 10]]
+  Bins: [201, 201, 201]
+Grouping: 1x4

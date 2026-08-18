@@ -421,9 +421,8 @@ class ReductionPlan:
         path = os.path.dirname(os.path.abspath(filename))
         self.plan["OutputPath"] = path
 
-        if self.plan.get("OutputName") is None:
-            name = os.path.splitext(os.path.basename(filename))[0]
-            self.plan["OutputName"] = name
+        name = os.path.splitext(os.path.basename(filename))[0]
+        self.plan["OutputName"] = name
 
     def load_plan(self, filename):
         """

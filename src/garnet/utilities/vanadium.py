@@ -470,10 +470,9 @@ class Vanadium:
 
         M = mat.relativeMolecularMass()
         n = mat.numberDensityEffective  # A^-3
-        N = mat.totalAtoms
+        N = mat.totalAtoms  # atoms per formula unit, NOT the sample's
 
         self.n = n
-        self.N = N
 
         V = np.abs(
             mtd[self.instrument].sample().getShape().volume() * 100**3
@@ -482,6 +481,13 @@ class Vanadium:
         rho = (n / N) / 0.6022 * M
         m = rho * V
         r = np.cbrt(0.75 / np.pi * V)
+
+        # Illuminated atom count for the WHOLE sample (mass/molar_mass *
+        # Avogadro), assuming full illumination -- NOT mat.totalAtoms
+        # (N above), which is only the per-formula-unit atom count used
+        # for the density formula, several orders of magnitude too
+        # small to normalize a macroscopic count rate against.
+        self.N_illuminated = (m / M) * 6.02214076e23
 
         mu_s = n * sigma_s
         mu_a = n * sigma_a
@@ -681,9 +687,15 @@ class Vanadium:
             Wavelength bin width in Angstrom.
         solid_angle : str, optional
             Per-pixel geometric solid angle workspace (see
-            calculate_pixel_solid_angle). When given, the pixel-level rate
-            is divided by it before grouping by bank, so the bank-summed
-            result is expressed per steradian.
+            calculate_pixel_solid_angle). When given, it is grouped by
+            the same bank scheme (summed) and the bank-summed rate is
+            divided by that bank-total solid angle once, so the result
+            is expressed per steradian. Dividing per-pixel by its own
+            tiny solid angle and then summing those already-inflated
+            per-pixel rates across a whole bank (~4096 pixels for
+            CORELLI) would overcount by roughly the bank's pixel count
+            -- sum first, divide once, matching how ΔΩ_b itself is
+            defined (sum of the per-pixel solid angles in the bank).
 
         """
 
@@ -693,13 +705,6 @@ class Vanadium:
             Target="Wavelength",
         )
 
-        if solid_angle is not None:
-            Divide(
-                LHSWorkspace=output,
-                RHSWorkspace=solid_angle,
-                OutputWorkspace=output,
-            )
-
         GroupDetectors(
             InputWorkspace=output,
             CopyGroupingFromWorkspace="group",
@@ -707,6 +712,22 @@ class Vanadium:
             PreserveEvents=True,
             OutputWorkspace=output,
         )
+
+        if solid_angle is not None:
+            solid_angle_banks = "{}_by_bank".format(solid_angle)
+
+            GroupDetectors(
+                InputWorkspace=solid_angle,
+                CopyGroupingFromWorkspace="group",
+                Behaviour="Sum",
+                OutputWorkspace=solid_angle_banks,
+            )
+
+            Divide(
+                LHSWorkspace=output,
+                RHSWorkspace=solid_angle_banks,
+                OutputWorkspace=output,
+            )
 
         Rebin(
             InputWorkspace=output,
@@ -733,8 +754,8 @@ class Vanadium:
         for a forward count-rate simulator, independent of a
         reflection's own solid-angle footprint.
 
-        set_sample_geometry must have been called first (self.N,
-        self.sigma_s).
+        set_sample_geometry must have been called first
+        (self.N_illuminated, self.sigma_s).
         """
 
         self.calculate_pixel_solid_angle()
@@ -749,7 +770,7 @@ class Vanadium:
         Scale(
             InputWorkspace="count_rate",
             OutputWorkspace="count_rate",
-            Factor=4.0 * np.pi / (self.N * self.sigma_s),
+            Factor=4.0 * np.pi / (self.N_illuminated * self.sigma_s),
             Operation="Multiply",
         )
 

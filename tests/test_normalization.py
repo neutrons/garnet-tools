@@ -3,6 +3,8 @@ import tempfile
 import shutil
 import subprocess
 
+import pytest
+
 from garnet.reduction.plan import ReductionPlan
 from garnet.reduction.normalization import Normalization
 from garnet.config.instruments import beamlines
@@ -41,6 +43,9 @@ def test_get_file():
     assert data == base + app + symm + "_data" + ext
 
 
+@pytest.mark.skip(
+    reason="full reduction benchmark run; slow and needs production data mounts"
+)
 def test_corelli():
     config_file = "corelli_reduction_plan.yaml"
     reduction_plan = os.path.abspath(os.path.join("./tests/data", config_file))
@@ -67,6 +72,9 @@ def test_corelli():
         shutil.copytree(tmpdir, baseline_path)
 
 
+@pytest.mark.skip(
+    reason="full reduction benchmark run; slow and needs production data mounts"
+)
 def test_topaz():
     config_file = "topaz_reduction_plan.yaml"
     reduction_plan = os.path.abspath(os.path.join("./tests/data", config_file))
@@ -93,6 +101,9 @@ def test_topaz():
         shutil.copytree(tmpdir, baseline_path)
 
 
+@pytest.mark.skip(
+    reason="full reduction benchmark run; slow and needs production data mounts"
+)
 def test_demand():
     config_file = "demand_reduction_plan.yaml"
     reduction_plan = os.path.abspath(os.path.join("./tests/data", config_file))
@@ -119,6 +130,9 @@ def test_demand():
         shutil.copytree(tmpdir, baseline_path)
 
 
+@pytest.mark.skip(
+    reason="full reduction benchmark run; slow and needs production data mounts"
+)
 def test_wand2():
     config_file = "wand2_reduction_plan.yaml"
     reduction_plan = os.path.abspath(os.path.join("./tests/data", config_file))

@@ -39,6 +39,7 @@ requirements:
     - gemmi
     - qtawesome
     - qdarkstyle
+    - multiprocess
 
 test:
   imports:

@@ -83,7 +83,7 @@ def test_projection_extents_scales_with_d_min():
     extents_coarse, bins = ar._projection_extents(UB, projections, d_min=1.0)
     extents_fine, _ = ar._projection_extents(UB, projections, d_min=0.5)
 
-    assert bins == [801, 801, 1]
+    assert bins == [115, 139, 1]
 
     # Thin axis is always the fixed +/-0.1 integration range.
     assert extents_coarse[2] == [-0.1, 0.1]

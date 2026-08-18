@@ -4,7 +4,7 @@ description = "Single Crystal Graphical Advanced Reduction Neutron Event Toolkit
 dynamic = ["version"]
 requires-python = ">=3.10"
 dependencies = [
-    "mantidworkbench >= 6.7.20230830",
+    "mantidqt >= 6.7.20230830",
   "pyoncat ~= 1.6",
   "qtpy",
 ]

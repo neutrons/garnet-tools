@@ -105,7 +105,7 @@ def _qicon(name, **kwargs):
 # it isn't (or isn't yet) installed into the interpreter running this GUI.
 _SRC_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-from garnet._version import __version__
+from garnet import __version__
 
 from garnet.config.instruments import beamlines
 from garnet.config.atoms import (

@@ -65,10 +65,15 @@ def assemble(instance, plan, mode):
 
 
 def view(result_file):
+    # sliceview.py needs mantidqt's SliceViewer, which is built against
+    # PyQt6 -- override QT_API here since the parent process (application.py)
+    # sets it to pyside6 for pyvistaqt/VTK and that would otherwise leak in.
+    env = dict(os.environ, QT_API="pyqt6")
     process = subprocess.Popen(
         [sys.executable, SLICEVIEW_PY, result_file],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        env=env,
     )
     out, err = process.communicate()
     if process.returncode != 0:

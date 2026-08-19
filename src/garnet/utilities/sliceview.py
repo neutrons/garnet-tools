@@ -1,6 +1,7 @@
 import sys
 import os
 import tempfile
+import traceback
 
 # When run as a standalone script (not via an installed garnet-tools
 # package), sys.path[0] is this file's own directory, so the local
@@ -81,7 +82,9 @@ class MainWindow(QMainWindow):
             viewer = SliceViewer(mtd[name])
             self.setCentralWidget(viewer.view)
             _adjust_combos(viewer.view)
-        except:
+        except Exception:
+            print("SliceViewer failed, falling back to matplotlib plot:")
+            traceback.print_exc()
             plot_md_ws_from_names([name], True, False)
             sys.exit(app.exec())
 

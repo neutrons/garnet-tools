@@ -2194,7 +2194,7 @@ when no usable esd is available.</p>
 <span id="garnet-utilities-vanadium-module"></span><h2>garnet.utilities.vanadium module<a class="headerlink" href="#module-garnet.utilities.vanadium" title="Link to this heading">#</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="garnet.utilities.vanadium.Vanadium">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Vanadium</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/vanadium.py#L63-L1015"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.vanadium.Vanadium" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">Vanadium</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/vanadium.py#L63-L1023"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.vanadium.Vanadium" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
@@ -2203,7 +2203,7 @@ when no usable esd is available.</p>
 <td><p>Accurate per-pixel geometric solid angle (pixel_area * cos(gamma) / L2^2) from the calibrated instrument geometry, masked and grouped to match the pixel grouping already applied to the data workspaces.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#garnet.utilities.vanadium.Vanadium.generate_background_count_rate" title="garnet.utilities.vanadium.Vanadium.generate_background_count_rate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">generate_background_count_rate</span></code></a>()</p></td>
-<td><p>Wavelength-dependent, per-bank background count rate derived from the standalone background run.</p></td>
+<td><p>Wavelength-dependent, per-bank background count rate derived from the standalone background run, normalized by the accurate per-pixel geometric solid angle (see generate_count_rate) so the result is per steradian -- consistent with what the background ROI integral (counts = q_eff * beta_b * DeltaOmega_ROI * DeltaLambda_ROI) expects.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#garnet.utilities.vanadium.Vanadium.generate_count_rate" title="garnet.utilities.vanadium.Vanadium.generate_count_rate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">generate_count_rate</span></code></a>()</p></td>
 <td><p>Wavelength-dependent, per-bank signal count rate derived from the background-subtracted, absorption-corrected vanadium workspace, normalized by the accurate per-pixel geometric solid angle, the illuminated vanadium atom count, and the vanadium scattering cross section.</p></td>
@@ -2274,14 +2274,19 @@ to match the pixel grouping already applied to the data workspaces.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.vanadium.Vanadium.finalize_and_save">
-<span class="sig-name descname"><span class="pre">finalize_and_save</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/vanadium.py#L991-L996"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.vanadium.Vanadium.finalize_and_save" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">finalize_and_save</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/vanadium.py#L999-L1004"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.vanadium.Vanadium.finalize_and_save" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.vanadium.Vanadium.generate_background_count_rate">
-<span class="sig-name descname"><span class="pre">generate_background_count_rate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/vanadium.py#L797-L805"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.vanadium.Vanadium.generate_background_count_rate" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">generate_background_count_rate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/vanadium.py#L797-L813"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.vanadium.Vanadium.generate_background_count_rate" title="Link to this definition">#</a></dt>
 <dd><p>Wavelength-dependent, per-bank background count rate derived from
-the standalone background run.</p>
+the standalone background run, normalized by the accurate
+per-pixel geometric solid angle (see generate_count_rate) so the
+result is per steradian – consistent with what the background
+ROI integral (counts = q_eff * beta_b * DeltaOmega_ROI *
+DeltaLambda_ROI) expects. calculate_pixel_solid_angle must have
+already been called (generate_count_rate does this).</p>
 </dd></dl>
 
 <dl class="py method">
@@ -2306,7 +2311,7 @@ reflection’s own solid-angle footprint.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.vanadium.Vanadium.generate_plots">
-<span class="sig-name descname"><span class="pre">generate_plots</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/vanadium.py#L950-L975"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.vanadium.Vanadium.generate_plots" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">generate_plots</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/vanadium.py#L958-L983"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.vanadium.Vanadium.generate_plots" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
@@ -2321,12 +2326,12 @@ reflection’s own solid-angle footprint.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.vanadium.Vanadium.process_data">
-<span class="sig-name descname"><span class="pre">process_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/vanadium.py#L826-L888"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.vanadium.Vanadium.process_data" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">process_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/vanadium.py#L834-L896"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.vanadium.Vanadium.process_data" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.vanadium.Vanadium.run">
-<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/vanadium.py#L998-L1015"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.vanadium.Vanadium.run" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/vanadium.py#L1006-L1023"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.vanadium.Vanadium.run" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">

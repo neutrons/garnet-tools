@@ -797,11 +797,19 @@ class Vanadium:
     def generate_background_count_rate(self):
         """
         Wavelength-dependent, per-bank background count rate derived from
-        the standalone background run.
+        the standalone background run, normalized by the accurate
+        per-pixel geometric solid angle (see generate_count_rate) so the
+        result is per steradian -- consistent with what the background
+        ROI integral (counts = q_eff * beta_b * DeltaOmega_ROI *
+        DeltaLambda_ROI) expects. calculate_pixel_solid_angle must have
+        already been called (generate_count_rate does this).
         """
 
         self._bank_wavelength_rate(
-            "background", "background_count_rate", self.count_rate_step
+            "background",
+            "background_count_rate",
+            self.count_rate_step,
+            solid_angle="solid_angle_geom",
         )
 
     def _smooth_data(self, data, units="wavelength"):

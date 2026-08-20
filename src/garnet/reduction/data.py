@@ -2648,6 +2648,8 @@ class LaueData(BaseDataModel):
 
             self.crop_for_normalization("bkg")
 
+            mtd["bkg"].run()["gd_prtn_chrg"] = pc_bkg
+
             if not mtd["bkg"].run().hasProperty("NormalizationFactor"):
                 NormaliseByCurrent(InputWorkspace="bkg", OutputWorkspace="bkg")
 

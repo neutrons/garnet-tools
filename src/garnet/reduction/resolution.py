@@ -725,6 +725,7 @@ class ResolutionEllipsoid:
         ).x
 
         w = np.ones(A.shape[0])
+        result = None
 
         for _ in range(max_iter):
             r = width_resid(x)
@@ -733,14 +734,15 @@ class ResolutionEllipsoid:
             mad = np.median(np.abs(r - np.median(r)))
             scale = 1.4826 * mad + eps
 
-            x_new = least_squares(
+            result = least_squares(
                 width_resid,
                 x,
                 bounds=bounds,
                 method="trf",
                 loss="huber",
                 f_scale=c * scale,
-            ).x
+            )
+            x_new = result.x
 
             z = width_resid(x_new) / scale
             w = np.where(np.abs(z) <= c, 1.0, c / np.abs(z))
@@ -752,7 +754,93 @@ class ResolutionEllipsoid:
             x = x_new
 
         residual_norm = np.linalg.norm(A @ x - y)
-        return x, residual_norm, w
+        return x, residual_norm, w, result
+
+    def _parameter_covariance(self, result):
+        """
+        Approximate covariance of the fitted (variance-space) parameters
+        from the final robust least-squares solve in `robust_nnls`, using
+        the same Jacobian/SVD approach `scipy.optimize.curve_fit` uses
+        internally (Gauss-Newton approximation to the Hessian of the cost).
+
+        This is an asymptotic estimate: it assumes the solution is not
+        pinned against the x >= 0 bound and that the Huber-reweighted
+        Jacobian is a reasonable stand-in for the true curvature. Returns
+        None if the Jacobian is unavailable or degenerate (e.g. more free
+        parameters than usable peaks, or a parameter pinned at zero).
+        """
+        if result is None:
+            return None
+
+        J = result.jac
+        m, n = J.shape
+        if m <= n:
+            return None
+
+        try:
+            _, s, VT = np.linalg.svd(J, full_matrices=False)
+        except np.linalg.LinAlgError:
+            return None
+
+        threshold = np.finfo(float).eps * max(J.shape) * s[0]
+        keep = s > threshold
+        if not np.any(keep):
+            return None
+
+        s = s[keep]
+        VT = VT[keep]
+        pcov = (VT.T / s**2) @ VT
+
+        dof = m - n
+        s_sq = np.sum(result.fun**2) / dof
+
+        return pcov * s_sq
+
+    def _label_variance_uncertainties(self, x, x_cov):
+        """
+        Propagate variance-space parameter uncertainties (diagonal of
+        `x_cov`, i.e. Var(sigma^2)) to standard errors on sigma itself via
+        the delta method: Var(sigma) = Var(sigma^2) / (4 * sigma^2).
+
+        Returns a dict keyed like `_label_variance_parameters` with a
+        "_stderr" suffix, e.g. "sigma_alpha_i_stderr". Empty if `x_cov`
+        is None.
+        """
+        if x_cov is None:
+            return {}
+
+        var_x = np.clip(np.diag(x_cov), 0.0, None)
+        sigma = np.sqrt(np.clip(x, 0.0, None))
+
+        with np.errstate(divide="ignore", invalid="ignore"):
+            sigma_err = np.where(
+                sigma > 0, np.sqrt(var_x) / (2.0 * sigma), np.nan
+            )
+
+        labels = list(self._label_variance_parameters(x).keys())
+        return {
+            f"{label}_stderr": err for label, err in zip(labels, sigma_err)
+        }
+
+    def _parameter_correlation(self, x_cov):
+        """
+        Correlation matrix of the fitted sigma parameters.
+
+        Note this is identical to the correlation matrix of the
+        underlying variance-space parameters `x_cov`: sigma = sqrt(x) is
+        a per-parameter (diagonal) reparametrization, and a correlation
+        matrix is invariant under positive diagonal rescaling of each
+        variable. Returns None if `x_cov` is None or any parameter has
+        zero variance (e.g. pinned at the x >= 0 bound).
+        """
+        if x_cov is None:
+            return None
+
+        d = np.sqrt(np.clip(np.diag(x_cov), 0.0, None))
+        if np.any(d == 0):
+            return None
+
+        return x_cov / np.outer(d, d)
 
     def fit(self, fixed_instrumental=None):
         """
@@ -895,16 +983,27 @@ class ResolutionEllipsoid:
             A_scale = (A[:, :n_instrumental] @ x_prior)[:, None]
             A_fit = np.column_stack([A_scale, A[:, n_instrumental:]])
 
-            x_fit, residual_norm, robust_weights = self.robust_nnls(A_fit, y)
+            x_fit, residual_norm, robust_weights, _ = self.robust_nnls(
+                A_fit, y
+            )
 
             instrumental_scale = x_fit[0]
             x = np.concatenate([instrumental_scale * x_prior, x_fit[1:]])
+            x_cov = None
         else:
-            x, residual_norm, robust_weights = self.robust_nnls(A, y)
+            x, residual_norm, robust_weights, lsq_result = self.robust_nnls(
+                A, y
+            )
+            x_cov = self._parameter_covariance(lsq_result)
+
+        x_corr = self._parameter_correlation(x_cov)
 
         self.model = {
             **self._label_variance_parameters(x.ravel()),
+            **self._label_variance_uncertainties(x.ravel(), x_cov),
             "variance_parameters": x,
+            "variance_covariance": x_cov,
+            "variance_correlation": x_corr,
             "residual_norm": residual_norm,
             "used_peaks": used,
             # Huber weight per used peak, same order as "used_peaks";
@@ -1378,19 +1477,72 @@ class ResolutionEllipsoid:
                 )
             )
 
+        skip = {
+            "variance_parameters",
+            "variance_covariance",
+            "variance_correlation",
+            "residual_norm",
+            "used_peaks",
+            "robust_weights",
+            "instrumental_scale",
+        }
+
         for key, val in self.model.items():
-            if key in (
-                "variance_parameters",
-                "residual_norm",
-                "used_peaks",
-                "robust_weights",
-                "instrumental_scale",
-            ):
+            if key in skip or key.endswith("_stderr"):
                 continue
+
+            stderr = self.model.get(f"{key}_stderr")
+
             if key == "sigma_dl_mod":
-                lines.append("{}: {:.6e} (dimensionless)\n".format(key, val))
+                if stderr is None:
+                    lines.append(
+                        "{}: {:.6e} (dimensionless)\n".format(key, val)
+                    )
+                else:
+                    lines.append(
+                        "{}: {:.6e} +/- {:.6e} (dimensionless)\n".format(
+                            key, val, stderr
+                        )
+                    )
             else:
-                lines.append("{}: {:.6e} deg\n".format(key, np.degrees(val)))
+                if stderr is None:
+                    lines.append(
+                        "{}: {:.6e} deg\n".format(key, np.degrees(val))
+                    )
+                else:
+                    lines.append(
+                        "{}: {:.6e} +/- {:.6e} deg\n".format(
+                            key, np.degrees(val), np.degrees(stderr)
+                        )
+                    )
+
+        x_corr = self.model.get("variance_correlation")
+        if x_corr is not None:
+            labels = list(
+                self._label_variance_parameters(
+                    self.model["variance_parameters"]
+                ).keys()
+            )
+            col_w = max(10, max(len(lab) for lab in labels) + 2)
+            row_w = max(len(lab) for lab in labels) + 2
+
+            lines.append("\nparameter correlation matrix:\n")
+            lines.append(
+                "{:>{row_w}}".format("", row_w=row_w)
+                + "".join(
+                    "{:>{col_w}}".format(lab, col_w=col_w) for lab in labels
+                )
+                + "\n"
+            )
+            for i, lab in enumerate(labels):
+                lines.append(
+                    "{:>{row_w}}".format(lab, row_w=row_w)
+                    + "".join(
+                        "{:>{col_w}.3f}".format(x_corr[i, j], col_w=col_w)
+                        for j in range(len(labels))
+                    )
+                    + "\n"
+                )
 
         for line in lines:
             print(line)

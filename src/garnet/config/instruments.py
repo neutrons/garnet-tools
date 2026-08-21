@@ -60,12 +60,13 @@ beamlines = {
         "DeltaTheta": 0.16,
         "Processes": 12,
         "DivergenceParams": {
-            "sigma_alpha_i": 0.595,
-            "sigma_beta_i": 0.955,
-            "sigma_alpha_f": 0.630,
-            "sigma_beta_f": 0.509,
-            "sigma_dl_mod": 0.017,
-            "sigma_mosaic": 0.3,
+            # Fit to Yb3Al5O12 (garnet standard), IPTS-31429.
+            "sigma_alpha_i": 0.2485194,
+            "sigma_beta_i": 0.4362689,
+            "sigma_alpha_f": 0.3371352,
+            "sigma_beta_f": 0.2654416,
+            "sigma_dl_mod": 0.004875392,
+            "sigma_mosaic": 0.2599287,
         },
     },
     "TOPAZ": {
@@ -100,12 +101,13 @@ beamlines = {
         "DeltaTheta": 0.044,
         "Processes": 4,
         "DivergenceParams": {
-            "sigma_alpha_i": 1.072,
-            "sigma_beta_i": 1.054,
-            "sigma_alpha_f": 0.414,
-            "sigma_beta_f": 0.288,
-            "sigma_dl_mod": 0.006,
-            "sigma_mosaic": 0.3,
+            # Fit to Yb3Al5O12 (garnet standard), IPTS-31856.
+            "sigma_alpha_i": 0.4044220,
+            "sigma_beta_i": 0.4135139,
+            "sigma_alpha_f": 0.1558517,
+            "sigma_beta_f": 0.3339786,
+            "sigma_dl_mod": 0.009124644,
+            "sigma_mosaic": 0.5256548,
         },
     },
     "MANDI": {
@@ -145,12 +147,13 @@ beamlines = {
         "DeltaTheta": 0.0420,
         "Processes": 4,
         "DivergenceParams": {
-            "sigma_alpha_i": 0.3564,
-            "sigma_beta_i": 0.3525,
-            "sigma_alpha_f": 0.2685,
-            "sigma_beta_f": 0.1470,
-            "sigma_dl_mod": 0.005672,
-            "sigma_mosaic": 0.3,
+            # Fit to Yb3Al5O12 (garnet standard), IPTS-34720.
+            "sigma_alpha_i": 0.4362019,
+            "sigma_beta_i": 0.4287497,
+            "sigma_alpha_f": 0.3766134,
+            "sigma_beta_f": 0.1754992,
+            "sigma_dl_mod": 0.005819790,
+            "sigma_mosaic": 0.4133600,
         },
     },
     "IMAGINE": {

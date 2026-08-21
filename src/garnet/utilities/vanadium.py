@@ -482,12 +482,9 @@ class Vanadium:
         m = rho * V
         r = np.cbrt(0.75 / np.pi * V)
 
-        # Illuminated atom count for the WHOLE sample (mass/molar_mass *
-        # Avogadro), assuming full illumination -- NOT mat.totalAtoms
-        # (N above), which is only the per-formula-unit atom count used
-        # for the density formula, several orders of magnitude too
-        # small to normalize a macroscopic count rate against.
-        self.N_illuminated = (m / M) * 6.02214076e23
+        # Whole-sample atom count (mass/molar_mass * Avogadro) -- NOT
+        # mat.totalAtoms (N above), which is only per-formula-unit.
+        self.N_illum = (m / M) * 6.02214076e23
 
         mu_s = n * sigma_s
         mu_a = n * sigma_a
@@ -645,37 +642,22 @@ class Vanadium:
     def calculate_pixel_solid_angle(self):
         """
         Accurate per-pixel geometric solid angle (pixel_area * cos(gamma)
-        / L2^2) from the calibrated instrument geometry, masked and grouped
-        to match the pixel grouping already applied to the data workspaces.
+        / L2^2). Computed directly on "vanadium" (not self.instrument,
+        which can resolve to a different, undated IDF) so the grouping
+        can't disagree with the grouping already applied to the data.
         """
 
         SolidAngle(
-            InputWorkspace=self.instrument,
+            InputWorkspace="vanadium",
             OutputWorkspace="solid_angle_geom",
         )
-
-        MaskDetectors(
-            Workspace="solid_angle_geom",
-            MaskedWorkspace="mask",
-        )
-
-        if self.x_bins > 1 or self.y_bins > 1:
-            SmoothNeighbours(
-                InputWorkspace="solid_angle_geom",
-                OutputWorkspace="solid_angle_geom",
-                SumPixelsX=self.x_bins,
-                SumPixelsY=self.y_bins,
-            )
 
     def _bank_wavelength_rate(
         self, workspace, output, dlamda, solid_angle=None
     ):
         """
-        Group a Momentum-units event workspace by bank, rebin into fixed
-        wavelength bins, and convert to a per-Angstrom rate. The input
-        workspace is expected to already be normalized by proton charge
-        (as done in load_runs), so the result is counts / (charge * Angstrom)
-        per bank.
+        Group a Momentum-units event workspace by bank, rebin to
+        wavelength, and convert to a per-Angstrom rate.
 
         Parameters
         ----------
@@ -687,16 +669,8 @@ class Vanadium:
             Wavelength bin width in Angstrom.
         solid_angle : str, optional
             Per-pixel geometric solid angle workspace (see
-            calculate_pixel_solid_angle). When given, it is grouped by
-            the same bank scheme (summed) and the bank-summed rate is
-            divided by that bank-total solid angle once, so the result
-            is expressed per steradian. Dividing per-pixel by its own
-            tiny solid angle and then summing those already-inflated
-            per-pixel rates across a whole bank (~4096 pixels for
-            CORELLI) would overcount by roughly the bank's pixel count
-            -- sum first, divide once, matching how ΔΩ_b itself is
-            defined (sum of the per-pixel solid angles in the bank).
-
+            calculate_pixel_solid_angle). If given, bank-summed once and
+            divided in, so the result is per steradian.
         """
 
         ConvertUnits(
@@ -716,15 +690,8 @@ class Vanadium:
         if solid_angle is not None:
             solid_angle_banks = "{}_by_bank".format(solid_angle)
 
-            # GroupDetectors' Behaviour="Sum" adds Y arrays element-wise,
-            # so it requires literally matching bin boundaries across
-            # spectra -- unlike Divide (used before this was grouped),
-            # which just broadcasts each spectrum's single bin
-            # independently regardless of its numeric edges. Collapse
-            # every spectrum onto one common bin spanning the full
-            # range actually present (not a hardcoded range, which
-            # could silently drop data whose real bin edges -- TOF,
-            # momentum, whatever unit it inherited -- fall outside it).
+            # GroupDetectors' Sum needs matching bin edges across spectra,
+            # so collapse each to one bin spanning its own actual range.
             n_hist = mtd[solid_angle].getNumberHistograms()
             x_lo = min(mtd[solid_angle].readX(i)[0] for i in range(n_hist))
             x_hi = max(mtd[solid_angle].readX(i)[-1] for i in range(n_hist))
@@ -760,22 +727,14 @@ class Vanadium:
 
     def generate_count_rate(self):
         """
-        Wavelength-dependent, per-bank signal count rate derived from the
-        background-subtracted, absorption-corrected vanadium workspace,
-        normalized by the accurate per-pixel geometric solid angle, the
-        illuminated vanadium atom count, and the vanadium scattering
-        cross section. This last division is what removes the per-
-        steradian dependence left over from the solid-angle
-        normalization (unlike generate_background_count_rate's result,
-        which has no such division and stays per-steradian): the
-        result is the calibrated bank response R_b(lambda) ~=
-        Phi(lambda) * epsilon_b(lambda), in counts / (charge * Angstrom
-        * barn) -- the incident-flux x detector-efficiency ingredient
-        for a forward count-rate simulator, independent of a
-        reflection's own solid-angle footprint.
+        Per-bank signal count rate R_b(lambda) ~= Phi(lambda) *
+        epsilon_b(lambda), in counts / (charge * Angstrom * barn):
+        background-subtracted, absorption-corrected, normalized by solid
+        angle and vanadium cross section (unlike
+        generate_background_count_rate, which stays per-steradian).
 
         set_sample_geometry must have been called first
-        (self.N_illuminated, self.sigma_s).
+        (self.N_illum, self.sigma_s).
         """
 
         self.calculate_pixel_solid_angle()
@@ -790,19 +749,16 @@ class Vanadium:
         Scale(
             InputWorkspace="count_rate",
             OutputWorkspace="count_rate",
-            Factor=4.0 * np.pi / (self.N_illuminated * self.sigma_s),
+            Factor=4.0 * np.pi / (self.N_illum * self.sigma_s),
             Operation="Multiply",
         )
 
     def generate_background_count_rate(self):
         """
-        Wavelength-dependent, per-bank background count rate derived from
-        the standalone background run, normalized by the accurate
-        per-pixel geometric solid angle (see generate_count_rate) so the
-        result is per steradian -- consistent with what the background
-        ROI integral (counts = q_eff * beta_b * DeltaOmega_ROI *
-        DeltaLambda_ROI) expects. calculate_pixel_solid_angle must have
-        already been called (generate_count_rate does this).
+        Per-bank background count rate from the standalone background
+        run, normalized by solid angle only (stays per-steradian).
+        calculate_pixel_solid_angle must have already run
+        (generate_count_rate does this).
         """
 
         self._bank_wavelength_rate(
@@ -917,12 +873,9 @@ class Vanadium:
 
     def _plot_instrument_map(self, workspace, label):
         """
-        Per-pixel value plotted at its detector position in the gamma/nu
-        convention (gamma: in-plane angle from the beam, nu: out-of-plane
-        elevation), matching the convention used elsewhere in garnet-tools
-        (see calibration.py, reduction/data.py, reduction/resolution.py).
-        Workspaces with more than one bin are collapsed to a single
-        per-pixel value by averaging over the bin axis first.
+        Per-pixel value plotted at its detector position in gamma/nu
+        (in-plane angle from beam, out-of-plane elevation), same
+        convention as calibration.py / reduction/data.py / resolution.py.
         """
 
         y = mtd[workspace].extractY().mean(axis=1)

@@ -89,7 +89,10 @@ class StructureAnalysis:
 
         apply_corr = False
         if not self.refine_abs:
-            apply_corr = (np.array(self.parameters) > 0).all()
+            apply_corr = (
+                bool(self.chemical_formula)
+                and (np.array(self.parameters) > 0).all()
+            )
 
         if apply_corr:
             self.apply_correction()

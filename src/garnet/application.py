@@ -1201,15 +1201,9 @@ class FormView(QWidget):
         self.mat_z_line = QLineEdit()
         self.mat_z_line.setPlaceholderText("Z")
         self.mat_z_line.setValidator(QIntValidator(1, 10000, self))
-        self.mat_vol_line = QLineEdit()
-        self.mat_vol_line.setPlaceholderText("Volume")
-        self.mat_vol_line.setReadOnly(True)
         formula_layout.addWidget(self.mat_formula_line)
         formula_layout.addWidget(QLabel("Z", self))
         formula_layout.addWidget(self.mat_z_line)
-        formula_layout.addWidget(QLabel("Ω", self))
-        formula_layout.addWidget(self.mat_vol_line)
-        formula_layout.addWidget(QLabel("Å³", self))
 
         self.refine_structure_box = QCheckBox("Refine Structure", self)
         self.refine_structure_box.setChecked(False)
@@ -2455,20 +2449,14 @@ class FormView(QWidget):
             sites.append(entry)
         return sites
 
-    def set_mat_formula(self, formula, Z, vol):
+    def set_mat_formula(self, formula, Z):
         self.mat_formula_line.setText(formula)
         self.mat_z_line.setText(str(Z))
-        self.mat_vol_line.setText("{:.4f}".format(vol))
 
     def get_mat_formula(self):
         formula = self.mat_formula_line.text().strip()
         Z = int(self.mat_z_line.text()) if self.mat_z_line.text() else 1
-        vol = (
-            float(self.mat_vol_line.text())
-            if self.mat_vol_line.text()
-            else 0.0
-        )
-        return formula, Z, vol
+        return formula, Z
 
     def get_refine_structure(self):
         return self.refine_structure_box.isChecked()
@@ -5598,11 +5586,10 @@ class FormPresenter:
             sg = cs.get_space_group()
             scatterers = cs.get_scatterers()
             formula, Z = cs.get_chemical_formula_z_parameter()
-            vol = cs.get_unit_cell_volume()
             self.view.set_lattice_display((a, b, c, alpha, beta, gamma))
             self.view.set_mat_space_group(sg)
             self.view.set_mat_sites(scatterers)
-            self.view.set_mat_formula(formula, int(Z), vol)
+            self.view.set_mat_formula(formula, int(Z))
         except Exception as e:
             self.view.show_error(str(e))
 
@@ -5617,8 +5604,7 @@ class FormPresenter:
             self.view.set_mat_sites(sites)
             formula = material.get("ChemicalFormula", "")
             Z = material.get("ZParameter", 1)
-            vol = material.get("UnitCellVolume", 0)
-            self.view.set_mat_formula(formula, int(Z), vol)
+            self.view.set_mat_formula(formula, int(Z))
             refine = "Sites" in material
             self.view.set_refine_structure(refine)
             if sites:
@@ -5639,7 +5625,7 @@ class FormPresenter:
             self.view.set_refine_shape(sample.get("Refine", False))
 
     def save_mat(self):
-        formula, Z, vol = self.view.get_mat_formula()
+        formula, Z = self.view.get_mat_formula()
         sg = self.view.get_mat_space_group()
         sites = self.view.get_mat_sites()
         refine_struct = self.view.get_refine_structure()
@@ -5647,7 +5633,7 @@ class FormPresenter:
         u, v = self.view.get_sample_orientation()
         refine_shape = self.view.get_refine_shape()
         self.model.set_mat(
-            formula, Z, vol, sg, sites, refine_struct, twh, u, v, refine_shape
+            formula, Z, sg, sites, refine_struct, twh, u, v, refine_shape
         )
 
     def update_formula_z(self, *_):
@@ -5662,11 +5648,11 @@ class FormPresenter:
                 lattice_params, _ = self.model.get_lattice_from_UB(ub_file)
             except Exception:
                 pass
-        formula, Z, vol = self.model.compute_formula_and_z(
+        formula, Z = self.model.compute_formula_and_z(
             sg, sites, lattice_params
         )
         if formula:
-            self.view.set_mat_formula(formula, Z, vol)
+            self.view.set_mat_formula(formula, Z)
 
     def show_crystal(self):
         ub_file = self.view.get_UB()
@@ -5846,7 +5832,6 @@ class FormModel:
         self,
         formula,
         Z,
-        vol,
         sg,
         sites,
         refine_structure,
@@ -5860,7 +5845,6 @@ class FormModel:
         material = {}
         material["ChemicalFormula"] = formula
         material["ZParameter"] = float(Z)
-        material["UnitCellVolume"] = float(vol)
         if refine_structure:
             material["SpaceGroup"] = sg
             material["Sites"] = sites
@@ -6208,7 +6192,7 @@ class FormModel:
           - Z = GCD of all site multiplicities
           - formula = atom counts per formula unit, occupancy-weighted
 
-        Returns (formula, Z, vol).  Returns ("", 1, 0.0) on any error.
+        Returns (formula, Z).  Returns ("", 1) on any error.
         """
         parsed = []
         scatterer_parts = []
@@ -6227,7 +6211,7 @@ class FormModel:
             parsed.append((elem, x, y, z, occ))
 
         if not parsed:
-            return "", 1, 0.0
+            return "", 1
 
         if lattice_params is not None:
             a, b, c, alpha, beta, gamma = lattice_params
@@ -6241,13 +6225,8 @@ class FormModel:
 
             cs = MantidCS(cell_str, hm, "; ".join(scatterer_parts))
             sg = cs.getSpaceGroup()
-            vol = (
-                cs.getUnitCell().volume()
-                if lattice_params is not None
-                else 0.0
-            )
         except Exception:
-            return "", 1, 0.0
+            return "", 1
 
         atom_dict = {}
         for elem, x, y, z, occ in parsed:
@@ -6274,7 +6253,7 @@ class FormModel:
         n_per_Z = [nw / Z for nw in n_wgt]
         formula = "-".join(formula_parts).format(*n_per_Z)
 
-        return formula, Z, vol
+        return formula, Z
 
     def get_runs(self):
         if self.reduction.plan is not None:

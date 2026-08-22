@@ -627,10 +627,22 @@ class FormView(QWidget):
         notation = QDoubleValidator.StandardNotation
         manual_validator = QDoubleValidator(-100, 100, 5, notation=notation)
 
+        combo_arrow_style = (
+            "QComboBox::down-arrow {"
+            "  image: none;"
+            "  width: 0; height: 0;"
+            "  border-left: 4px solid transparent;"
+            "  border-right: 4px solid transparent;"
+            "  border-top: 5px solid palette(text);"
+            "  margin-right: 6px;"
+            "}"
+        )
+
         self._view_combo = QComboBox(self)
         self._view_combo.addItem("[hkl]")
         self._view_combo.addItem("[uvw]")
         self._view_combo.setToolTip("Select axis notation for view direction.")
+        self._view_combo.setStyleSheet(combo_arrow_style)
         self._view_combo.currentIndexChanged.connect(
             self._update_manual_labels
         )
@@ -639,6 +651,7 @@ class FormView(QWidget):
         self._viewup_combo.addItem("[hkl]")
         self._viewup_combo.addItem("[uvw]")
         self._viewup_combo.setToolTip("Select axis notation for up direction.")
+        self._viewup_combo.setStyleSheet(combo_arrow_style)
         self._viewup_combo.currentIndexChanged.connect(
             self._update_manual_labels
         )

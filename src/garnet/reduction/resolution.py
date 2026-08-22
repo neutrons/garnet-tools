@@ -1058,6 +1058,22 @@ class ResolutionEllipsoid:
             keys "residual_norm", "used_peaks", "robust_weights".
 
         """
+        if self.mosaic == "full" and "sigma_mosaic" in sigmas:
+            # expand an isotropic prior (sigma_mosaic) into the full
+            # tensor: same sigma on the three axis-aligned directions,
+            # zero on the off-diagonal directions -- reproduces the
+            # isotropic model exactly (M = sigma_mosaic^2 * I).
+            s = sigmas["sigma_mosaic"]
+            sigmas = {
+                **sigmas,
+                "sigma_mosaic_00": s,
+                "sigma_mosaic_11": s,
+                "sigma_mosaic_22": s,
+                "sigma_mosaic_01": 0.0,
+                "sigma_mosaic_02": 0.0,
+                "sigma_mosaic_12": 0.0,
+            }
+
         if self.mosaic == "isotropic":
             keys = [
                 "sigma_alpha_i",

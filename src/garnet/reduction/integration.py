@@ -279,7 +279,7 @@ class Integration(PeakProjection):
             self.prior_res = None
             if div_params is not None:
                 self.prior_res = ResolutionEllipsoid(
-                    "peaks", r_cut=r_cut, mosaic="isotropic"
+                    "peaks", r_cut=r_cut, mosaic="full"
                 )
                 self.prior_res.set_variance_parameters_deg(div_params)
 

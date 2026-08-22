@@ -33,8 +33,6 @@ import pyvista as pv
 
 np.random.seed(13)
 
-import scipy.optimize
-import scipy.interpolate
 import scipy.stats
 
 from sklearn.cluster import AgglomerativeClustering
@@ -599,7 +597,7 @@ class Peaks:
     def refine_ellipsoids(self, peaks):
         filename = os.path.splitext(self.filename)[0]
 
-        res = ResolutionEllipsoid(peaks, r_cut=np.inf)
+        res = ResolutionEllipsoid(peaks, r_cut=np.inf, mosaic="full")
 
         res.fit()
         res.plot_diagnostics(filename + "_res.pdf")

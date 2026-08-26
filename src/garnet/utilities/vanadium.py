@@ -41,6 +41,7 @@ from mantid.simpleapi import (
     ClearMaskFlag,
     InvertMask,
     ExtractMask,
+    SaveMask,
     ExtractMonitors,
     SetSample,
     SetBeam,
@@ -209,6 +210,10 @@ class Vanadium:
             InputWorkspace=self.instrument,
             UngroupDetectors=True,
             OutputWorkspace="mask",
+        )
+
+        SaveMask(
+            InputWorkspace="mask", OutputFile=self._output_path("mask.xml")
         )
 
         ClearMaskFlag(Workspace=self.instrument)

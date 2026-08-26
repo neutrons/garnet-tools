@@ -11,6 +11,8 @@ import yaml
 
 import numpy as np
 
+import matplotlib.pyplot as plt
+
 from scipy.spatial.transform import Rotation
 
 import multiprocessing
@@ -267,11 +269,63 @@ def _process_run(config, ipts, run, idx, tol):
 
     print("run {}: seeded cell".format(run), *ub.get_lattice_parameters())
 
-    peaks_model.remove_unindexed_peaks(strong_ws)
+    ub.copy_UB(data_ws)
 
-    peaks_model.integrate_ellipsoids(data_ws, strong_ws, peak_radius)
+    peaks_model.predict_peaks(
+        data_ws,
+        strong_ws,
+        centering,
+        d_min,
+        wavelength_band[0],
+        wavelength_band[1],
+    )
 
-    peaks_model.remove_weak_peaks(strong_ws, 20)
+    peaks_model.integrate_peaks(
+        md_ws,
+        strong_ws,
+        Q_min / np.cbrt(3),
+        background_inner_fact=np.cbrt(2),
+        background_outer_fact=np.cbrt(3),
+        method="sphere",
+        centroid=False,
+    )
+
+    peaks_model.remove_weak_peaks(strong_ws, 3)
+
+    radii, sig_noise, _, _, _, _ = peaks_model.intensity_vs_radius(
+        md_ws,
+        strong_ws,
+        Q_min / np.cbrt(3),
+        background_inner_fact=np.cbrt(2),
+        background_outer_fact=np.cbrt(3),
+        fix=True,
+    )
+
+    rising = slice(0, np.argmax(sig_noise) + 1)
+    radius = radii[rising][
+        np.argmin(np.abs(sig_noise[rising] - 0.9 * sig_noise.max()))
+    ]
+
+    fig, ax = plt.subplots(1, 1, layout="constrained")
+    ax.plot(radii, sig_noise)
+    ax.axvline(
+        radius,
+        color="C1",
+        linestyle="--",
+        label="radius={:.4f}".format(radius),
+    )
+    ax.set_xlabel(r"$r$ [$\AA^{-1}$]")
+    ax.set_ylabel("Signal/Noise")
+    ax.minorticks_on()
+    ax.legend()
+    fig.savefig(
+        os.path.join(output_folder, "intensity_vs_radius_{}.pdf".format(run))
+    )
+    plt.close(fig)
+
+    peaks_model.integrate_peaks(md_ws, strong_ws, radius * 1.5, centroid=True)
+
+    peaks_model.remove_weak_peaks(strong_ws, 10)
 
     ub.index_peaks(tol)
 
@@ -307,6 +361,15 @@ def _process_run(config, ipts, run, idx, tol):
         Extents=extents,
         Bins=bins,
         OutputWorkspace=combine_ws,
+    )
+
+    mdq_filename = os.path.join(output_folder, "mdq_{}.nxs".format(run))
+    SaveMD(
+        InputWorkspace=md_ws,
+        Filename=mdq_filename,
+        SaveHistory=False,
+        SaveLogs=False,
+        SaveInstrument=False,
     )
 
     DeleteWorkspace(Workspace=md_ws)
@@ -571,9 +634,6 @@ class Peaks:
                 mtd["merge"].setSignalArray(signal)
                 mtd["merge"].setErrorSquaredArray(error_sq)
 
-            for md in md_files:
-                os.remove(md)
-
         peak_files = [
             os.path.join(self.output_folder, f)
             for f in os.listdir(self.output_folder)
@@ -590,7 +650,6 @@ class Peaks:
                     RHSWorkspace="peaks",
                     OutputWorkspace="peaks",
                 )
-            os.remove(sf)
 
         filename = os.path.join(self.output_folder, "peaks.nxs")
         SaveNexus(InputWorkspace="peaks", Filename=filename)
@@ -617,7 +676,7 @@ class Peaks:
         ub = UBModel("peaks")
         ub.save_UB(filename)
 
-        res = ResolutionEllipsoid("peaks", r_cut=self.peak_radius)
+        res = ResolutionEllipsoid("peaks", r_cut=np.inf)
         res.fit()
 
         if res.model is not None:

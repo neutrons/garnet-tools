@@ -356,7 +356,7 @@ class PeaksModel:
             FixQAxis=False,
             FixMajorAxisLength=False,
             UseCentroid=centroid,
-            MaxIterations=10,
+            MaxIterations=5,
             ReplaceIntensity=True,
             IntegrateIfOnEdge=True,
             AdaptiveQBackground=adaptive,
@@ -493,6 +493,70 @@ class PeaksModel:
 
         DeleteWorkspace(Workspace="tmp")
 
+    def renumber_by_size(self, peaks, n=None):
+        """
+        Renumber peak RunNumbers 1..n ordered by observed peak shape size.
+
+        Bins peaks by their currently-stored peak shape's largest radius
+        (set by a prior integrate_peaks/integrate_ellipsoids call) into n
+        equal-count bins, smallest (RunNumber=1) to largest (RunNumber=n)
+        -- for use with integrate_peaks_with_radii, which selects each
+        radius's peak group by RunNumber. Call stash_run_number first to
+        preserve the real run numbers, and restore_run_number after
+        re-integrating.
+
+        Parameters
+        ----------
+        peaks : str
+            Name of peaks table.
+        n : int or None
+            Number of size bins. Defaults to one bin per peak.
+
+        Returns
+        -------
+        radii_bins : ndarray, shape (n_bins,)
+            Mean largest radius of the peaks assigned to each bin,
+            ordered from smallest (bin 1) to largest (bin n).
+
+        """
+        ws = mtd[peaks]
+        n_peaks = ws.getNumberPeaks()
+
+        max_radii = np.zeros(n_peaks)
+        for i in range(n_peaks):
+            shape = ws.getPeak(i).getPeakShape()
+            name = shape.shapeName()
+
+            if name in ("ellipsoid", "spherical"):
+                d = eval(shape.toJSON())
+                if name == "ellipsoid":
+                    max_radii[i] = max(
+                        d["radius0"], d["radius1"], d["radius2"]
+                    )
+                else:
+                    max_radii[i] = d["radius"]
+
+        n_bins = n_peaks if (n is None) else int(n)
+        n_bins = max(1, min(n_bins, n_peaks))
+
+        order = np.argsort(max_radii)
+        sorted_radii = max_radii[order]
+
+        bin_number = np.empty(n_peaks, dtype=int)
+        bin_indices = [[] for _ in range(n_bins)]
+        for rank, peak_idx in enumerate(order):
+            b = rank * n_bins // n_peaks
+            bin_number[peak_idx] = b + 1
+            bin_indices[b].append(rank)
+
+        for i in range(n_peaks):
+            ws.getPeak(i).setRunNumber(int(bin_number[i]))
+
+        radii_bins = np.array(
+            [sorted_radii[idx].mean() for idx in bin_indices]
+        )
+        return radii_bins
+
     def intensity_vs_radius(
         self,
         md,
@@ -575,7 +639,7 @@ class PeaksModel:
         # ol = mtd['peaks'].sample().getOrientedLattice()
         # hkls = mtd[peaks+'_intens_vs_rad'].getAxis(1).extractValues()
         # hkls = [np.array(hkl.split(' ')).astype(float) for hkl in hkls]
-        lamda = np.array([peak.getWavelength() for peak in mtd["peaks"]])
+        lamda = np.array([peak.getWavelength() for peak in mtd[peaks]])
 
         y = mtd[peaks + "_intens_vs_rad"].extractY()
         x = mtd[peaks + "_intens_vs_rad"].extractX()

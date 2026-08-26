@@ -9,9 +9,12 @@ sys.path.append(directory)
 
 import argparse
 
+import yaml
+
 from mantid.simpleapi import LoadNexus
 
 from garnet.reduction.resolution import ResolutionEllipsoid
+from garnet.utilities.peaks import Peaks
 
 # Datasets used to characterize the per-instrument resolution model.
 # Each entry re-fits an already-reduced peaks.nxs (no raw-data reduction
@@ -61,6 +64,44 @@ def recompute(instrument, peaks_nxs, r_cut, output):
     res.write_resolution_parameters(output)
     print("[{}] wrote {}".format(instrument, output))
 
+    csv_output = os.path.splitext(output)[0] + ".csv"
+    res.write_diagnostics_csv(csv_output)
+    print("[{}] wrote {}".format(instrument, csv_output))
+
+    plot_output = os.path.splitext(output)[0] + ".pdf"
+    res.plot_diagnostics(plot_output)
+    print("[{}] wrote {}".format(instrument, plot_output))
+
+
+def run_peaks_yaml(config_file):
+    """
+    Run the full peak-finding pipeline (garnet.utilities.peaks.Peaks) from
+    a config file -- same as `python -m garnet.utilities.peaks <config>` --
+    then recompute the resolution model (with CSV/plot diagnostics) from
+    the peaks.nxs it produces, unlike `Peaks.finalize_and_save`'s own
+    (isotropic, diagnostics-free) fit.
+    """
+    with open(config_file, "r") as f:
+        params = yaml.safe_load(f)
+
+    config_dir = os.path.dirname(os.path.abspath(config_file))
+    name = os.path.splitext(os.path.basename(config_file))[0]
+
+    output_folder = os.path.join(config_dir, name)
+    os.makedirs(output_folder, exist_ok=True)
+
+    params["OutputFolder"] = output_folder
+
+    peaks = Peaks(params)
+    peaks.run()
+
+    instrument = params.get("Instrument", "TOPAZ")
+    peaks_nxs = os.path.join(output_folder, "peaks.nxs")
+    r_cut = params.get("PeakRadius", 0.25)
+    output = os.path.join(output_folder, "resolution.txt")
+
+    recompute(instrument, peaks_nxs, r_cut, output)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -76,10 +117,29 @@ if __name__ == "__main__":
         choices=sorted(CASES),
         help="Only recompute this instrument (default: all of them)",
     )
+    parser.add_argument(
+        "--peaks-yaml",
+        action="append",
+        metavar="CONFIG",
+        help=(
+            "Run the full peak-finding pipeline from this "
+            "garnet.utilities.peaks config file first (re-reduces the raw "
+            "runs), then recompute resolution from the resulting "
+            "peaks.nxs. May be given multiple times; combines with "
+            "--instrument/CASES if both are given."
+        ),
+    )
     args = parser.parse_args()
 
-    instruments = [args.instrument] if args.instrument else sorted(CASES)
+    if args.peaks_yaml:
+        for config_file in args.peaks_yaml:
+            run_peaks_yaml(config_file)
 
-    for instrument in instruments:
-        case = CASES[instrument]
-        recompute(instrument, case["peaks_nxs"], case["r_cut"], case["output"])
+    if not args.peaks_yaml or args.instrument:
+        instruments = [args.instrument] if args.instrument else sorted(CASES)
+
+        for instrument in instruments:
+            case = CASES[instrument]
+            recompute(
+                instrument, case["peaks_nxs"], case["r_cut"], case["output"]
+            )

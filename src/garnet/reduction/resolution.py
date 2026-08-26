@@ -1,3 +1,5 @@
+import csv
+
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import numpy as np
@@ -596,7 +598,9 @@ class ResolutionEllipsoid:
     def _lab_axes_to_sample(self, R, V_lab):
         return R.T @ V_lab
 
-    def _model_design_lab(self, two_theta, phi, lamda, R):
+    def _model_design_lab(
+        self, two_theta, phi, lamda, R, lambda_0=None, p=1.0
+    ):
         """
         Approximation to the resolution function.
 
@@ -620,6 +624,20 @@ class ResolutionEllipsoid:
         R : ndarray
             Goniometer matrix (only used for the "diagonal"/"full" mosaic
             models).
+        lambda_0 : float or None, optional
+            Saturation wavelength scale for the isotropic incident-
+            divergence model sigma_i(lambda) = sigma_i * x^p /
+            sqrt(1 + x^(2p)), x = lambda / lambda_0 -- a smooth curve
+            that grows like x^p for lambda << lambda_0 and saturates to
+            sigma_i for lambda >> lambda_0. None (default) disables the
+            scaling -- sigma_i is then a plain wavelength-independent
+            sigma, as before this model existed.
+        p : float, optional
+            Growth-rate exponent for the sigma_i(lambda) curve above.
+            Fit jointly with lambda_0 rather than assumed -- empirically
+            close to 2 (not the linear growth a tanh(lambda/lambda_0)
+            curve implies) for TOPAZ/CORELLI, ~1.75 for MANDI. Unused
+            when lambda_0 is None.
 
         Returns
         -------
@@ -634,26 +652,81 @@ class ResolutionEllipsoid:
         cp = np.cos(phi)
         sp = np.sin(phi)
 
-        alpha_i = np.array([1.0, 0.0, 0.0])
-        beta_i = np.array([0.0, 1.0, 0.0])
+        # Incident-beam divergence directions. k_i is always exactly
+        # the beam axis (no elevation/azimuth to vary), so the
+        # horizontal/vertical angular coordinates (gamma, nu) and
+        # literal tangent-plane directions coincide exactly here.
+        # gamma_i/nu_i were fit as separate parameters, but came out
+        # strongly correlated (0.5-0.9 across TOPAZ/CORELLI/MANDI) --
+        # not separately identifiable from this data -- so they're
+        # combined into one isotropic incident-divergence term.
+        gamma_i = np.array([1.0, 0.0, 0.0])
+        nu_i = np.array([0.0, 1.0, 0.0])
 
         ki = np.array([0.0, 0.0, 1.0])
         kf = np.array([s * cp, s * sp, c])
 
-        alpha_f = np.array([c * cp, c * sp, -s])
-        beta_f = np.array([-sp, cp, 0.0])
+        # Final-beam divergence directions, in terms of the detector's
+        # horizontal/vertical angular coordinates (gamma, nu) -- not
+        # the (two_theta, phi) polar-around-the-beam-axis angles kf is
+        # built from above. Away from the equatorial plane (nu != 0)
+        # these two angular bases rotate apart, so a divergence model
+        # built from (two_theta, phi) tangents mixes the true
+        # horizontal/vertical spread into the wrong directions.
+        #
+        # gamma = atan2(x, z), nu = arcsin(y) for kf = (x, y, z); see
+        # diagnostics() for the same (gamma, nu) convention. rho =
+        # sqrt(x^2 + z^2) = cos(nu).
+        #
+        # gamma_f = cos(nu) * h_f (h_f = unit horizontal tangent,
+        # d(kf)/d(gamma) = cos(nu) * h_f) -- the cos(nu) simplifies
+        # away to (z, 0, -x) exactly, avoiding a 1/rho division. This
+        # makes sigma_gamma_f a coordinate-angle uncertainty (in
+        # gamma itself), not a literal tangent-plane spread.
+        # nu_f = v_f (unit vertical tangent, d(kf)/d(nu) = v_f).
+        x, y, z = kf
+        rho = np.hypot(x, z)
+
+        gamma_f = np.array([z, 0.0, -x])
+        nu_f = np.array([-x * y, rho**2, -y * z]) / rho
 
         q_lambda = kf - ki
 
         Q_vec = k * q_lambda
         Q2 = np.dot(Q_vec, Q_vec)
 
+        # (sigma_lambda/lambda)^2 = sigma_dl_mod^2 + (sigma_dl_mod_lam * lambda)^2
+        # -- a wavelength-independent floor (sigma_dl_mod, as before)
+        # plus a term that grows with lambda (sigma_dl_mod_lam).
+        #
+        # Incident divergence saturates with wavelength instead of
+        # growing without bound: sigma_i(lambda) = sigma_i * x^p /
+        # sqrt(1 + x^(2p)), x = lambda / lambda_0. Physical motivation:
+        # if the incident beam is guide-fed, the guide's supermirror
+        # critical angle scales with lambda, so short-lambda neutrons
+        # are guide-limited (divergence rises with lambda) until the
+        # guide's acceptance exceeds the source aperture's own
+        # divergence, at which point the guide stops being the
+        # limiting factor and sigma_i saturates at its asymptotic
+        # value. lambda_0 and p are fit jointly, nonlinearly, alongside
+        # the (still linear/bounded) sigma parameters -- see
+        # robust_nnls_saturation. p empirically comes out close to 2,
+        # not the linear (p=1) growth a tanh(lambda/lambda_0) curve
+        # would imply.
+        if lambda_0 is not None:
+            x = lamda / lambda_0
+            sat2 = x ** (2 * p) / (1.0 + x ** (2 * p))
+        else:
+            sat2 = 1.0
+
         cols = [
-            k**2 * self._outer6(alpha_i),  # sigma_alpha_i^2
-            k**2 * self._outer6(beta_i),  # sigma_beta_i^2
-            k**2 * self._outer6(alpha_f),  # sigma_alpha_f^2
-            k**2 * self._outer6(beta_f),  # sigma_beta_f^2
+            (k**2 * sat2)
+            * (self._outer6(gamma_i) + self._outer6(nu_i)),  # sigma_i^2
+            k**2 * self._outer6(gamma_f),  # sigma_gamma_f^2
+            k**2 * self._outer6(nu_f),  # sigma_nu_f^2
             k**2 * self._outer6(q_lambda),  # sigma_dl_mod^2 (σ_λ/λ)
+            (k**2 * lamda**2)
+            * self._outer6(q_lambda),  # sigma_dl_mod_lam^2
         ]
 
         if self.mosaic == "isotropic":
@@ -685,12 +758,33 @@ class ResolutionEllipsoid:
             peak.getAzimuthal(),
             peak.getWavelength(),
             peak.getGoniometerMatrix(),
+            lambda_0=self.model.get("lambda_0"),
+            p=self.model.get("p", 1.0),
         )
         y = A @ self.model["variance_parameters"]
         S = np.array(
             [[y[0], y[5], y[4]], [y[5], y[1], y[3]], [y[4], y[3], y[2]]]
         )
         return 0.5 * (S + S.T)
+
+    def _signed_sqrt(self, v, eps):
+        """
+        sign(v) * sqrt(|v| + eps).
+
+        `vech6`'s three diagonal rows (Q_xx, Q_yy, Q_zz) are always
+        >= 0, where this is equivalent to the naive sqrt(max(v, eps))
+        width transform. Its three off-diagonal rows (Q_yz, Q_xz,
+        Q_xy) are signed -- empirically ~2/3 negative, comparable in
+        magnitude to the diagonal rows -- and a plain max(v, eps)
+        floor collapses all of that sign/magnitude information to
+        ~sqrt(eps), destroying real data about how each peak's
+        ellipsoid is tilted in the lab frame instead of just guarding
+        against sqrt of a tiny/negative model-prediction rounding
+        error. This is a smooth, sign-preserving generalization of the
+        same width transform, applied uniformly since it reduces to
+        the old behavior on the always-nonnegative rows anyway.
+        """
+        return np.sign(v) * np.sqrt(np.abs(v) + eps)
 
     def robust_nnls(self, A, y, max_iter=20, c=1.345, eps=1e-12):
         """
@@ -715,9 +809,7 @@ class ResolutionEllipsoid:
         def width_resid(x):
             # compare widths rather than variances
             y_fit = A @ x
-            return np.sqrt(np.maximum(y_fit, eps)) - np.sqrt(
-                np.maximum(y, eps)
-            )
+            return self._signed_sqrt(y_fit, eps) - self._signed_sqrt(y, eps)
 
         # initial unweighted fit for a feasible starting point
         x = least_squares(
@@ -755,6 +847,133 @@ class ResolutionEllipsoid:
 
         residual_norm = np.linalg.norm(A @ x - y)
         return x, residual_norm, w, result
+
+    def robust_nnls_saturation(
+        self,
+        A,
+        y,
+        lamda,
+        tanh_cols,
+        max_iter=20,
+        c=1.345,
+        eps=1e-12,
+        lambda_0_bounds=(0.01, 100.0),
+        p_bounds=(0.2, 6.0),
+    ):
+        """
+        Like `robust_nnls`, but `tanh_cols` columns additionally get
+        scaled by x^(2p) / (1 + x^(2p)) (x = lamda / lambda_0) before
+        every residual evaluation, with lambda_0 and p fit jointly and
+        nonlinearly alongside the (still nonnegative) linear sigma^2
+        parameters. `least_squares` handles a mix of nonlinear
+        parameters and several bounded linear ones fine -- lambda_0
+        and p are just appended to the parameter vector.
+
+        Parameters
+        ----------
+        A, y : as in `robust_nnls` -- A's `tanh_cols` columns must be
+            the raw (lambda_0=None) columns from `_model_design_lab`,
+            not yet saturation-scaled.
+        lamda : ndarray, shape (A.shape[0],)
+            Wavelength (Angstrom) for each row of A.
+        tanh_cols : sequence of int
+            Column indices of A to scale by the saturation factor.
+        lambda_0_bounds : tuple of float, optional
+            Bounds for lambda_0 (Angstrom). Deliberately wide -- a
+            lambda_0 much larger than the data's wavelength range
+            recovers pure power-law growth, and one much smaller
+            recovers a wavelength-independent constant, so the data
+            is free to prefer either limit.
+        p_bounds : tuple of float, optional
+            Bounds for the growth-rate exponent p.
+
+        Returns
+        -------
+        x : ndarray
+            Fitted sigma^2 parameters (same meaning/order as
+            `robust_nnls`, i.e. without lambda_0/p).
+        lambda_0 : float
+            Fitted saturation wavelength scale.
+        p : float
+            Fitted growth-rate exponent.
+        residual_norm : float
+        w : ndarray
+            Final robust (Huber) weights.
+        result : OptimizeResult
+            `result.x`/`result.jac` have two extra (final) entries/
+            columns, for lambda_0 then p, for `_parameter_covariance`.
+
+        """
+
+        finite = (
+            np.all(np.isfinite(A), axis=1)
+            & np.isfinite(y)
+            & np.isfinite(lamda)
+        )
+        A = A[finite]
+        y = y[finite]
+        lamda = lamda[finite]
+
+        n = A.shape[1]
+        lo = np.concatenate([np.zeros(n), [lambda_0_bounds[0], p_bounds[0]]])
+        hi = np.concatenate(
+            [np.full(n, np.inf), [lambda_0_bounds[1], p_bounds[1]]]
+        )
+
+        def scaled_A(lambda_0, p):
+            x = lamda / lambda_0
+            factor = x ** (2 * p) / (1.0 + x ** (2 * p))
+            A_s = A.copy()
+            for j in tanh_cols:
+                A_s[:, j] = A_s[:, j] * factor
+            return A_s
+
+        def width_resid(v):
+            x, lambda_0, p = v[:-2], v[-2], v[-1]
+            y_fit = scaled_A(lambda_0, p) @ x
+            return self._signed_sqrt(y_fit, eps) - self._signed_sqrt(y, eps)
+
+        v0 = np.concatenate(
+            [
+                np.zeros(n),
+                [np.sqrt(lambda_0_bounds[0] * lambda_0_bounds[1])],
+                [1.0],
+            ]
+        )
+
+        v = least_squares(width_resid, v0, bounds=(lo, hi), method="trf").x
+
+        w = np.ones(A.shape[0])
+        result = None
+
+        for _ in range(max_iter):
+            r = width_resid(v)
+
+            mad = np.median(np.abs(r - np.median(r)))
+            scale = 1.4826 * mad + eps
+
+            result = least_squares(
+                width_resid,
+                v,
+                bounds=(lo, hi),
+                method="trf",
+                loss="huber",
+                f_scale=c * scale,
+            )
+            v_new = result.x
+
+            z = width_resid(v_new) / scale
+            w = np.where(np.abs(z) <= c, 1.0, c / np.abs(z))
+
+            if np.linalg.norm(v_new - v) < 1e-10 * (np.linalg.norm(v) + eps):
+                v = v_new
+                break
+
+            v = v_new
+
+        x, lambda_0, p = v[:-2], v[-2], v[-1]
+        residual_norm = np.linalg.norm(scaled_A(lambda_0, p) @ x - y)
+        return x, lambda_0, p, residual_norm, w, result
 
     def _parameter_covariance(self, result):
         """
@@ -803,7 +1022,7 @@ class ResolutionEllipsoid:
         the delta method: Var(sigma) = Var(sigma^2) / (4 * sigma^2).
 
         Returns a dict keyed like `_label_variance_parameters` with a
-        "_stderr" suffix, e.g. "sigma_alpha_i_stderr". Empty if `x_cov`
+        "_stderr" suffix, e.g. "sigma_gamma_i_stderr". Empty if `x_cov`
         is None.
         """
         if x_cov is None:
@@ -842,27 +1061,70 @@ class ResolutionEllipsoid:
 
         return x_cov / np.outer(d, d)
 
-    def fit(self, fixed_instrumental=None):
+    def fit(
+        self, fixed_instrumental=None, weighting="sn_over_q2", exclude=None
+    ):
         """
         Fit the variance parameters against the workspace's peak shapes.
 
         Parameters
         ----------
         fixed_instrumental : dict or None
-            Prior instrumental sigmas (radians, "sigma_dl_mod"
-            dimensionless -- same shape as `set_variance_parameters`
-            expects), e.g. from a beamline's characterized
-            `DivergenceParams`. When given, the instrumental columns
-            (alpha_i, beta_i, alpha_f, beta_f, dl_mod) are held at this
-            prior shape and only a single overall scale factor plus the
-            mosaic term(s) are fit, rather than letting all instrumental
-            terms float independently.
+            Prior instrumental sigmas (radians, "sigma_dl_mod"/
+            "sigma_dl_mod_lam" dimensionless -- same shape as
+            `set_variance_parameters` expects), e.g. from a beamline's
+            characterized `DivergenceParams`. When given, the
+            instrumental columns (sigma_i, gamma_f, nu_f, dl_mod,
+            dl_mod_lam) are held at this prior shape and only a
+            single overall scale factor plus the mosaic term(s) are
+            fit, rather than letting all instrumental terms float
+            independently -- lambda_0 (if present in the prior) is
+            baked into the design matrix directly rather than fit.
+            "sigma_dl_mod_lam" defaults to 0 if absent from an older
+            prior.
+        weighting : str, optional
+            How to weight each peak's row:
+            "sn_over_q2" (default) -- signal/noise / Q^2.
+            "sn" -- signal/noise alone (no Q^2 down-weighting of the
+            high-Q tail).
+            "none" -- every peak weighted equally.
+            A diagnostic knob to check whether the Q^2 term is masking
+            a real trend at the tails of the Q or wavelength range,
+            where weight is otherwise systematically smaller/larger.
+        exclude : set of int or None, optional
+            Peak indices (workspace row index, same as `diagnostics()`'s
+            "i") to hard-exclude from this fit entirely -- e.g. peaks a
+            prior iteration of `fit_iterative` flagged as sigma-clipped
+            outliers. Unlike the internal Huber down-weighting (which
+            still lets an outlier's row pull the fit a little), these
+            peaks contribute nothing.
 
         """
         ws = mtd[self.peaks_ws]
+        n_excluded = 0
+
+        # None (free calibration fit) -- built with lambda_0=None (raw,
+        # unscaled gamma_i/nu_i columns) and lambda_0/p are fit
+        # nonlinearly alongside the linear sigma^2 parameters
+        # (robust_nnls_saturation). Given (per-run science-data fit
+        # against a fixed instrumental prior) -- that prior's own
+        # calibrated lambda_0/p are baked directly into A via
+        # _model_design_lab, and the rest of the fit stays fully
+        # linear (robust_nnls).
+        lambda_0_prior = (
+            fixed_instrumental.get("lambda_0")
+            if fixed_instrumental is not None
+            else None
+        )
+        p_prior = (
+            fixed_instrumental.get("p", 1.0)
+            if fixed_instrumental is not None
+            else None
+        )
 
         A_blocks = []
         y_blocks = []
+        lamda_blocks = []
         used = []
 
         n_low_sig_noise = 0
@@ -872,6 +1134,10 @@ class ResolutionEllipsoid:
         sig_noise_seen = []
 
         for i, peak in enumerate(ws):
+            if exclude is not None and i in exclude:
+                n_excluded += 1
+                continue
+
             sig_noise = peak.getIntensityOverSigma()
 
             radii_s, V_s, frame = self._get_peak_shape(ws, i)
@@ -909,7 +1175,12 @@ class ResolutionEllipsoid:
 
             y_p = self._vech6(S_lab_obs)
             A_p = self._model_design_lab(
-                two_theta, peak.getAzimuthal(), lamda, R
+                two_theta,
+                peak.getAzimuthal(),
+                lamda,
+                R,
+                lambda_0=lambda_0_prior,
+                p=p_prior if p_prior is not None else 1.0,
             )
 
             Q = self._Q_magnitude(two_theta, lamda)
@@ -918,7 +1189,14 @@ class ResolutionEllipsoid:
                 n_bad_Q += 1
                 continue
 
-            w = sig_noise / Q**2
+            if weighting == "sn_over_q2":
+                w = sig_noise / Q**2
+            elif weighting == "sn":
+                w = sig_noise
+            elif weighting == "none":
+                w = 1.0
+            else:
+                raise ValueError(f"Unknown weighting: {weighting!r}")
 
             if not (np.all(np.isfinite(y_p)) and np.all(np.isfinite(A_p))):
                 n_nonfinite_row += 1
@@ -926,6 +1204,7 @@ class ResolutionEllipsoid:
 
             A_blocks.append(w * A_p)
             y_blocks.append(w * y_p)
+            lamda_blocks.append(lamda)
             used.append(i)
 
         sig_noise_str = (
@@ -938,12 +1217,13 @@ class ResolutionEllipsoid:
             else "n/a (no peak had a valid shape at all)"
         )
         print(
-            "ResolutionEllipsoid.fit: {} used of {} peaks (sig_noise_cut="
-            "{:.1f} excluded {}, bad-shape excluded {}, bad-Q excluded {}, "
-            "nonfinite-row excluded {}); sig_noise among peaks with a "
-            "valid shape: {}".format(
+            "ResolutionEllipsoid.fit: {} used of {} peaks (hard-excluded "
+            "{}, sig_noise_cut={:.1f} excluded {}, bad-shape excluded {}, "
+            "bad-Q excluded {}, nonfinite-row excluded {}); sig_noise "
+            "among peaks with a valid shape: {}".format(
                 len(used),
                 ws.getNumberPeaks(),
+                n_excluded,
                 self.sig_noise_cut,
                 n_low_sig_noise,
                 n_bad_shape,
@@ -958,9 +1238,14 @@ class ResolutionEllipsoid:
 
         A = np.vstack(A_blocks)
         y = np.concatenate(y_blocks)
+        # Each peak contributes 6 rows (vech6), so its wavelength must
+        # be repeated 6x to line up with A/y's rows.
+        lamda_arr = np.repeat(lamda_blocks, 6)
 
         n_instrumental = 5
         instrumental_scale = None
+        lambda_0 = lambda_0_prior
+        p = p_prior
 
         if fixed_instrumental is not None:
             x_prior = (
@@ -968,13 +1253,15 @@ class ResolutionEllipsoid:
                     [
                         fixed_instrumental[k]
                         for k in (
-                            "sigma_alpha_i",
-                            "sigma_beta_i",
-                            "sigma_alpha_f",
-                            "sigma_beta_f",
+                            "sigma_i",
+                            "sigma_gamma_f",
+                            "sigma_nu_f",
                             "sigma_dl_mod",
                         )
-                    ],
+                    ]
+                    # sigma_dl_mod_lam defaults to 0 -- older priors
+                    # (e.g. beamline DivergenceParams) predate it.
+                    + [fixed_instrumental.get("sigma_dl_mod_lam", 0.0)],
                     dtype=float,
                 )
                 ** 2
@@ -991,10 +1278,27 @@ class ResolutionEllipsoid:
             x = np.concatenate([instrumental_scale * x_prior, x_fit[1:]])
             x_cov = None
         else:
-            x, residual_norm, robust_weights, lsq_result = self.robust_nnls(
-                A, y
-            )
-            x_cov = self._parameter_covariance(lsq_result)
+            (
+                x,
+                lambda_0,
+                p,
+                residual_norm,
+                robust_weights,
+                lsq_result,
+            ) = self.robust_nnls_saturation(A, y, lamda_arr, tanh_cols=(0,))
+
+            # lsq_result's last two parameters are lambda_0 then p, not
+            # part of x -- keep their own uncertainties separately and
+            # drop them from the sigma-parameter covariance/correlation.
+            x_cov_ext = self._parameter_covariance(lsq_result)
+            if x_cov_ext is not None:
+                x_cov = x_cov_ext[:-2, :-2]
+                lambda_0_stderr = np.sqrt(max(x_cov_ext[-2, -2], 0.0))
+                p_stderr = np.sqrt(max(x_cov_ext[-1, -1], 0.0))
+            else:
+                x_cov = None
+                lambda_0_stderr = None
+                p_stderr = None
 
         x_corr = self._parameter_correlation(x_cov)
 
@@ -1011,17 +1315,122 @@ class ResolutionEllipsoid:
             # robust_nnls), <1.0 for peaks it down-weighted as outliers.
             "robust_weights": robust_weights,
             "instrumental_scale": instrumental_scale,
+            # Saturation wavelength scale and growth-rate exponent for
+            # sigma_i (lambda_0=None means the saturation scaling isn't
+            # in effect -- i.e. sigma_i is a plain constant).
+            "lambda_0": lambda_0,
+            "p": p,
         }
+        if fixed_instrumental is None:
+            self.model["lambda_0_stderr"] = lambda_0_stderr
+            self.model["p_stderr"] = p_stderr
         return self.model
+
+    def fit_iterative(
+        self,
+        n_iter=5,
+        clip_sigma=5.0,
+        weighting="sn_over_q2",
+        fixed_instrumental=None,
+    ):
+        """
+        Repeatedly fit(), then hard-exclude peaks whose observed shape
+        disagrees with the just-fitted model by more than `clip_sigma`
+        robust-scaled residuals, and refit without them. Converges
+        when a pass finds no new peaks to exclude (or after `n_iter`
+        passes).
+
+        Unlike the Huber down-weighting already inside fit() (bounded
+        but nonzero influence for every peak, every pass), this drops
+        flagged peaks entirely and for good -- useful when a genuine
+        trend in the data is being obscured by a persistent minority
+        of badly-integrated peaks that Huber alone doesn't fully
+        suppress.
+
+        Parameters
+        ----------
+        n_iter : int, optional
+            Maximum number of fit-then-clip passes.
+        clip_sigma : float, optional
+            Peaks whose largest-axis relative residual
+            (|obs_r - pred_r| / pred_r, max over the three
+            Stoica-Wilkinson axes) is more than `clip_sigma` robust
+            (MAD-based) scaled deviations above the median are
+            excluded on the next pass. Large by default (5) -- this
+            is a coarse "drop the badly-integrated tail", not a
+            general-purpose robust estimator (fit() already does
+            that internally).
+        weighting, fixed_instrumental :
+            Passed through to every fit() call.
+
+        Returns
+        -------
+        model : dict
+            Same shape as fit()'s return, from the final pass.
+        excluded : set of int
+            Peak indices excluded by the final pass.
+
+        """
+        exclude = set()
+
+        for iteration in range(n_iter):
+            model = self.fit(
+                fixed_instrumental=fixed_instrumental,
+                weighting=weighting,
+                exclude=exclude,
+            )
+            if model is None:
+                break
+
+            rows = self.diagnostics()
+            if not rows:
+                break
+
+            idx = np.array([r["i"] for r in rows])
+            resid = np.array(
+                [
+                    max(
+                        abs(r["err_r0"]) / max(r["pred_r0"], 1e-12),
+                        abs(r["err_r1"]) / max(r["pred_r1"], 1e-12),
+                        abs(r["err_r2"]) / max(r["pred_r2"], 1e-12),
+                    )
+                    for r in rows
+                ]
+            )
+
+            median = np.median(resid)
+            mad = np.median(np.abs(resid - median))
+            scale = 1.4826 * mad + 1e-12
+            z = (resid - median) / scale
+
+            newly_bad = set(idx[z > clip_sigma].tolist())
+
+            print(
+                "ResolutionEllipsoid.fit_iterative: pass {} flagged {} "
+                "new outlier peaks (of {} fit, {} previously "
+                "excluded)".format(
+                    iteration + 1,
+                    len(newly_bad - exclude),
+                    len(rows),
+                    len(exclude),
+                )
+            )
+
+            if newly_bad <= exclude:
+                break
+
+            exclude |= newly_bad
+
+        return self.model, exclude
 
     def _label_variance_parameters(self, x):
         sq = lambda v: np.sqrt(max(v, 0.0))
         base = {
-            "sigma_alpha_i": sq(x[0]),
-            "sigma_beta_i": sq(x[1]),
-            "sigma_alpha_f": sq(x[2]),
-            "sigma_beta_f": sq(x[3]),
-            "sigma_dl_mod": sq(x[4]),
+            "sigma_i": sq(x[0]),
+            "sigma_gamma_f": sq(x[1]),
+            "sigma_nu_f": sq(x[2]),
+            "sigma_dl_mod": sq(x[3]),
+            "sigma_dl_mod_lam": sq(x[4]),
         }
         if self.mosaic == "isotropic":
             base["sigma_mosaic"] = sq(x[5])
@@ -1048,8 +1457,8 @@ class ResolutionEllipsoid:
         sigmas : dict
             Same keys `_label_variance_parameters` returns for the
             current `self.mosaic` model (e.g. for "isotropic":
-            sigma_alpha_i, sigma_beta_i, sigma_alpha_f, sigma_beta_f,
-            sigma_dl_mod, sigma_mosaic).
+            sigma_i, sigma_gamma_f, sigma_nu_f, sigma_dl_mod,
+            sigma_mosaic).
 
         Returns
         -------
@@ -1058,6 +1467,25 @@ class ResolutionEllipsoid:
             keys "residual_norm", "used_peaks", "robust_weights".
 
         """
+        if (
+            "sigma_i" not in sigmas
+            and "sigma_gamma_i" in sigmas
+            and "sigma_nu_i" in sigmas
+        ):
+            # combine an older separate gamma_i/nu_i prior into the
+            # single isotropic sigma_i term (quadrature mean) -- they
+            # were found to be too correlated to identify separately.
+            sigmas = {
+                **sigmas,
+                "sigma_i": np.sqrt(
+                    0.5
+                    * (
+                        sigmas["sigma_gamma_i"] ** 2
+                        + sigmas["sigma_nu_i"] ** 2
+                    )
+                ),
+            }
+
         if self.mosaic == "full" and "sigma_mosaic" in sigmas:
             # expand an isotropic prior (sigma_mosaic) into the full
             # tensor: same sigma on the three axis-aligned directions,
@@ -1076,55 +1504,68 @@ class ResolutionEllipsoid:
 
         if self.mosaic == "isotropic":
             keys = [
-                "sigma_alpha_i",
-                "sigma_beta_i",
-                "sigma_alpha_f",
-                "sigma_beta_f",
+                "sigma_i",
+                "sigma_gamma_f",
+                "sigma_nu_f",
                 "sigma_dl_mod",
+                "sigma_dl_mod_lam",
                 "sigma_mosaic",
             ]
         elif self.mosaic == "diagonal":
             keys = [
-                "sigma_alpha_i",
-                "sigma_beta_i",
-                "sigma_alpha_f",
-                "sigma_beta_f",
+                "sigma_i",
+                "sigma_gamma_f",
+                "sigma_nu_f",
                 "sigma_dl_mod",
+                "sigma_dl_mod_lam",
                 "sigma_mosaic_0",
                 "sigma_mosaic_1",
                 "sigma_mosaic_2",
             ]
         else:  # full
             keys = [
-                "sigma_alpha_i",
-                "sigma_beta_i",
-                "sigma_alpha_f",
-                "sigma_beta_f",
+                "sigma_i",
+                "sigma_gamma_f",
+                "sigma_nu_f",
                 "sigma_dl_mod",
+                "sigma_dl_mod_lam",
             ] + [
                 f"sigma_mosaic_{lab}"
                 for lab in ("00", "11", "22", "01", "02", "12")
             ]
 
+        # sigma_dl_mod_lam defaults to 0 -- older priors predate this
+        # term and don't have it.
+        sigmas = {**{"sigma_dl_mod_lam": 0.0}, **sigmas}
+
         x = np.array([sigmas[k] for k in keys], dtype=float) ** 2
 
         self.model = {k: sigmas[k] for k in keys}
         self.model["variance_parameters"] = x
+        # Saturation wavelength scale and growth-rate exponent for
+        # sigma_i (see _model_design_lab); lambda_0 is None if this
+        # prior predates that model. p defaults to 1.0 for priors that
+        # predate the power-law saturation model.
+        self.model["lambda_0"] = sigmas.get("lambda_0")
+        self.model["p"] = sigmas.get("p", 1.0)
 
         return self.model
 
     def set_variance_parameters_deg(self, sigmas_deg):
         """
         Same as `set_variance_parameters`, but with the angular sigmas
-        given in degrees instead of radians. "sigma_dl_mod" is
-        dimensionless (sigma_lambda/lambda, see `_model_design_lab`)
-        rather than an angle, so it is passed through unchanged.
+        given in degrees instead of radians. "sigma_dl_mod"/
+        "sigma_dl_mod_lam" are dimensionless (sigma_lambda/lambda, see
+        `_model_design_lab`) rather than an angle, so they are passed
+        through unchanged.
 
         Parameters
         ----------
         sigmas_deg : dict
             Same keys as `set_variance_parameters`, with every key but
-            "sigma_dl_mod" in degrees.
+            "sigma_dl_mod"/"sigma_dl_mod_lam"/"lambda_0" in degrees.
+            "lambda_0" (Angstrom) is passed through unchanged too, if
+            present -- it isn't an angle at all.
 
         Returns
         -------
@@ -1132,8 +1573,9 @@ class ResolutionEllipsoid:
             Same as `set_variance_parameters`.
 
         """
+        pass_through = {"sigma_dl_mod", "sigma_dl_mod_lam", "lambda_0", "p"}
         sigmas = {
-            key: (value if key == "sigma_dl_mod" else np.radians(value))
+            key: (value if key in pass_through else np.radians(value))
             for key, value in sigmas_deg.items()
         }
         return self.set_variance_parameters(sigmas)
@@ -1297,6 +1739,8 @@ class ResolutionEllipsoid:
                 peak.getAzimuthal(),
                 peak.getWavelength(),
                 peak.getGoniometerMatrix(),
+                lambda_0=self.model.get("lambda_0") if self.model else None,
+                p=self.model.get("p", 1.0) if self.model else 1.0,
             )
         return result
 
@@ -1437,6 +1881,11 @@ class ResolutionEllipsoid:
             gamma = np.arctan2(kx_hat, kz_hat)
             nu = np.arcsin(ky_hat)
 
+            obs_r = np.sqrt(np.maximum([S_w_obs[k, k] for k in range(3)], 0.0))
+            pred_r = np.sqrt(
+                np.maximum([S_w_pred[k, k] for k in range(3)], 0.0)
+            )
+
             rows.append(
                 {
                     "i": i,
@@ -1452,6 +1901,15 @@ class ResolutionEllipsoid:
                     "pred_x0": S_w_pred[0, 0],
                     "pred_x1": S_w_pred[1, 1],
                     "pred_x2": S_w_pred[2, 2],
+                    "obs_r0": obs_r[0],
+                    "obs_r1": obs_r[1],
+                    "obs_r2": obs_r[2],
+                    "pred_r0": pred_r[0],
+                    "pred_r1": pred_r[1],
+                    "pred_r2": pred_r[2],
+                    "err_r0": obs_r[0] - pred_r[0],
+                    "err_r1": obs_r[1] - pred_r[1],
+                    "err_r2": obs_r[2] - pred_r[2],
                     "offset_x0": projs[0],
                     "offset_x1": projs[1],
                     "offset_x2": projs[2],
@@ -1465,6 +1923,21 @@ class ResolutionEllipsoid:
 
     def plot_diagnostics(self, filename):
         _plot_resolution_diagnostics(self.diagnostics(), filename)
+
+    def write_diagnostics_csv(self, filename):
+        """
+        Write the per-peak diagnostics table (Q, observed/predicted/error
+        radii along the Stoica-Wilkinson axes, angles, S/N, outlier flag)
+        to a CSV file. Call after fit().
+        """
+        rows = self.diagnostics()
+        if not rows:
+            raise RuntimeError("No peaks available to write diagnostics for.")
+
+        with open(filename, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(rows)
 
     def write_resolution_parameters(self, filename):
         if self.model is None:
@@ -1493,6 +1966,29 @@ class ResolutionEllipsoid:
                 )
             )
 
+        lambda_0 = self.model.get("lambda_0")
+        if lambda_0 is not None:
+            lambda_0_stderr = self.model.get("lambda_0_stderr")
+            if lambda_0_stderr is None:
+                lines.append("lambda_0: {:.6e} Ang\n".format(lambda_0))
+            else:
+                lines.append(
+                    "lambda_0: {:.6e} +/- {:.6e} Ang\n".format(
+                        lambda_0, lambda_0_stderr
+                    )
+                )
+
+            p = self.model.get("p")
+            p_stderr = self.model.get("p_stderr")
+            if p_stderr is None:
+                lines.append("p: {:.6e} (dimensionless)\n".format(p))
+            else:
+                lines.append(
+                    "p: {:.6e} +/- {:.6e} (dimensionless)\n".format(
+                        p, p_stderr
+                    )
+                )
+
         skip = {
             "variance_parameters",
             "variance_covariance",
@@ -1501,6 +1997,8 @@ class ResolutionEllipsoid:
             "used_peaks",
             "robust_weights",
             "instrumental_scale",
+            "lambda_0",
+            "p",
         }
 
         for key, val in self.model.items():
@@ -1509,7 +2007,7 @@ class ResolutionEllipsoid:
 
             stderr = self.model.get(f"{key}_stderr")
 
-            if key == "sigma_dl_mod":
+            if key in ("sigma_dl_mod", "sigma_dl_mod_lam"):
                 if stderr is None:
                     lines.append(
                         "{}: {:.6e} (dimensionless)\n".format(key, val)

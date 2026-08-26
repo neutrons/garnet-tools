@@ -61,10 +61,10 @@ beamlines = {
         "Processes": 12,
         "DivergenceParams": {
             # Fit to Yb3Al5O12 (garnet standard), IPTS-31429.
-            "sigma_alpha_i": 0.2485194,
-            "sigma_beta_i": 0.4362689,
-            "sigma_alpha_f": 0.3371352,
-            "sigma_beta_f": 0.2654416,
+            "sigma_gamma_i": 0.2485194,
+            "sigma_nu_i": 0.4362689,
+            "sigma_gamma_f": 0.3371352,
+            "sigma_nu_f": 0.2654416,
             "sigma_dl_mod": 0.004875392,
             "sigma_mosaic": 0.2599287,
         },
@@ -102,10 +102,10 @@ beamlines = {
         "Processes": 4,
         "DivergenceParams": {
             # Fit to Yb3Al5O12 (garnet standard), IPTS-31856.
-            "sigma_alpha_i": 0.4044220,
-            "sigma_beta_i": 0.4135139,
-            "sigma_alpha_f": 0.1558517,
-            "sigma_beta_f": 0.3339786,
+            "sigma_gamma_i": 0.4044220,
+            "sigma_nu_i": 0.4135139,
+            "sigma_gamma_f": 0.1558517,
+            "sigma_nu_f": 0.3339786,
             "sigma_dl_mod": 0.009124644,
             "sigma_mosaic": 0.5256548,
         },
@@ -148,10 +148,10 @@ beamlines = {
         "Processes": 4,
         "DivergenceParams": {
             # Fit to Yb3Al5O12 (garnet standard), IPTS-34720.
-            "sigma_alpha_i": 0.4362019,
-            "sigma_beta_i": 0.4287497,
-            "sigma_alpha_f": 0.3766134,
-            "sigma_beta_f": 0.1754992,
+            "sigma_gamma_i": 0.4362019,
+            "sigma_nu_i": 0.4287497,
+            "sigma_gamma_f": 0.3766134,
+            "sigma_nu_f": 0.1754992,
             "sigma_dl_mod": 0.005819790,
             "sigma_mosaic": 0.4133600,
         },

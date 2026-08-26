@@ -314,6 +314,11 @@ class Integration(PeakProjection):
                 res_file = self.get_plot_file("run#{}_res".format(run))
                 res.plot_diagnostics(res_file)
 
+                res_csv_file = self.get_plot_file(
+                    "run#{}_res".format(run), ext=".csv"
+                )
+                res.write_diagnostics_csv(res_csv_file)
+
                 self.plot_peak_shape_diagnostics("peaks", res, r_cut, 21)
 
             self.predict_all_peaks(

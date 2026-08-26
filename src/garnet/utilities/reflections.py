@@ -602,6 +602,7 @@ class Peaks:
         res.fit()
         res.plot_diagnostics(filename + "_res.pdf")
         res.write_resolution_parameters(filename + "_res.txt")
+        res.write_diagnostics_csv(filename + "_res.csv")
 
     def refine_UB(self, peaks):
         opt = Optimization(peaks)

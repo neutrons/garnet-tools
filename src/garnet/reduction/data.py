@@ -2534,9 +2534,11 @@ class LaueData(BaseDataModel):
             pc_bkg = mtd["bkg"].run().getProperty("gd_prtn_chrg").value
             self.pc_bkg = pc_bkg
 
+            target = mtd["bkg"].getAxis(0).getUnit().name()
+
             ConvertUnits(
                 InputWorkspace=self.instrument,
-                Target=mtd["bkg"].getAxis(0).getUnit().name(),
+                Target="TOF" if target == "Time-of-flight" else target,
                 OutputWorkspace="bkg_lite",
             )
 

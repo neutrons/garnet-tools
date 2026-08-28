@@ -312,6 +312,8 @@ class PeaksModel:
         method="ellipsoid",
         centroid=True,
         update=True,
+        integrate_if_on_edge=True,
+        mask_edge_tubes=False,
     ):
         """
         Integrate peaks using spherical or ellipsoidal regions.
@@ -337,6 +339,13 @@ class PeaksModel:
             Shift peak position to centroid. The default is True.
         update : bool, optional
             Update peak position. The defualt is True.
+        integrate_if_on_edge : bool, optional
+            Integrate (with a truncated, biased shape) a peak whose
+            region extends past a detector panel/tube boundary instead
+            of excluding it. The default is True.
+        mask_edge_tubes : bool, optional
+            Exclude peaks landing on a detector's edge tubes/columns
+            entirely. The default is False.
 
         """
 
@@ -358,10 +367,10 @@ class PeaksModel:
             UseCentroid=centroid,
             MaxIterations=5,
             ReplaceIntensity=True,
-            IntegrateIfOnEdge=True,
+            IntegrateIfOnEdge=integrate_if_on_edge,
             AdaptiveQBackground=adaptive,
             AdaptiveQMultiplier=radius_scale,
-            MaskEdgeTubes=False,
+            MaskEdgeTubes=mask_edge_tubes,
             OutputWorkspace=peaks,
         )
 

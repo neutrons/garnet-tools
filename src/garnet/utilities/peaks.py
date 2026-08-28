@@ -280,50 +280,95 @@ def _process_run(config, ipts, run, idx, tol):
         wavelength_band[1],
     )
 
-    peaks_model.integrate_peaks(
-        md_ws,
-        strong_ws,
-        Q_min / np.cbrt(3),
-        background_inner_fact=np.cbrt(2),
-        background_outer_fact=np.cbrt(3),
-        method="sphere",
-        centroid=False,
-    )
+    # First pass: if the beamline has a characterized instrument model
+    # (DivergenceParams), use it to get shape-aware (anisotropic)
+    # integration radii instead of a single isotropic sphere -- same
+    # prior-model/renumber_by_size/integrate_peaks_with_radii pattern
+    # as Integration.integrate(). Falls back to the isotropic-sphere +
+    # intensity_vs_radius scan for beamlines without one.
+    div_params = beamlines[instrument].get("DivergenceParams")
+
+    prior_res = None
+    if div_params is not None:
+        prior_res = ResolutionEllipsoid(strong_ws, mosaic="full")
+        prior_res.set_variance_parameters_deg(div_params)
+
+        peaks_model.stash_run_number(strong_ws)
+
+        radii = prior_res.renumber_by_size(5)
+
+        peaks_model.integrate_peaks_with_radii(
+            md_ws, strong_ws, radii, centroid=True, update=True
+        )
+
+        peaks_model.restore_run_number(strong_ws)
+    else:
+        peaks_model.integrate_peaks(
+            md_ws,
+            strong_ws,
+            Q_min / np.cbrt(3),
+            background_inner_fact=np.cbrt(2),
+            background_outer_fact=np.cbrt(3),
+            method="sphere",
+            centroid=False,
+        )
 
     peaks_model.remove_weak_peaks(strong_ws, 3)
 
-    radii, sig_noise, _, _, _, _ = peaks_model.intensity_vs_radius(
-        md_ws,
-        strong_ws,
-        Q_min / np.cbrt(3),
-        background_inner_fact=np.cbrt(2),
-        background_outer_fact=np.cbrt(3),
-        fix=True,
-    )
+    # Second pass: refit mosaic (+ overall scale) against this run's
+    # own peaks, holding the prior instrumental model fixed, then
+    # re-integrate with the updated (run-specific) shape.
+    res = ResolutionEllipsoid(strong_ws, mosaic="isotropic")
+    fixed_instrumental = prior_res.model if prior_res is not None else None
+    res.fit(fixed_instrumental=fixed_instrumental)
 
-    rising = slice(0, np.argmax(sig_noise) + 1)
-    radius = radii[rising][
-        np.argmin(np.abs(sig_noise[rising] - 0.9 * sig_noise.max()))
-    ]
+    if res.model is not None:
+        peaks_model.stash_run_number(strong_ws)
 
-    fig, ax = plt.subplots(1, 1, layout="constrained")
-    ax.plot(radii, sig_noise)
-    ax.axvline(
-        radius,
-        color="C1",
-        linestyle="--",
-        label="radius={:.4f}".format(radius),
-    )
-    ax.set_xlabel(r"$r$ [$\AA^{-1}$]")
-    ax.set_ylabel("Signal/Noise")
-    ax.minorticks_on()
-    ax.legend()
-    fig.savefig(
-        os.path.join(output_folder, "intensity_vs_radius_{}.pdf".format(run))
-    )
-    plt.close(fig)
+        radii = res.renumber_by_size(8)
 
-    peaks_model.integrate_peaks(md_ws, strong_ws, radius * 1.5, centroid=True)
+        peaks_model.integrate_peaks_with_radii(
+            md_ws, strong_ws, radii, centroid=True, update=True
+        )
+
+        peaks_model.restore_run_number(strong_ws)
+    elif prior_res is None:
+        radii, sig_noise, _, _, _, _ = peaks_model.intensity_vs_radius(
+            md_ws,
+            strong_ws,
+            Q_min / np.cbrt(3),
+            background_inner_fact=np.cbrt(2),
+            background_outer_fact=np.cbrt(3),
+            fix=True,
+        )
+
+        rising = slice(0, np.argmax(sig_noise) + 1)
+        radius = radii[rising][
+            np.argmin(np.abs(sig_noise[rising] - 0.9 * sig_noise.max()))
+        ]
+
+        fig, ax = plt.subplots(1, 1, layout="constrained")
+        ax.plot(radii, sig_noise)
+        ax.axvline(
+            radius,
+            color="C1",
+            linestyle="--",
+            label="radius={:.4f}".format(radius),
+        )
+        ax.set_xlabel(r"$r$ [$\AA^{-1}$]")
+        ax.set_ylabel("Signal/Noise")
+        ax.minorticks_on()
+        ax.legend()
+        fig.savefig(
+            os.path.join(
+                output_folder, "intensity_vs_radius_{}.pdf".format(run)
+            )
+        )
+        plt.close(fig)
+
+        peaks_model.integrate_peaks(
+            md_ws, strong_ws, radius * 1.5, centroid=True
+        )
 
     peaks_model.remove_weak_peaks(strong_ws, 10)
 

@@ -2329,9 +2329,20 @@ class LaueData(BaseDataModel):
             else:
                 index_map = {spec: i for i, spec in enumerate(nos)}
 
-                nos = mtd["flux_van"].getSpectrumNumbers()
-                for spec, y in zip(nos, ys):
-                    mtd["flux"].setY(index_map[spec], y)
+                nos_van = mtd["flux_van"].getSpectrumNumbers()
+                matched = set()
+                for spec, y in zip(nos_van, ys):
+                    i = index_map.get(spec)
+                    if i is None:
+                        continue
+                    mtd["flux"].setY(i, y)
+                    matched.add(i)
+
+                for i in range(len(nos)):
+                    if i not in matched:
+                        mtd["flux"].setY(
+                            i, np.zeros(mtd["flux"].readY(i).size)
+                        )
 
             for i, y in enumerate(mtd["flux"].extractY()):
                 if np.isclose(np.sum(y), 0):

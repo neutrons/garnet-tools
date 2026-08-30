@@ -245,6 +245,10 @@ class BaseDataModel:
             grouping = plan["Grouping"]
             self.grouping = grouping if grouping != "1x1" else None
 
+        preprocessed = self.time_offset is None and (
+            self.elastic or self.grouping is not None
+        )
+
         if self.grouping is not None and self.time_offset is None:
             raw_path = raw_path.replace("nexus", "shared/autoreduce")
             raw_file = raw_file.replace(".nxs", ".lite.nxs")
@@ -265,11 +269,7 @@ class BaseDataModel:
             assert os.path.exists(file), "Check file {}".format(file)
 
         if instrument != "DEMAND":
-            if self.time_offset is not None or (
-                not self.elastic
-                and not self.custom_path
-                and self.grouping is None
-            ):
+            if not preprocessed and not self.custom_path:
                 LoadEventNexus(
                     Filename=files[0],
                     OutputWorkspace=self.instrument,

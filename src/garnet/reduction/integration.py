@@ -1,4 +1,5 @@
 import os
+import sys
 import gc
 import subprocess
 import traceback
@@ -162,7 +163,7 @@ class Integration(PeakProjection):
     def write(self, result_file):
         try:
             process = subprocess.Popen(
-                ["python", REFLECTIONS, self.plan["YAML"]],
+                [sys.executable, REFLECTIONS, self.plan["YAML"]],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
@@ -172,7 +173,7 @@ class Integration(PeakProjection):
             else:
                 raise subprocess.SubprocessError(err.decode().strip())
         except (FileNotFoundError, subprocess.SubprocessError):
-            subprocess.Popen(["python", REFLECTIONS, self.plan["YAML"]])
+            subprocess.Popen([sys.executable, REFLECTIONS, self.plan["YAML"]])
 
     def integrate(self):
         output_file = self.get_output_file()

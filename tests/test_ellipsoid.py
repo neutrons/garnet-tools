@@ -324,7 +324,8 @@ def test_pure_shape_preserves_geometric_mean_radius():
     g = (r0_fit * r1_fit * r2_fit) ** (1 / 3)
     assert np.isclose(g, g0)
     assert np.isclose(
-        np.log(r0_fit / r1_fit) - np.log(r0 / r1), np.sqrt(2) * 0.4
+        np.log((r1_fit * r2_fit) / r0_fit**2) - np.log((r1 * r2) / r0**2),
+        np.sqrt(6) * 0.4,
     )
 
     _make_reference(ellipsoid, x0, x1, x2, r0, r1, r2, axes)
@@ -333,8 +334,7 @@ def test_pure_shape_preserves_geometric_mean_radius():
     g = (r0_fit * r1_fit * r2_fit) ** (1 / 3)
     assert np.isclose(g, g0)
     assert np.isclose(
-        np.log((r0_fit * r1_fit) / r2_fit**2) - np.log((r0 * r1) / r2**2),
-        np.sqrt(6) * -0.3,
+        np.log(r1_fit / r2_fit) - np.log(r1 / r2), np.sqrt(2) * -0.3
     )
 
 

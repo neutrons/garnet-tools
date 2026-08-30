@@ -1606,6 +1606,206 @@ class ResolutionEllipsoid:
             self.model["q_i_stderr"] = q_i_stderr
         return self.model
 
+    def fit_mosaic_only(self, model, weighting="sn", loss="cauchy", eps=1e-12):
+        """
+        Fit only the mosaic term(s), holding every instrumental
+        parameter (not just its shape, but its exact calibrated value)
+        fixed at `model`'s values -- unlike `fit(fixed_instrumental=...)`,
+        which still lets one overall scale factor float across all the
+        instrumental columns together.
+
+        Mosaic's uncertainty in the ordinary joint fit is contaminated
+        by its correlation with the instrumental terms (sigma_gamma_f
+        in particular, r ~ -0.5 to -0.7 throughout this model's
+        development) -- the joint Jacobian is close to rank-deficient
+        in that direction, so mosaic and sigma_gamma_f can trade off
+        against each other with little cost to the joint residual.
+        Subtracting the instrumental prediction out of the data
+        entirely (rather than fitting a shared scale for it) removes
+        that trade-off by construction: mosaic is the only thing left
+        free, so its resulting uncertainty is a much more trustworthy
+        answer to "is mosaic measurable at all here" -- at the cost of
+        not propagating `model`'s own uncertainty into that number
+        (this is a conditional/profile uncertainty, Var(mosaic |
+        instrumental fixed at its point estimate), not the full
+        marginal one).
+
+        Parameters
+        ----------
+        model : dict
+            An already-fit `self.model`-shaped dict (needs
+            "lambda_0_gamma_i", "lambda_0_nu_i", "q_i", and
+            "variance_parameters").
+        weighting, loss, eps : as in `fit`.
+
+        Returns
+        -------
+        mosaic : dict
+            Same mosaic-only keys `_label_variance_parameters` would
+            produce (e.g. "sigma_mosaic" for the isotropic model),
+            plus a "_stderr" entry for each.
+        residual_norm : float
+        used : list of int
+            Workspace peak indices used, same convention as `fit`.
+
+        """
+        ws = mtd[self.peaks_ws]
+
+        lambda_0_gamma_i = model.get("lambda_0_gamma_i")
+        lambda_0_nu_i = model.get("lambda_0_nu_i")
+        q_i = model.get("q_i", 2.0)
+        n_instrumental = 6
+        x_instrumental = model["variance_parameters"][:n_instrumental]
+
+        A_blocks = []
+        y_blocks = []
+        used = []
+
+        n_low_sig_noise = 0
+        n_edge_lamda = 0
+        n_bad_shape = 0
+        n_bad_Q = 0
+        n_nonfinite_row = 0
+        sig_noise_seen = []
+
+        for i, peak in enumerate(ws):
+            sig_noise = peak.getIntensityOverSigma()
+
+            radii_s, V_s, frame = self._get_peak_shape(ws, i)
+            if np.all(np.isfinite(radii_s)):
+                sig_noise_seen.append(sig_noise)
+
+            if not np.isfinite(sig_noise) or sig_noise < self.sig_noise_cut:
+                n_low_sig_noise += 1
+                continue
+
+            two_theta = peak.getScattering()
+            lamda = peak.getWavelength()
+
+            if (
+                self.lamda_cut_min is not None and lamda < self.lamda_cut_min
+            ) or (
+                self.lamda_cut_max is not None and lamda > self.lamda_cut_max
+            ):
+                n_edge_lamda += 1
+                continue
+
+            R = peak.getGoniometerMatrix()
+
+            if not np.all(np.isfinite(radii_s)) or np.any(radii_s <= 0):
+                n_bad_shape += 1
+                continue
+
+            V_lab = self._sample_axes_to_lab(R, V_s) if frame == "s" else V_s
+            V_lab = self._normalize_columns(V_lab)
+
+            S_lab_obs = self._S_from_ellipsoid(radii_s, V_lab)
+            S_lab_obs = 0.5 * (S_lab_obs + S_lab_obs.T)
+
+            y_p = self._vech6(S_lab_obs)
+            A_p = self._model_design_lab(
+                two_theta,
+                peak.getAzimuthal(),
+                lamda,
+                R,
+                lambda_0_gamma_i=lambda_0_gamma_i,
+                lambda_0_nu_i=lambda_0_nu_i,
+                q_i=q_i,
+            )
+
+            Q = self._Q_magnitude(two_theta, lamda)
+
+            if not (np.isfinite(Q) and Q > 0):
+                n_bad_Q += 1
+                continue
+
+            if weighting == "sn_over_q2":
+                w = sig_noise / Q**2
+            elif weighting == "sn":
+                w = sig_noise
+            elif weighting == "sn2":
+                w = sig_noise**2
+            elif weighting == "none":
+                w = 1.0
+            else:
+                raise ValueError(f"Unknown weighting: {weighting!r}")
+
+            if not (np.all(np.isfinite(y_p)) and np.all(np.isfinite(A_p))):
+                n_nonfinite_row += 1
+                continue
+
+            A_blocks.append(w * A_p)
+            y_blocks.append(w * y_p)
+            used.append(i)
+
+        sig_noise_str = (
+            "min={:.2f} median={:.2f} max={:.2f}".format(
+                np.min(sig_noise_seen),
+                np.median(sig_noise_seen),
+                np.max(sig_noise_seen),
+            )
+            if sig_noise_seen
+            else "n/a (no peak had a valid shape at all)"
+        )
+        print(
+            "ResolutionEllipsoid.fit_mosaic_only: {} used of {} peaks "
+            "(sig_noise_cut={:.1f} excluded {}, lamda-edge-cut [{},{}] "
+            "excluded {}, bad-shape excluded {}, bad-Q excluded {}, "
+            "nonfinite-row excluded {}); sig_noise among peaks with a "
+            "valid shape: {}".format(
+                len(used),
+                ws.getNumberPeaks(),
+                self.sig_noise_cut,
+                n_low_sig_noise,
+                self.lamda_cut_min,
+                self.lamda_cut_max,
+                n_edge_lamda,
+                n_bad_shape,
+                n_bad_Q,
+                n_nonfinite_row,
+                sig_noise_str,
+            )
+        )
+
+        if not A_blocks:
+            return None
+
+        A = np.vstack(A_blocks)
+        y = np.concatenate(y_blocks)
+
+        y_corrected = y - A[:, :n_instrumental] @ x_instrumental
+        A_mosaic = A[:, n_instrumental:]
+
+        x_mosaic, residual_norm, robust_weights, result = self.robust_nnls(
+            A_mosaic, y_corrected, loss=loss, eps=eps
+        )
+
+        x_cov = self._parameter_covariance(result)
+
+        if self.mosaic == "isotropic":
+            labels = ["sigma_mosaic"]
+        elif self.mosaic == "diagonal":
+            labels = ["sigma_mosaic_0", "sigma_mosaic_1", "sigma_mosaic_2"]
+        else:  # full
+            labels = [
+                f"sigma_mosaic_{lab}"
+                for lab in ("00", "11", "22", "01", "02", "12")
+            ]
+
+        sq = lambda v: np.sqrt(max(v, 0.0))
+        mosaic = {lab: sq(v) for lab, v in zip(labels, x_mosaic)}
+
+        if x_cov is not None:
+            var_x = np.clip(np.diag(x_cov), 0.0, None)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                for lab, v, var_v in zip(labels, x_mosaic, var_x):
+                    sigma = sq(v)
+                    mosaic[f"{lab}_stderr"] = (
+                        np.sqrt(var_v) / (2.0 * sigma) if sigma > 0 else np.nan
+                    )
+
+        return mosaic, residual_norm, used
+
     def fit_iterative(
         self,
         n_iter=5,

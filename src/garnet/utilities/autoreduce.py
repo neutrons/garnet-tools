@@ -132,9 +132,7 @@ class AutoReduce:
         cols, rows = beamline["BankPixels"]
         mask_cols, mask_rows = beamline["MaskEdges"]
 
-        PreprocessDetectorsToMD(
-            InputWorkspace="data", OutputWorkspace="detectors"
-        )
+        PreprocessDetectorsToMD(InputWorkspace=ws, OutputWorkspace="detectors")
 
         det_map = np.asarray(mtd["detectors"].column(5)).reshape(
             -1, cols, rows
@@ -170,7 +168,7 @@ class AutoReduce:
         detector_list = ",".join(parts)
 
         GroupDetectors(
-            InputWorkspace="data",
+            InputWorkspace=ws,
             GroupingPattern=detector_list,
             OutputWorkspace="lite",
         )

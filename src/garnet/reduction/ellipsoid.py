@@ -13,13 +13,23 @@ _R_SCALE_3D = np.sqrt(scipy.stats.chi2.ppf(0.997, df=3))
 
 # Orthonormal basis spanning the traceless subspace of log-radius space
 # (each column sums to zero and is orthogonal to [1, 1, 1] and to the
-# other column), used to separate an overall log-size change from the
-# two independent log-aspect-ratio ("shape") changes.
+# other column), used to separate an overall log-size change from two
+# physically-labeled deformations. Axis 0 of the prior frame is
+# guaranteed to be the radial (parallel-to-Q) direction and axes 1, 2
+# the transverse (perpendicular-to-Q) directions by the upstream
+# projection frame (see `projection.bin_axes`/`align_shape_axes`), so:
+#   column 0 ("shape_1"): moves the radial axis opposite to both
+#     transverse axes (which move together) -- combined with log_size,
+#     this is the direction that lets the fit grow both transverse
+#     axes while holding the radial axis fixed (pure mosaic-like
+#     broadening transverse to Q), or vice versa.
+#   column 1 ("shape_2"): the two transverse axes against each other,
+#     radial axis untouched (in-plane transverse asymmetry).
 SHAPE_BASIS = np.array(
     [
-        [1.0 / np.sqrt(2.0), 1.0 / np.sqrt(6.0)],
-        [-1.0 / np.sqrt(2.0), 1.0 / np.sqrt(6.0)],
-        [0.0, -2.0 / np.sqrt(6.0)],
+        [-2.0 / np.sqrt(6.0), 0.0],
+        [1.0 / np.sqrt(6.0), 1.0 / np.sqrt(2.0)],
+        [1.0 / np.sqrt(6.0), -1.0 / np.sqrt(2.0)],
     ]
 )
 

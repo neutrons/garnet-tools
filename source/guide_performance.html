@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Generating Vanadium Normalization Files &#8212; garnet  documentation</title>
+    <title>Speed and Memory: Grouping, Binning, and Symmetry &#8212; garnet  documentation</title>
   
   
   
@@ -42,12 +42,12 @@
     <script src="../_static/documentation_options.js?v=5929fcd5"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'source/guide_vanadium';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'source/guide_performance';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Live Autoreduction" href="guide_autoreduce.html" />
-    <link rel="prev" title="Detector and Goniometer Calibration" href="guide_calibration.html" />
+    <link rel="next" title="garnet tutorials" href="garnet.tutorials.html" />
+    <link rel="prev" title="Live Autoreduction" href="guide_autoreduce.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -345,17 +345,17 @@
      aria-label="Section Navigation">
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Calibration and Normalization:</span></p>
-<ul class="current nav bd-sidenav">
+<ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="guide_calibration.html">Detector and Goniometer Calibration</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Generating Vanadium Normalization Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="guide_vanadium.html">Generating Vanadium Normalization Files</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">During the Experiment:</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="guide_autoreduce.html">Live Autoreduction</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Performance:</span></p>
-<ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="guide_performance.html">Speed and Memory: Grouping, Binning, and Symmetry</a></li>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Speed and Memory: Grouping, Binning, and Symmetry</a></li>
 </ul>
 </div>
 </nav></div>
@@ -399,7 +399,7 @@
     
     <li class="breadcrumb-item"><a href="garnet.guides.html" class="nav-link">garnet guides</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Generating Vanadium Normalization Files</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Speed and Memory: Grouping, Binning, and Symmetry</span></li>
   </ul>
 </nav>
 </div>
@@ -416,163 +416,119 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="generating-vanadium-normalization-files">
-<h1>Generating Vanadium Normalization Files<a class="headerlink" href="#generating-vanadium-normalization-files" title="Link to this heading">#</a></h1>
-<p>Covers the <strong>Vanadium</strong> sub-tab (inside the <strong>Calibration</strong> tab),
-which turns a vanadium run into the correction files used to normalize
-Bragg peak intensities in the main reduction pipeline. The workflow
-applies to any of the supported instruments.</p>
-<section id="the-physical-idea">
-<h2>The physical idea<a class="headerlink" href="#the-physical-idea" title="Link to this heading">#</a></h2>
-<p>A raw Bragg peak’s integrated counts depend on more than the sample’s
-crystal structure: how many neutrons of that wavelength the source and
-guide actually delivered that day, how efficiently the particular
-pixels the peak landed on convert a neutron into a recorded count, and
-how much solid angle those pixels subtend as seen from the sample.
-None of that is physics that belongs in the final structure - it is
-instrumental, and it has to be measured and divided out.</p>
-<p>Vanadium is used to measure it because vanadium’s coherent (Bragg)
-scattering is almost zero. A vanadium sphere or rod in the beam
-produces an almost purely elastic, incoherent signal with no crystal
-structure of its own - a smooth, structureless response whose only
-remaining wavelength- and pixel-dependence comes from exactly the
-three instrumental effects above. That makes a vanadium run a flat
-field: dividing a real sample’s data by it (after a few corrections)
-leaves the sample’s own scattering.</p>
+  <section id="speed-and-memory-grouping-binning-and-symmetry">
+<h1>Speed and Memory: Grouping, Binning, and Symmetry<a class="headerlink" href="#speed-and-memory-grouping-binning-and-symmetry" title="Link to this heading">#</a></h1>
+<p>Covers three settings on the <strong>Normalization</strong> tab that most directly
+control how long a reduction takes and how much memory it needs,
+independently of the physical quality trade-offs already covered
+elsewhere: pixel <strong>Grouping</strong>, the per-dimension <strong>Bins</strong>, and
+<strong>Symmetry</strong>. None of these change what garnet is capable of
+computing - only how expensive it is to compute it - so the guidance
+here is about not paying for resolution or symmetry coverage you
+don’t actually need for the step you’re on.</p>
+<section id="pixel-grouping">
+<h2>Pixel grouping<a class="headerlink" href="#pixel-grouping" title="Link to this heading">#</a></h2>
+<p><strong>What it does.</strong> Before a run is ever converted to Q, garnet groups
+neighboring detector pixels together (<code class="docutils literal notranslate"><span class="pre">Grouping</span></code>, e.g. <code class="docutils literal notranslate"><span class="pre">2x2</span></code> or
+<code class="docutils literal notranslate"><span class="pre">4x4</span></code>) with <code class="docutils literal notranslate"><span class="pre">GroupDetectors</span></code> and immediately compresses the
+result with <code class="docutils literal notranslate"><span class="pre">CompressEvents</span></code>. This happens once, up front, on the
+raw event workspace for that run - every later step (calibration,
+masking, <code class="docutils literal notranslate"><span class="pre">ConvertToMD</span></code>) then works on the grouped, coarser
+workspace instead of the full per-pixel one.</p>
+<p><strong>Why it’s faster and lighter.</strong> Grouping N x N pixels together cuts
+the number of distinct spectra (and therefore the number of
+individual event lists Mantid has to calibrate, mask, and convert)
+by roughly N <sup>2</sup>, and <code class="docutils literal notranslate"><span class="pre">CompressEvents</span></code> collapses now-redundant
+overlapping events on top of that. Since this happens before
+<code class="docutils literal notranslate"><span class="pre">ConvertToMD</span></code>, every downstream operation - including the MDNorm
+pass discussed below - is working with a smaller workspace for the
+rest of that run’s processing. For a reduction that loops over many
+runs (a full experiment, or a survey/scan), this per-run load-and-
+convert cost is usually where the bulk of the wall time actually
+goes, so grouping is the single biggest lever for that part of the
+pipeline.</p>
+<p><strong>Where it applies.</strong> <code class="docutils literal notranslate"><span class="pre">Grouping</span></code> is a <strong>Normalization</strong>-tab
+setting only - it does not touch the separate <strong>Integration</strong> step,
+which always works from full-resolution per-pixel data for peak
+shape and position. That means grouping can be turned up aggressively
+for normalization/slice-preview work without any effect on peak
+integration precision elsewhere in the same plan.</p>
+<p><strong>The trade-off.</strong> Coarser grouping means coarser detector-space
+resolution: peak positions and shapes in the raw data are less
+precisely located, and the vanadium solid-angle/flux correction is
+only as fine-grained as whatever grouping it was itself computed at
+(see the <a class="reference internal" href="guide_vanadium.html"><span class="doc">vanadium guide</span></a>) - the grouping used
+here must match the grouping the vanadium files were generated with,
+or the correction and the data will disagree pixel-for-pixel. In
+practice: use the coarsest grouping that still matches your vanadium
+files while you’re iterating on projections/extents/symmetry, and
+only go finer (or to no grouping) for the final production pass if
+detector-space resolution genuinely matters for that output.</p>
 </section>
-<section id="step-1-runs-and-sample-geometry">
-<h2>Step 1: Runs and sample geometry<a class="headerlink" href="#step-1-runs-and-sample-geometry" title="Link to this heading">#</a></h2>
-<ul class="simple">
-<li><p>Switch to the <strong>Vanadium</strong> sub-tab.</p></li>
-<li><p>Set <strong>Instrument</strong>, <strong>Vanadium IPTS/Runs</strong>, and the matching
-<strong>No-Sample IPTS/Runs</strong> - a background run taken under the same beam
-conditions but with the vanadium standard removed. The background is
-subtracted from the vanadium run to strip out scattering from the
-sample environment itself (can walls, air, cryostat) that would
-otherwise contaminate the “pure vanadium” signal.</p></li>
-<li><p>Choose the <strong>Sample Shape</strong> (sphere or cylinder) and enter its
-<strong>Diameter</strong> (and <strong>Height</strong> for a cylinder) to match the physical
-standard actually mounted in the beam. This isn’t cosmetic - it
-drives the absorption correction below.</p></li>
-<li><p><strong>Beam Diameter</strong> matters when the beam is narrower than the
-standard: only the illuminated volume contributes signal, and a beam
-smaller than the vanadium changes how much of the rod or sphere is
-actually seen.</p></li>
-<li><p><strong>Output Folder</strong> is a short name, not a full path: results are
-written to <code class="docutils literal notranslate"><span class="pre">/SNS/&lt;Instrument&gt;/shared/Vanadium/&lt;Output</span> <span class="pre">Folder&gt;/</span></code>, a
-facility location shared by everyone working on that instrument -
-not a personal or scratch directory. Pick a descriptive name (e.g.
-the cycle or sample geometry).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">absorption_parameters.txt</span></code> in that output folder reports the
-linear absorption/scattering coefficients and the equivalent mass
-and density derived from the entered dimensions. Vanadium’s density
-is well known (~6.11 g/cm<sup>3</sup>), so a wildly different implied
-density is a quick sign the entered diameter/height doesn’t match
-the physical standard.</p></li>
-</ul>
+<section id="output-binning">
+<h2>Output binning<a class="headerlink" href="#output-binning" title="Link to this heading">#</a></h2>
+<p><strong>What it does.</strong> The three <code class="docutils literal notranslate"><span class="pre">Bins</span></code> values (one per projection axis,
+<code class="docutils literal notranslate"><span class="pre">Uproj</span></code>/<code class="docutils literal notranslate"><span class="pre">Vproj</span></code>/<code class="docutils literal notranslate"><span class="pre">Wproj</span></code>) set the shape of the output data/norm
+histogram that MDNorm actually builds and writes. Unlike grouping,
+this doesn’t shrink an intermediate workspace - it <em>is</em> the size of
+the final result, and both the memory MDNorm needs while accumulating
+it and the time it takes to fill every voxel scale with the total
+voxel count, <code class="docutils literal notranslate"><span class="pre">Bins[0]</span> <span class="pre">x</span> <span class="pre">Bins[1]</span> <span class="pre">x</span> <span class="pre">Bins[2]</span></code>. Garnet enforces a hard
+cap of 1001<sup>3</sup> total bins specifically to keep that number
+from running away.</p>
+<p><strong>The three axes don’t have to match.</strong> It’s tempting to set all
+three bin counts equal (e.g. the GUI default of 201x201x201), but the
+three axes are rarely equally informative. If you’re looking at (or
+integrating over) a thin or genuinely lower-resolution direction -
+the vertical/out-of-plane axis of a 2D slice, or any direction whose
+features you don’t need to resolve finely - every extra bin along
+<em>that</em> axis multiplies the total work by the same factor as an extra
+bin in a direction that actually matters, for no analytical benefit.
+As a rule of thumb: keep the low-value axis around 100 bins or fewer,
+and reserve the higher resolution - 200 to 800 bins - for the one or
+two in-plane directions where the reciprocal-space features you care
+about (Bragg peaks, diffuse scattering) actually need resolving. Going
+from, say, a uniform 400x400x400 grid to 400x400x100 for the same
+in-plane detail cuts total voxels - and MDNorm’s memory and run time
+with them - by a factor of four, just by not over-resolving the axis
+that didn’t need it.</p>
 </section>
-<section id="step-2-wavelength-range-and-pixel-grouping">
-<h2>Step 2: Wavelength range and pixel grouping<a class="headerlink" href="#step-2-wavelength-range-and-pixel-grouping" title="Link to this heading">#</a></h2>
-<ul class="simple">
-<li><p><strong>k(min)/k(max)</strong> set the momentum (equivalently wavelength) window
-the correction covers; this should bracket the full band used for
-the actual sample reduction, and auto-populates from the
-instrument’s usable wavelength band when <strong>Instrument</strong> changes.</p></li>
-<li><p><strong>Rows/Cols</strong> sum neighboring pixels together before building the
-correction curves. Vanadium runs are typically much shorter than
-sample runs, so grouping trades a little spatial resolution for a
-correction surface with far less counting-statistics noise - and it
-is applied consistently, so the grouping should match what is used
-for the sample data downstream.</p></li>
-<li><p><strong>Mask Options</strong> exclude dead or noisy tubes/pixels/banks. This
-matters even more here than for a sample run: after grouping, one
-bad pixel can poison the smoothed signal of its whole neighborhood,
-leaving a visible artifact in the final correction map.</p></li>
-</ul>
+<section id="symmetry-operations">
+<h2>Symmetry operations<a class="headerlink" href="#symmetry-operations" title="Link to this heading">#</a></h2>
+<p><strong>What it does.</strong> The <code class="docutils literal notranslate"><span class="pre">Symmetry</span></code> parameter names a Laue point group
+and is passed straight through to MDNorm’s <code class="docutils literal notranslate"><span class="pre">SymmetryOperations</span></code>.
+Internally, MDNorm doesn’t just tag the output with a symmetry label -
+it rotates the normalization (and background, if present) by <em>every</em>
+operator in that point group and re-bins/accumulates each rotated
+copy into the same output histogram, so that the final normalization
+correctly reflects what detector coverage looks like from every
+symmetry-equivalent orientation, not just the one actually measured.</p>
+<p><strong>The cost.</strong> That means the normalization pass is repeated once per
+operator: a low-symmetry Laue class (triclinic, 1-2 operators) costs
+about the same as no symmetry at all, while a high-symmetry cubic
+class like m-3m has 48 operators - so requesting full m-3m symmetry
+can make the same bin grid take up to roughly 48 times longer to
+normalize than leaving <code class="docutils literal notranslate"><span class="pre">Symmetry</span></code> unset. This multiplies directly
+with the binning cost above: 48 operators over a needlessly fine
+400x400x400 grid is far more expensive than 48 operators over the
+same grid with its low-value axis trimmed to 100 bins.</p>
+<p><strong>Guidance.</strong> Don’t pay the full symmetry cost while you’re still
+iterating - leave <code class="docutils literal notranslate"><span class="pre">Symmetry</span></code> unset (or use whatever minimal point
+group you’re confident in) while choosing projections, extents, and
+bins, and only turn on the true, full Laue symmetry for the final
+production normalization once the geometry is settled. Re-running a
+48-operator normalization repeatedly during exploration is by far the
+most expensive way to iterate.</p>
 </section>
-<section id="step-3-run-and-inspect-the-correction">
-<h2>Step 3: Run and inspect the correction<a class="headerlink" href="#step-3-run-and-inspect-the-correction" title="Link to this heading">#</a></h2>
-<ul class="simple">
-<li><p>Point <strong>Instrument Definition</strong>, <strong>Detector Calibration</strong>, and
-<strong>Tube Calibration</strong> at the calibrated geometry (see the detector
-calibration guide) - the vanadium correction has to be computed on
-the exact panel geometry used to reduce the sample data, since it
-depends on each pixel’s real position and solid angle.</p></li>
-<li><p>Click <strong>Run</strong>. Behind the scenes:</p>
-<ol class="arabic simple">
-<li><p>Vanadium and background are loaded, normalized by proton charge,
-grouped, and masked identically.</p></li>
-<li><p>The background is subtracted from the vanadium signal.</p></li>
-<li><p>An absorption correction is applied: a thicker or larger standard
-absorbs more of the slower (longer-wavelength) neutrons before
-they can scatter back out, especially along the longer path
-lengths seen at large scattering angles. This step estimates, for
-every pixel and wavelength, how much stronger the signal would
-have been without that self-absorption, and scales it back up
-accordingly, using the sample’s real size/shape and its known
-absorption coefficient.</p></li>
-<li><p>The now background-subtracted, absorption-corrected data is split
-into two physically distinct pieces: the incident spectrum (how
-much flux the source delivered at each wavelength, summed over
-the whole array) and a per-bank detector efficiency curve (how
-sensitive each bank is as a function of wavelength, cross
-calibrated bank to bank). Both are smoothed into stable curves
-rather than left as noisy raw histograms, since dividing sample
-data by a noisy correction would inject that noise into every
-peak.</p></li>
-<li><p>A purely geometric per-pixel solid-angle map is computed directly
-from the calibrated panel geometry (independent of counting
-statistics), used to correct for how much of the scattered beam
-each pixel actually catches.</p></li>
-</ol>
-</li>
-</ul>
-</section>
-<section id="reading-the-output">
-<h2>Reading the output<a class="headerlink" href="#reading-the-output" title="Link to this heading">#</a></h2>
-<p>Everything below lives under
-<code class="docutils literal notranslate"><span class="pre">/SNS/&lt;Instrument&gt;/shared/Vanadium/&lt;Output</span> <span class="pre">Folder&gt;/</span></code>. Two files are
-the actual normalization inputs consumed by the <strong>Normalization</strong> tab
-of the main reduction plan - everything else in that folder is a
-diagnostic for checking the run, not something later steps read.</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">flux.nxs</span></code> - the background-subtracted, absorption-corrected
-incident spectrum, per bank, expressed as a cumulative distribution
-over wavelength. For a peak observed at a given wavelength on a
-given bank, this is what supplies “how much flux was actually
-available at that wavelength.”</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">solid_angle.nxs</span></code> - the per-pixel vanadium response integrated
-over the full wavelength band: a single number per pixel folding
-together its detector efficiency and the geometric solid angle it
-subtends. This is what supplies “how strongly would this specific
-pixel respond.”</p></li>
-</ul>
-<p>Together, evaluating the flux at a peak’s wavelength/bank and scaling
-by the solid angle of the pixels it landed on is the full flat-field
-correction described above.</p>
-<p>Diagnostics only - the remaining files are written for visual
-inspection of the run and are never read back in by the software:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">incident.nxs</span></code> / the <em>incident</em> plot - the delivered spectrum
-shape versus wavelength, prior to the cumulative-flux conversion in
-<code class="docutils literal notranslate"><span class="pre">flux.nxs</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">count_rate.nxs</span></code> / the <em>count_rate</em> plot - the per-bank detector
-efficiency curve; a tube or bank whose curve has a noticeably
-different shape from its neighbors usually indicates a mask or
-calibration issue worth revisiting.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">solid_angle_geom.nxs</span></code> - the purely geometric solid-angle map
-(efficiency factored out); instrument coverage maps (gamma/nu
-scatter plots) are also saved for visually spot-checking masked
-regions or panels that look discolored relative to their neighbors.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">background.nxs</span></code>, <code class="docutils literal notranslate"><span class="pre">background_count_rate.nxs</span></code> - the standalone
-background run and its rate, useful for confirming the background
-run itself was clean.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spectra.nxs</span></code>, <code class="docutils literal notranslate"><span class="pre">correction.nxs</span></code>, <code class="docutils literal notranslate"><span class="pre">scale.nxs</span></code> - intermediate
-absorption-correction workspaces, useful for tracing a suspicious
-result back to a specific correction step.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">absorption_parameters.txt</span></code> - the sanity-check report described
-in Step 1.</p></li>
-</ul>
+<section id="putting-it-together">
+<h2>Putting it together<a class="headerlink" href="#putting-it-together" title="Link to this heading">#</a></h2>
+<p>These three settings compound multiplicatively, so the order to tune
+them in matters: pick a <strong>Grouping</strong> that matches your vanadium files
+and is coarse enough for fast iteration, choose <strong>Bins</strong> that spend
+resolution only on the axes that need it (~100 or fewer on the
+low-value axis, 200-800 on the axes that matter), and leave
+<strong>Symmetry</strong> off until everything else is settled - then turn full
+symmetry on for the one production run that needs it.</p>
 </section>
 </section>
 
@@ -587,20 +543,20 @@ in Step 1.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="guide_calibration.html"
+       href="guide_autoreduce.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Detector and Goniometer Calibration</p>
+        <p class="prev-next-title">Live Autoreduction</p>
       </div>
     </a>
     <a class="right-next"
-       href="guide_autoreduce.html"
+       href="garnet.tutorials.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Live Autoreduction</p>
+        <p class="prev-next-title">garnet tutorials</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -623,11 +579,10 @@ in Step 1.</p></li>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-physical-idea">The physical idea</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-runs-and-sample-geometry">Step 1: Runs and sample geometry</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-wavelength-range-and-pixel-grouping">Step 2: Wavelength range and pixel grouping</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-3-run-and-inspect-the-correction">Step 3: Run and inspect the correction</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reading-the-output">Reading the output</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pixel-grouping">Pixel grouping</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#output-binning">Output binning</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#symmetry-operations">Symmetry operations</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#putting-it-together">Putting it together</a></li>
 </ul>
   </nav></div>
 

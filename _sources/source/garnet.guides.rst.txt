@@ -13,3 +13,9 @@ garnet guides
    :caption: During the Experiment:
 
    guide_autoreduce
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Performance:
+
+   guide_performance

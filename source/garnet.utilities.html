@@ -418,7 +418,7 @@
 <span id="garnet-utilities-autoreduce-module"></span><h2>garnet.utilities.autoreduce module<a class="headerlink" href="#module-garnet.utilities.autoreduce" title="Link to this heading">#</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="garnet.utilities.autoreduce.AutoReduce">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">AutoReduce</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/autoreduce.py#L71-L948"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.autoreduce.AutoReduce" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">AutoReduce</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/autoreduce.py#L71-L946"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.autoreduce.AutoReduce" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
@@ -456,7 +456,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.autoreduce.AutoReduce.compress">
-<span class="sig-name descname"><span class="pre">compress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ws</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/autoreduce.py#L128-L238"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.autoreduce.AutoReduce.compress" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">compress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ws</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/autoreduce.py#L128-L236"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.autoreduce.AutoReduce.compress" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
@@ -466,7 +466,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.autoreduce.AutoReduce.find_autoreduce_config">
-<span class="sig-name descname"><span class="pre">find_autoreduce_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/autoreduce.py#L413-L444"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.autoreduce.AutoReduce.find_autoreduce_config" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">find_autoreduce_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/autoreduce.py#L411-L442"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.autoreduce.AutoReduce.find_autoreduce_config" title="Link to this definition">#</a></dt>
 <dd><p>Locate the most recently modified autoreduce yaml config, if any.</p>
 <p>Requires UBFile, VanadiumFile, and FluxFile keys; missing file or
 keys means the slice preview workflow is skipped entirely.</p>
@@ -474,7 +474,7 @@ keys means the slice preview workflow is skipped entirely.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.autoreduce.AutoReduce.plot_instrument">
-<span class="sig-name descname"><span class="pre">plot_instrument</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/autoreduce.py#L347-L411"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.autoreduce.AutoReduce.plot_instrument" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">plot_instrument</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/autoreduce.py#L345-L409"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.autoreduce.AutoReduce.plot_instrument" title="Link to this definition">#</a></dt>
 <dd><p>Bin the detector-space (gamma, nu) view into a 2D histogram
 (mean intensity per bin, mirroring NeuXtalViz’s
 ub_tools.py calculate_instrument_view), and render it as an
@@ -483,12 +483,12 @@ interactive Plotly heatmap for the monitor page.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.autoreduce.AutoReduce.publish_plots">
-<span class="sig-name descname"><span class="pre">publish_plots</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/autoreduce.py#L944-L948"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.autoreduce.AutoReduce.publish_plots" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">publish_plots</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/autoreduce.py#L942-L946"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.autoreduce.AutoReduce.publish_plots" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="garnet.utilities.autoreduce.AutoReduce.slice_workflow">
-<span class="sig-name descname"><span class="pre">slice_workflow</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/autoreduce.py#L857-L942"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.autoreduce.AutoReduce.slice_workflow" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">slice_workflow</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/utilities/autoreduce.py#L855-L940"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.utilities.autoreduce.AutoReduce.slice_workflow" title="Link to this definition">#</a></dt>
 <dd><p>Compute default UB-driven HKL-projection slices, MDNorm-normalize
 against the configured vanadium solid-angle/flux, accumulate
 on-disk with any prior run of the same title, and plot/upload.</p>

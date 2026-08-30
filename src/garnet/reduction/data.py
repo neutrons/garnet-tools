@@ -245,7 +245,7 @@ class BaseDataModel:
             grouping = plan["Grouping"]
             self.grouping = grouping if grouping != "1x1" else None
 
-        if self.grouping is not None:
+        if self.grouping is not None and self.time_offset is None:
             raw_path = raw_path.replace("nexus", "shared/autoreduce")
             raw_file = raw_file.replace(".nxs", ".lite.nxs")
             if self.elastic == True and self.time_offset is None:
@@ -265,7 +265,7 @@ class BaseDataModel:
             assert os.path.exists(file), "Check file {}".format(file)
 
         if instrument != "DEMAND":
-            if (
+            if self.time_offset is not None or (
                 not self.elastic
                 and not self.custom_path
                 and self.grouping is None
@@ -1545,9 +1545,9 @@ class LaueData(BaseDataModel):
 
         filenames = self.file_names(IPTS, runs)
 
-        preprocessed = (
-            self.elastic and self.time_offset is None
-        ) or self.grouping is not None
+        preprocessed = self.time_offset is None and (
+            self.elastic or self.grouping is not None
+        )
 
         if preprocessed:
             LoadNexus(Filename=filenames, OutputWorkspace=event_name)
@@ -1583,6 +1583,26 @@ class LaueData(BaseDataModel):
                 InputWorkspace=event_name,
                 OutputWorkspace=event_name,
                 TimingOffset=self.time_offset,
+            )
+
+        if not preprocessed and self.grouping is not None:
+            c, r = list(map(int, self.grouping.split("x")))
+            cols, rows = self.instrument_config["BankPixels"]
+
+            PreprocessDetectorsToMD(
+                InputWorkspace=event_name, OutputWorkspace="_detectors"
+            )
+
+            pattern = self.grouping_list("_detectors", cols, rows, 1, 1, c, r)
+
+            GroupDetectors(
+                InputWorkspace=event_name,
+                GroupingPattern=pattern,
+                OutputWorkspace=event_name,
+            )
+
+            CompressEvents(
+                InputWorkspace=event_name, OutputWorkspace=event_name
             )
 
         self.monitor = mtd[event_name].run().getProtonCharge()
@@ -2728,7 +2748,9 @@ class LaueData(BaseDataModel):
 
         self.crop_for_normalization(sub_name)
 
-    def normalize_to_hkl(self, md, projections, extents, bins, symmetry=None):
+    def normalize_to_hkl(
+        self, md, projections, extents, bins, symmetry=None, zero=False
+    ):
         """
         Normalize to binned hkl.
 
@@ -2744,6 +2766,11 @@ class LaueData(BaseDataModel):
             Number of bins.
         symmetry : str, optional
             Laue point group. The default is None.
+        zero : bool, optional
+            Discard the normalized result, keeping data/norm at zero. Used
+            when the projection axes could not be derived (e.g. a
+            MillerIndex that is not elastically reachable). The default is
+            False.
 
         """
 
@@ -2802,6 +2829,10 @@ class LaueData(BaseDataModel):
                 OutputBackgroundDataWorkspace=bkg_data,
                 OutputBackgroundNormalizationWorkspace=bkg_norm,
             )
+
+            if zero:
+                mtd[md + "_data"] *= 0
+                mtd[md + "_norm"] *= 0
 
     def filter_events(self, ws, run, runs):
         """

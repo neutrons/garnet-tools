@@ -108,7 +108,7 @@ class AutoReduce:
         self.files = {}
         self.plot_html = ""
 
-    def elastic(self, time_offset=14000):
+    def elastic(self, time_offset=17000):
         if self.instrument == "CORELLI":
             try:
                 CorelliCrossCorrelate(

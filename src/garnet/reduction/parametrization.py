@@ -129,6 +129,7 @@ class Parametrization(SubPlan):
 
         projections = self.params["Projections"]
         extents = np.array(self.params["Extents"].copy()).tolist()
+        zero_hkl = False
 
         if data.laue:
             self.run = 0
@@ -194,14 +195,30 @@ class Parametrization(SubPlan):
                     hkl = self.params.get("MillerIndex")
                     if hkl is not None:
                         if not mtd.doesExist("peaks"):
-                            peaks.create_peaks("md", "peaks")
+                            peaks.create_peaks("md", "peaks", lean=True)
                             peaks.add_peak("peaks", hkl)
                             peak = PeakModel("peaks")
                             proj_orig = peak.get_projection_peak_origin(0)
-                            projections, origin = proj_orig
-                            for i in range(3):
-                                for j in range(2):
-                                    extents[i][j] += origin[i]
+                            proj_candidate, origin = proj_orig
+                            W = np.array(proj_candidate)
+                            if (
+                                np.all(np.isfinite(W))
+                                and abs(np.linalg.det(W)) > 1e-6
+                            ):
+                                projections = proj_candidate
+                                for i in range(3):
+                                    for j in range(2):
+                                        extents[i][j] += origin[i]
+                                zero_hkl = False
+                            else:
+                                # Don't cache a degenerate result: this
+                                # run's UB may be a fluke (bad load,
+                                # miscalibration). Drop "peaks" so the next
+                                # run retries instead of every remaining
+                                # run in this batch being forced to zero.
+                                mtd.remove("peaks")
+                                zero_hkl = True
+                                projections = np.eye(3).tolist()
 
                     data.normalize_to_hkl(
                         "md",
@@ -209,6 +226,7 @@ class Parametrization(SubPlan):
                         extents,
                         self.params["Bins"],
                         "-1",
+                        zero=zero_hkl,
                     )
 
                     data.combine_splits(

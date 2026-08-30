@@ -1,4 +1,5 @@
 import os
+import re
 import itertools
 from concurrent.futures import ProcessPoolExecutor
 
@@ -122,6 +123,42 @@ def _read_signal_error_squared(filename):
         error_sq = np.asarray(group["errors_squared"]).T
 
     return signal, error_sq
+
+
+def _read_index_logs(filename):
+    """
+    Read per-index numeric sample logs ("log_<n>") directly from a saved
+    MDHistoWorkspace nexus file with h5py, bypassing LoadMD.
+
+    combine_splits tags each contributing run's bin index with its own
+    "log_<n>" sample log. Only the first file of a parallel combine is
+    loaded through Mantid (see combine_histogram_files) -- these logs must
+    be read back out of every other file directly so they aren't silently
+    dropped from the merged result.
+
+    Parameters
+    ----------
+    filename : str
+        Nexus filename to read the logs from.
+
+    Returns
+    -------
+    logs : dict
+        Mapping of log name to (value, units).
+
+    """
+
+    logs = {}
+    with h5py.File(filename, "r") as f:
+        group = f.get("MDHistoWorkspace/experiment0/logs")
+        if group is not None:
+            for name in group:
+                if re.fullmatch(r"log_\d+", name):
+                    value = np.asarray(group[name]["value"]).item()
+                    units = group[name]["value"].attrs.get("units", "")
+                    logs[name] = (value, units)
+
+    return logs
 
 
 def DataModel(instrument_config):
@@ -782,7 +819,10 @@ class BaseDataModel:
         signal and error-squared arrays of the remaining files are read
         directly with h5py instead of being loaded through Mantid, since
         only those two arrays are needed for the sum, and are accumulated
-        onto the first workspace's arrays.
+        onto the first workspace's arrays. Each remaining file's own
+        per-index "log_<n>" sample logs (see combine_splits) are read back
+        the same way and reapplied, since they otherwise only survive from
+        the first file.
 
         Parameters
         ----------
@@ -820,6 +860,16 @@ class BaseDataModel:
 
         mtd[merge].setSignalArray(signal)
         mtd[merge].setErrorSquaredArray(error_sq)
+
+        for file in rest:
+            for name, (value, units) in _read_index_logs(file).items():
+                AddSampleLog(
+                    Workspace=merge,
+                    LogName=name,
+                    LogText=str(value),
+                    LogUnit=str(units),
+                    LogType="Number",
+                )
 
     def save_histograms(self, filename, ws, sample_logs=False):
         """

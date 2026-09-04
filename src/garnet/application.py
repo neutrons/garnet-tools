@@ -1022,6 +1022,18 @@ class FormView(QWidget):
         self.process.readyReadStandardError.connect(self.handle_stderr)
         self.process.finished.connect(self.process_finished)
 
+        # Viewer launches (SliceViewer, etc.) run on their own QProcess so
+        # that an open viewer window never blocks the reduction run queue --
+        # self.process must stay NotRunning as soon as the reduction exits.
+        self.view_process = QProcess(self)
+        self.view_process.readyReadStandardOutput.connect(
+            self.handle_view_stdout
+        )
+        self.view_process.readyReadStandardError.connect(
+            self.handle_view_stderr
+        )
+        self.view_process.finished.connect(self.handle_view_finished)
+
         self.stop_button.clicked.connect(self.stop_process)
         self._theme_combo.currentIndexChanged.connect(self.update_pv_theme)
 
@@ -3533,6 +3545,36 @@ class FormView(QWidget):
         text = bytes(data).decode("utf-8")
         self.output.appendPlainText(f"[stderr] {text}")
 
+    def run_view_command(self, command):
+        self.output.appendPlainText("Launching viewer...\n")
+        if isinstance(command, list):
+            script, args = command[0], command[1:]
+        else:
+            script, *args = command.split(" ")
+        if self.view_process.state() != QProcess.NotRunning:
+            # A previous viewer is still open; drop it in favor of the new
+            # one rather than blocking this launch on it.
+            self.view_process.terminate()
+            if not self.view_process.waitForFinished(3000):
+                self.view_process.kill()
+        self.view_process.start(script, args)
+
+    def handle_view_stdout(self):
+        data = self.view_process.readAllStandardOutput()
+        text = bytes(data).decode("utf-8")
+        self.output.appendPlainText(text)
+
+    def handle_view_stderr(self):
+        data = self.view_process.readAllStandardError()
+        text = bytes(data).decode("utf-8")
+        self.output.appendPlainText(f"[stderr] {text}")
+
+    def handle_view_finished(self, exit_code=0, exit_status=None):
+        if exit_code != 0:
+            self.output.appendPlainText(
+                f"Viewer exited with code {exit_code}.\n"
+            )
+
     def process_finished(self, exit_code=0, exit_status=None):
         if hasattr(self, "_elapsed_timer"):
             ms = self._elapsed_timer.elapsed()
@@ -5458,7 +5500,7 @@ class FormPresenter:
             script = os.path.join(_utils, "view.py")
             cmd = [sys.executable, script, filename, mode]
 
-        self.view.run_command(cmd)
+        self.view.run_view_command(cmd)
 
     def load_int(self):
         params = self.model.get_int()

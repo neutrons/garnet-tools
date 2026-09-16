@@ -42,7 +42,9 @@ from garnet.utilities.absorption import AbsorptionEllipsoid
 
 
 class NuclearStructureRefinement:
-    def __init__(self, cell, space_group, sites, filename, parameters=None):
+    def __init__(
+        self, cell, space_group, sites, filename, parameters=None, twin_laws=None
+    ):
         self.sites = []
         for site in sites:
             atm, x, y, z, occ = site
@@ -51,6 +53,10 @@ class NuclearStructureRefinement:
 
         self.cell = cell
         self.space_group = space_group
+
+        self.twin_laws = [np.eye(3)]
+        if twin_laws is not None:
+            self.twin_laws += [np.asarray(T, dtype=float) for T in twin_laws]
 
         self.initialize_crystal_structure(self.sites)
         self.initialize_material()
@@ -463,6 +469,7 @@ class NuclearStructureRefinement:
         self.add_absorption_extinction_parameters(params)
         self.add_beam_parameters(params)
         self.add_detector_run_scale_parameters(params)
+        self.add_twin_parameters(params)
 
         F2s = self.calculate_structure_factors(params)
         scale = self.calculate_scale_factor(F2s)
@@ -567,6 +574,44 @@ class NuclearStructureRefinement:
                 value=0.0,
                 vary=True,
             )
+
+    def add_twin_parameters(self, params):
+        """
+        Twin domain volume fractions (``twin_frac_0..twin_frac_{n-1}``,
+        domain 0 the identity), reparametrized as n-1 free, independently
+        bounded [0, 1] "stick-breaking" parameters ``twin_s_i``:
+        ``frac_0 = s_0``, ``frac_1 = (1-s_0)*s_1``, ..., and the last
+        fraction is the leftover product ``prod(1-s_i)``. This keeps
+        every fraction in [0, 1] and summing to 1 for any values the
+        optimizer picks, unlike a naive ``expr='1-f_1-...-f_{n-1}'`` for
+        the last fraction, which lmfit would not keep bounded.
+
+        n=1 (the default, no twin laws beyond the implicit identity)
+        adds a single fixed ``twin_frac_0 = 1`` and no free parameters.
+        """
+        n = len(self.twin_laws)
+
+        if n == 1:
+            params.add("twin_frac_0", value=1.0, vary=False)
+            return
+
+        for i in range(n - 1):
+            params.add(
+                "twin_s_{}".format(i),
+                value=1.0 / (n - i),
+                min=0,
+                max=1,
+            )
+
+        remaining = "1"
+        for i in range(n - 1):
+            params.add(
+                "twin_frac_{}".format(i),
+                expr="({})*twin_s_{}".format(remaining, i),
+            )
+            remaining = "({})*(1-twin_s_{})".format(remaining, i)
+
+        params.add("twin_frac_{}".format(n - 1), expr=remaining)
 
     def extract_parameters(self, params, Uiso=0):
         sites = []
@@ -747,18 +792,52 @@ class NuclearStructureRefinement:
 
         self.material = material.build()
 
-    def calculate_structure_factors(self, params):
-        Fs = self.calculate_structure_amplitudes(params)
-
-        return (Fs * Fs.conj())[self.inverse].real
-
-    def calculate_structure_amplitudes(self, params):
+    def twin_fractions(self, params):
         """
-        Compute complex structure amplitudes Fs (per unique hkl) for given `params`.
+        Volume fraction of each twin domain (``self.twin_laws``, domain 0
+        always the identity), read off the ``twin_frac_i`` parameters
+        ``add_twin_parameters`` derives from the free ``twin_s_i``
+        stick-breaking parameters. Sums to 1 by construction.
+        """
+        return np.array(
+            [
+                params["twin_frac_{}".format(i)].value
+                for i in range(len(self.twin_laws))
+            ]
+        )
+
+    def calculate_structure_factors(self, params):
+        """
+        F2_calc per observation, incoherently summed over twin domains
+        weighted by their refined volume fraction: each domain sees the
+        same structural model but a transformed hkl (``T @ hkl``), since
+        domains are distinct crystallites (no amplitude interference
+        between them).
+        """
+        fracs = self.twin_fractions(params)
+
+        F2_unique = np.zeros(len(self.equiv))
+        for frac, T in zip(fracs, self.twin_laws):
+            hkl = self.equiv if np.array_equal(T, np.eye(3)) else np.rint(
+                self.equiv @ T.T
+            ).astype(int)
+            Fs = self.calculate_structure_amplitudes(params, hkl)
+            F2_unique = F2_unique + frac * (Fs * Fs.conj()).real
+
+        return F2_unique[self.inverse]
+
+    def calculate_structure_amplitudes(self, params, hkl=None):
+        """
+        Compute complex structure amplitudes Fs (per unique hkl) for given
+        `params`. `hkl` defaults to `self.equiv` (the observed unique HKLs)
+        but may be a transformed array, e.g. a twin domain's `T @ hkl`.
 
         This is identical to the inner part of `calculate_structure_factors`
         but returns the complex amplitudes (not squared magnitudes).
         """
+        if hkl is None:
+            hkl = self.equiv
+
         Fs = 0 + 0j
 
         for i, (site, transform, transform_disp, b) in enumerate(
@@ -773,7 +852,7 @@ class NuclearStructureRefinement:
 
             xyz = np.einsum("ijk,k->ij", transform, [x, y, z, 1])
 
-            pf = np.exp(2j * np.pi * np.einsum("ij,kj->ik", xyz, self.equiv))
+            pf = np.exp(2j * np.pi * np.einsum("ij,kj->ik", xyz, hkl))
 
             beta11 = params[var.format("beta11")].value
             beta22 = params[var.format("beta22")].value
@@ -791,12 +870,12 @@ class NuclearStructureRefinement:
             occ = params[var.format("occ")].value
 
             h2 = [
-                self.equiv[:, 0] ** 2,
-                self.equiv[:, 1] ** 2,
-                self.equiv[:, 2] ** 2,
-                2 * self.equiv[:, 1] * self.equiv[:, 2],
-                2 * self.equiv[:, 0] * self.equiv[:, 2],
-                2 * self.equiv[:, 0] * self.equiv[:, 1],
+                hkl[:, 0] ** 2,
+                hkl[:, 1] ** 2,
+                hkl[:, 2] ** 2,
+                2 * hkl[:, 1] * hkl[:, 2],
+                2 * hkl[:, 0] * hkl[:, 2],
+                2 * hkl[:, 0] * hkl[:, 1],
             ]
 
             T = np.exp(-np.einsum("ij,jk->ik", beta, h2))
@@ -1106,7 +1185,7 @@ class NuclearStructureRefinement:
         for name, par in params.items():
             if name in fixed or par.expr is not None:
                 par.vary = False
-            elif name == "scale":
+            elif name == "scale" or name.startswith("twin_s_"):
                 par.vary = True
             else:
                 par.vary = False  # Default off
@@ -1332,6 +1411,12 @@ class NuclearStructureRefinement:
         print("abs : {:6.5f} {:6.5f} {:6.5f}".format(thickness, width, height))
         print("    : {:6.1f} {:6.1f} {:6.1f}".format(alpha, beta, gamma))
         print("")
+
+        if len(self.twin_laws) > 1:
+            fracs = self.twin_fractions(params)
+            for i, frac in enumerate(fracs):
+                print("twin {} : {:6.4f}".format(i, frac))
+            print("")
 
         for i, site in enumerate(self.sites):
             name, x, y, z, occ, Uiso = site

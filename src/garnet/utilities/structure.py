@@ -54,6 +54,7 @@ class StructureAnalysis:
         self.point_group = point_group
 
         self.sites = defaults.get("Sites")
+        self.twin_laws = defaults.get("TwinLaws")
         self.ext_model = defaults.get("ExtinctionModel")
 
         self.refine_abs = False
@@ -161,6 +162,7 @@ class StructureAnalysis:
             self.sites,
             self.filename,
             self.parameters,
+            twin_laws=self.twin_laws,
         )
         nuclear.extract_info()
         nuclear.refine(

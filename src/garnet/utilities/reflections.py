@@ -875,10 +875,16 @@ class Peaks:
         group + atom sites), which is the source of truth here. See
         ``remove_forbidden_reflections_from_cif`` for the fallback
         when a user supplies a CIF file instead.
+
+        ``sites`` entries are ``(atom, x, y, z, occ)`` -- the plan's
+        Material.Sites format has no Uiso -- or ``(atom, x, y, z,
+        occ, Uiso)``; a missing Uiso defaults to 0, matching
+        ``NuclearStructureRefinement``'s own convention.
         """
         cell_params = " ".join(6 * ["{}"]).format(*cell)
         atom_sites = ";".join(
-            " ".join(6 * ["{}"]).format(*site) for site in sites
+            " ".join(6 * ["{}"]).format(*(tuple(site) + (0,))[:6])
+            for site in sites
         )
         crystal_structure = CrystalStructure(
             cell_params, space_group, atom_sites

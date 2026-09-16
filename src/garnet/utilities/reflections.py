@@ -18,6 +18,8 @@ from mantid.simpleapi import (
     LoadIsawUB,
     LoadIsawSpectrum,
     CloneWorkspace,
+    CreateSampleWorkspace,
+    LoadCIF,
     SetGoniometer,
     SetSample,
     LoadSampleShape,
@@ -38,6 +40,7 @@ import scipy.stats
 from sklearn.cluster import AgglomerativeClustering
 
 from mantid.kernel import V3D
+from mantid.geometry import CrystalStructure, ReflectionGenerator
 
 from mantid import config
 
@@ -773,6 +776,133 @@ class Peaks:
 
             if not (lo < ratio < hi):
                 peak.setSigmaIntensity(float("-inf"))
+
+    def _remove_forbidden_reflections(
+        self, crystal_structure, sigma=4.5, weak_frac=0.05, peaks=None
+    ):
+        """
+        Shared core for ``remove_forbidden_reflections`` and
+        ``remove_forbidden_reflections_from_cif``: given a resolved
+        ``mantid.geometry.CrystalStructure``, flag fundamental peaks
+        (m^2+n^2+p^2 == 0) whose observed intensity is far stronger
+        than the structural model predicts -- e.g. an integer HKL
+        that overlaps an aluminum CCR powder ring and picks up
+        sample-environment scattering on top of a symmetry-forbidden
+        or accidentally weak reflection.
+
+        F2_calc is evaluated for every fundamental peak's HKL, and a
+        single scale ``k`` is fit from the strongly-predicted
+        reflections (those with F2_calc above ``weak_frac`` of the
+        maximum) as the median of I_obs / F2_calc -- a robust ratio,
+        not a least-squares fit, so it isn't pulled by the very
+        contamination this is meant to catch. The residual
+        ``I_obs - k * F2_calc`` is then MAD-tested (one-sided, high
+        only) over the "should be weak" pool: fundamentals with
+        F2_calc at or below ``weak_frac`` of the maximum, union
+        satellite peaks. Satellites have no modulation structural
+        model, so F2_calc is not evaluated for them -- per convention
+        they are assumed weak (F2_calc = 0) and folded into the same
+        pool.
+
+        Strongly-predicted reflections are left untouched: their
+        deviation from a simple kinematic F2 (extinction, absorption
+        residuals, preferred orientation, ...) is not what this test
+        is for, and treating it as contamination would false-flag
+        real strong peaks.
+        """
+        if peaks is None:
+            peaks = self.peaks
+
+        generator = ReflectionGenerator(crystal_structure)
+
+        n_peaks = mtd[peaks].getNumberPeaks()
+
+        is_sat = np.zeros(n_peaks, dtype=bool)
+        hkls = []
+        I_obs = np.zeros(n_peaks)
+
+        for i, peak in enumerate(mtd[peaks]):
+            h, k, l = [int(v) for v in peak.getIntHKL()]
+            m, n, p = [int(v) for v in peak.getIntMNP()]
+            is_sat[i] = (m * m + n * n + p * p) > 0
+            hkls.append(V3D(h, k, l))
+            I_obs[i] = peak.getIntensity()
+
+        fund_idx = np.where(~is_sat)[0]
+        if len(fund_idx) == 0:
+            return
+
+        F2 = np.zeros(n_peaks)
+        F2[fund_idx] = generator.getFsSquared([hkls[i] for i in fund_idx])
+
+        F2_max = F2[fund_idx].max()
+        if F2_max <= 0:
+            return
+
+        strong = fund_idx[F2[fund_idx] > weak_frac * F2_max]
+        if len(strong) == 0:
+            return
+
+        k = np.nanmedian(I_obs[strong] / F2[strong])
+
+        weak = np.union1d(
+            fund_idx[F2[fund_idx] <= weak_frac * F2_max],
+            np.where(is_sat)[0],
+        )
+        if len(weak) < 5:
+            return
+
+        residual = I_obs - k * F2
+
+        med, mad = self.median_absolute_devation(residual[weak])
+        if mad == 0:
+            return
+
+        z = (residual[weak] - med) / mad
+
+        for idx, zi in zip(weak, z):
+            if zi > sigma:
+                mtd[peaks].getPeak(int(idx)).setSigmaIntensity(float("-inf"))
+
+    def remove_forbidden_reflections(
+        self, cell, space_group, sites, sigma=4.5, weak_frac=0.05, peaks=None
+    ):
+        """
+        Flag anomalously strong forbidden/weak reflections using the
+        (cell, space_group, sites) structural model -- the same
+        triple ``NuclearStructureRefinement``/``StructureAnalysis``
+        already carry as the reduction plan's Material block (space
+        group + atom sites), which is the source of truth here. See
+        ``remove_forbidden_reflections_from_cif`` for the fallback
+        when a user supplies a CIF file instead.
+        """
+        cell_params = " ".join(6 * ["{}"]).format(*cell)
+        atom_sites = ";".join(
+            " ".join(6 * ["{}"]).format(*site) for site in sites
+        )
+        crystal_structure = CrystalStructure(
+            cell_params, space_group, atom_sites
+        )
+
+        self._remove_forbidden_reflections(
+            crystal_structure, sigma=sigma, weak_frac=weak_frac, peaks=peaks
+        )
+
+    def remove_forbidden_reflections_from_cif(
+        self, cif_filename, sigma=4.5, weak_frac=0.05, peaks=None
+    ):
+        """
+        Convenience fallback for ``remove_forbidden_reflections`` when
+        a CIF file is available instead of an explicit (cell,
+        space_group, sites) triple.
+        """
+        CreateSampleWorkspace(OutputWorkspace="_forbidden_cif")
+        LoadCIF(Workspace="_forbidden_cif", InputFile=cif_filename)
+        crystal_structure = mtd["_forbidden_cif"].sample().getCrystalStructure()
+
+        self._remove_forbidden_reflections(
+            crystal_structure, sigma=sigma, weak_frac=weak_frac, peaks=peaks
+        )
 
     def remove_non_integrated(self):
         for peak in mtd[self.peaks]:

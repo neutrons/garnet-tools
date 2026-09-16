@@ -82,6 +82,11 @@ class StructureAnalysis:
 
         self.load_peaks()
 
+        if self.space_group is not None and self.sites is not None:
+            self.peaks.remove_forbidden_reflections(
+                self.cell, self.space_group, self.sites
+            )
+
         if not self.profile_fit:
             self.peaks.renormalize_intensities(
                 self.plan, self.vanadium_file, self.flux_file

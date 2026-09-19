@@ -1329,8 +1329,42 @@ class FormView(QWidget):
         samp_layout.addStretch(1)
         samp_tab.setLayout(samp_layout)
 
+        twin_tab = QWidget()
+        twin_layout = QVBoxLayout()
+
+        twin_caption = QLabel(
+            "Domain 1 (identity) is always included. Add a matrix T "
+            "such that h'k'l' = T @ hkl for each additional twin "
+            "domain; volume fractions are refined, not entered here.",
+            self,
+        )
+        twin_caption.setWordWrap(True)
+
+        twin_ctrl_layout = QHBoxLayout()
+        self.add_twin_button = QPushButton("Add", self)
+        self.add_twin_button.setIcon(_qicon("fa6s.plus"))
+        self.del_twin_button = QPushButton("Delete", self)
+        self.del_twin_button.setIcon(_qicon("fa6s.minus"))
+        twin_ctrl_layout.addWidget(self.add_twin_button)
+        twin_ctrl_layout.addWidget(self.del_twin_button)
+        twin_ctrl_layout.addStretch(1)
+
+        self.twin_table = QTableWidget()
+        self.twin_table.setColumnCount(9)
+        self.twin_table.setHorizontalHeaderLabels(
+            ["T11", "T12", "T13", "T21", "T22", "T23", "T31", "T32", "T33"]
+        )
+        self.twin_table.horizontalHeader().setSectionResizeMode(stretch)
+        self.twin_table.setSelectionBehavior(QTableWidget.SelectRows)
+
+        twin_layout.addWidget(twin_caption)
+        twin_layout.addLayout(twin_ctrl_layout)
+        twin_layout.addWidget(self.twin_table)
+        twin_tab.setLayout(twin_layout)
+
         info_widget.addTab(mat_tab, "Material")
         info_widget.addTab(samp_tab, "Sample")
+        info_widget.addTab(twin_tab, "Twinning")
 
         outer_layout.addWidget(info_widget)
         tab.setLayout(outer_layout)
@@ -3695,6 +3729,54 @@ class FormView(QWidget):
         if hasattr(self, "_material_changed_cb"):
             self._material_changed_cb()
 
+    def add_twin_row(self):
+        row = self.twin_table.rowCount()
+        self.twin_table.insertRow(row)
+        for col, val in enumerate(["1", "0", "0", "0", "1", "0", "0", "0", "1"]):
+            item = QTableWidgetItem(val)
+            item.setTextAlignment(Qt.AlignCenter)
+            self.twin_table.setItem(row, col, item)
+        if hasattr(self, "_material_changed_cb"):
+            self._material_changed_cb()
+
+    def del_twin_row(self):
+        rows = self.twin_table.selectionModel().selectedRows()
+        for row in sorted(rows, reverse=True):
+            self.twin_table.removeRow(row.row())
+        if hasattr(self, "_material_changed_cb"):
+            self._material_changed_cb()
+
+    def set_mat_twin_laws(self, twin_laws):
+        self.twin_table.setRowCount(0)
+        for T in twin_laws or []:
+            flat = [v for row in T for v in row]
+            row = self.twin_table.rowCount()
+            self.twin_table.insertRow(row)
+            for col, val in enumerate(flat):
+                item = QTableWidgetItem(str(val))
+                item.setTextAlignment(Qt.AlignCenter)
+                self.twin_table.setItem(row, col, item)
+
+    def get_mat_twin_laws(self):
+        twin_laws = []
+        for row in range(self.twin_table.rowCount()):
+            flat = []
+            for col in range(9):
+                item = self.twin_table.item(row, col)
+                val = item.text() if item else ""
+                try:
+                    flat.append(float(val))
+                except ValueError:
+                    flat.append(0.0)
+            twin_laws.append([flat[0:3], flat[3:6], flat[6:9]])
+        return twin_laws
+
+    def connect_add_twin(self, add_twin):
+        self.add_twin_button.clicked.connect(add_twin)
+
+    def connect_del_twin(self, del_twin):
+        self.del_twin_button.clicked.connect(del_twin)
+
     def _open_periodic_table(self):
         dlg = PeriodicTableDialog(self)
         if dlg.exec() == QDialog.Accepted and dlg.selected:
@@ -4926,6 +5008,8 @@ class FormPresenter:
         self.view.connect_load_CIF(self.load_CIF)
         self.view.connect_add_site(self.view.add_site_row)
         self.view.connect_del_site(self.view.del_site_row)
+        self.view.connect_add_twin(self.view.add_twin_row)
+        self.view.connect_del_twin(self.view.del_twin_row)
         self.view.connect_show_crystal(self.show_crystal)
         self.view.connect_show_sample(self.show_sample)
         self.view.connect_material_changed(self.update_formula_z)
@@ -5657,6 +5741,7 @@ class FormPresenter:
             self.view.set_mat_space_group(material.get("SpaceGroup", ""))
             sites = material.get("Sites", [])
             self.view.set_mat_sites(sites)
+            self.view.set_mat_twin_laws(material.get("TwinLaws", []))
             formula = material.get("ChemicalFormula", "")
             Z = material.get("ZParameter", 1)
             self.view.set_mat_formula(formula, int(Z))
@@ -5683,12 +5768,22 @@ class FormPresenter:
         formula, Z = self.view.get_mat_formula()
         sg = self.view.get_mat_space_group()
         sites = self.view.get_mat_sites()
+        twin_laws = self.view.get_mat_twin_laws()
         refine_struct = self.view.get_refine_structure()
         twh = self.view.get_sample_dimensions()
         u, v = self.view.get_sample_orientation()
         refine_shape = self.view.get_refine_shape()
         self.model.set_mat(
-            formula, Z, sg, sites, refine_struct, twh, u, v, refine_shape
+            formula,
+            Z,
+            sg,
+            sites,
+            twin_laws,
+            refine_struct,
+            twh,
+            u,
+            v,
+            refine_shape,
         )
 
     def update_formula_z(self, *_):
@@ -5889,6 +5984,7 @@ class FormModel:
         Z,
         sg,
         sites,
+        twin_laws,
         refine_structure,
         twh,
         u,
@@ -5903,6 +5999,8 @@ class FormModel:
         if refine_structure:
             material["SpaceGroup"] = sg
             material["Sites"] = sites
+            if twin_laws:
+                material["TwinLaws"] = twin_laws
         self.reduction.plan["Material"] = material
 
         sample = {}

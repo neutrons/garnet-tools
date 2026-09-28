@@ -338,9 +338,7 @@ class AutoReduce:
             layout=layout,
         )
 
-        return plotly_plot(
-            fig, output_type="div", include_plotlyjs=False, show_link=False
-        )
+        return plotly_plot(fig, output_type="div", include_plotlyjs=False)
 
     def plot_instrument(self):
         """
@@ -847,7 +845,6 @@ class AutoReduce:
             plot.fig,
             output_type="div",
             include_plotlyjs=False,
-            show_link=False,
         )
 
         self.plot_html += "<div>{}</div>\n".format(div)

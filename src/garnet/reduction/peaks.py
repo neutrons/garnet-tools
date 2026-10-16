@@ -39,6 +39,8 @@ from mantid import config
 
 config["Q.convention"] = "Crystallography"
 
+import json
+
 import numpy as np
 
 centering_reflection = {
@@ -513,11 +515,21 @@ class PeaksModel:
         background_outer_fact=np.cbrt(3),
         solid_angle="sa",
         flux="flux",
+        profile_fit=False,
+        adjust_center=False,
+        adjust_shape=False,
+        min_signal_to_noise=10.0,
+        max_shape_change=2.0,
     ):
         """
-        Integrate peaks in fixed ellipsoids, normalized by flux and solid
-        angle along each detector's trajectory through them (as MDNorm, but
+        Integrate peaks in ellipsoids, normalized by flux and solid angle
+        along each detector's trajectory through them (as MDNorm, but
         without binning). The peaks' own shapes are left unchanged.
+
+        By default the events inside each ellipsoid less those in its
+        background shell are counted. With profile_fit, a Gaussian whose
+        standard deviations are the radii is fitted instead, and its center
+        and shape may be refined too.
 
         Parameters
         ----------
@@ -539,13 +551,28 @@ class PeaksModel:
             Name of solid angle workspace. The default is "sa".
         flux : str, optional
             Name of integrated flux workspace. The default is "flux".
+        profile_fit : bool, optional
+            Fit a Gaussian instead of counting. The default is False.
+        adjust_center : bool, optional
+            With profile_fit, refine each peak's center. The default is False.
+        adjust_shape : bool, optional
+            With profile_fit, refine the shape of each peak with at least
+            min_signal_to_noise. The default is False.
+        min_signal_to_noise : float, optional
+            Smallest intensity over sigma for which a shape is refined. The
+            default is 10.
+        max_shape_change : float, optional
+            Largest factor by which a refined standard deviation may change.
+            The default is 2.
 
         Returns
         -------
         diagnostics : list or None
-            For each peak, counts and normalization in the peak and the
-            shell, and whether the peak is only partly covered by the
-            detectors or momentum band; None if integration failed.
+            For each peak, counts and normalization in the peak (or fit
+            region) and the shell, whether the peak is only partly covered
+            by the detectors or momentum band, and whether its shape was
+            refined, with the refined standard deviations, Q-lab axes
+            (columns) and center offset; None if integration failed.
 
         """
 
@@ -573,6 +600,11 @@ class PeaksModel:
                 InputWorkspace=data,
                 PeaksWorkspace=shapes,
                 RegionRadius=region_radius,
+                ProfileFit=profile_fit,
+                AdjustCenter=adjust_center,
+                AdjustShape=adjust_shape,
+                AdjustShapeMinSignalToNoise=min_signal_to_noise,
+                MaxShapeChange=max_shape_change,
                 SolidAngleWorkspace=solid_angle,
                 FluxWorkspace=flux,
                 OutputWorkspace=shapes,
@@ -587,6 +619,19 @@ class PeaksModel:
         for i, peak in enumerate(mtd[shapes]):
             mtd[peaks].getPeak(i).setIntensity(peak.getIntensity())
             mtd[peaks].getPeak(i).setSigmaIntensity(peak.getSigmaIntensity())
+
+            shape = json.loads(peak.getPeakShape().toJSON())
+            sigmas = np.array([shape["radius{}".format(j)] for j in range(3)])
+            V = np.column_stack(
+                [
+                    [float(v) for v in shape["direction{}".format(j)].split()]
+                    for j in range(3)
+                ]
+            )
+            offset = np.array(
+                [shape.get("translation{}".format(j), 0.0) for j in range(3)]
+            )
+
             diagnostics.append(
                 {
                     "pk_data": mtd[table].cell("CountsPeak", i),
@@ -595,6 +640,10 @@ class PeaksModel:
                     "bkg_norm": mtd[table].cell("NormShell", i),
                     "partial": mtd[table].cell("ClippedByMomentumRange", i)
                     or mtd[table].cell("MaskedDetectors", i),
+                    "shape_adjusted": mtd[table].cell("ShapeAdjusted", i),
+                    "sigmas": sigmas,
+                    "directions": V,
+                    "offset": offset,
                 }
             )
 
@@ -2359,6 +2408,19 @@ class PeakModel:
             return True
         else:
             return False
+
+    def clear_peak_shape(self, no):
+        """
+        Remove the shape of the peak.
+
+        Parameters
+        ----------
+        no : int
+            Peak index number.
+
+        """
+
+        mtd[self.peaks].getPeak(no).setPeakShape(NoShape())
 
     def set_peak_shape(self, no, c0, c1, c2, r0, r1, r2, v0, v1, v2):
         """

@@ -31,6 +31,7 @@ from garnet.reduction.ellipsoid import PeakEllipsoid
 from garnet.reduction.resolution import (
     ResolutionEllipsoid,
     _plot_peak_shape_diagnostics,
+    _CONTAINMENT_SCALE_3D,
 )
 from garnet.reduction.data import DataModel
 from garnet.reduction.projection import PeakProjection
@@ -292,6 +293,11 @@ class Integration(PeakProjection):
                 )
                 self.prior_res.set_variance_parameters_deg(div_params)
 
+            if not self.params["ProfileFit"]:
+                self.refine_peak_shapes(
+                    peaks, "data", "peaks", self.prior_res, r_cut
+                )
+            elif self.prior_res is not None:
                 peaks.stash_run_number("peaks")
 
                 radii = self.prior_res.renumber_by_size(5)
@@ -960,6 +966,110 @@ class Integration(PeakProjection):
             else:
                 peak.set_peak_intensity(i, 0, 0)
 
+    def model_ellipsoids(self, peaks_ws, res, r_cut):
+        """
+        Each peak's ellipsoid from a resolution model, as containment radii
+        and Q-lab principal axes (columns), within the region; spheres
+        filling the region if there is no model.
+
+        Parameters
+        ----------
+        peaks_ws : str
+            Name of peaks table.
+        res : ResolutionEllipsoid or None
+            Resolution model.
+        r_cut : float
+            Radius of the region around each peak, which bounds the
+            background shell.
+
+        Returns
+        -------
+        radii : list
+            Containment radii of each peak.
+        directions : list
+            Principal axes (columns) of each peak in Q-lab.
+
+        """
+
+        r_max = r_cut / np.cbrt(3)
+
+        radii, directions = [], []
+        for i in range(mtd[peaks_ws].getNumberPeaks()):
+            if res is not None and res.model is not None:
+                # S = V diag(r^2) V^T, in Q-lab
+                r2, V = np.linalg.eigh(res.predict_lab_S(i))
+                r = np.sqrt(np.clip(r2, 0, None))
+            else:
+                r, V = np.full(3, r_max), np.eye(3)
+            radii.append(np.clip(r, 1e-3 * r_max, r_max))
+            directions.append(V)
+
+        return radii, directions
+
+    def refine_peak_shapes(self, peaks, data_ws, peaks_ws, prior_res, r_cut):
+        """
+        Observed peak shapes for the resolution model, without binning:
+        starting from each peak's prior ellipsoid, the center and shape of
+        every strong enough peak are refined by a profile fit normalized by
+        flux and solid angle, so they are those of the intensity rather than
+        of the counts. A refined peak is moved to its fitted center and given
+        its fitted ellipsoid (as containment radii, in the sample frame); the
+        others are left without a shape, so the resolution model ignores
+        them.
+
+        Parameters
+        ----------
+        peaks : PeaksModel
+            Peaks model to integrate with.
+        data_ws : str
+            Name of the events, cropped for normalization.
+        peaks_ws : str
+            Name of peaks table.
+        prior_res : ResolutionEllipsoid or None
+            Prior resolution model, from the instrument configuration.
+        r_cut : float
+            Radius of the region around each peak.
+
+        """
+
+        # containment radius of a standard deviation
+        scale = np.sqrt(_CONTAINMENT_SCALE_3D)
+
+        radii, directions = self.model_ellipsoids(peaks_ws, prior_res, r_cut)
+
+        diagnostics = peaks.integrate_peaks_normalized(
+            data_ws,
+            peaks_ws,
+            [r / scale for r in radii],
+            directions,
+            r_cut,
+            profile_fit=True,
+            adjust_center=True,
+            adjust_shape=True,
+        )
+
+        peak = PeakModel(peaks_ws)
+        ws = mtd[peaks_ws]
+
+        n_refined = 0
+        for i in range(ws.getNumberPeaks()):
+            if diagnostics is None or not diagnostics[i]["shape_adjusted"]:
+                peak.clear_peak_shape(i)
+                continue
+
+            diag = diagnostics[i]
+            R = ws.getPeak(i).getGoniometerMatrix()
+
+            Q = np.array(ws.getPeak(i).getQLabFrame()) + diag["offset"]
+            c0, c1, c2 = R.T @ Q
+            r0, r1, r2 = diag["sigmas"] * scale
+            v0, v1, v2 = (R.T @ diag["directions"]).T.tolist()
+
+            peak.set_peak_shape(i, c0, c1, c2, r0, r1, r2, v0, v1, v2)
+            n_refined += 1
+
+        print("refined {} peak shapes".format(n_refined))
+
     def integrate_peaks_normalized(self, data_ws, peaks_ws, res, r_cut):
         """
         Quick integration of every peak: the events in its resolution
@@ -982,20 +1092,12 @@ class Integration(PeakProjection):
         """
 
         inner_fact, outer_fact = np.cbrt(2), np.cbrt(3)
-        r_max = r_cut / outer_fact
 
         peak = PeakModel(peaks_ws)
 
-        peak_radii, peak_directions = [], []
-        for i in range(peak.get_number_peaks()):
-            if res is not None and res.model is not None:
-                # S = V diag(r^2) V^T, in Q-lab
-                r2, V = np.linalg.eigh(res.predict_lab_S(i))
-                radii = np.sqrt(np.clip(r2, 0, None))
-            else:
-                radii, V = np.full(3, r_max), np.eye(3)
-            peak_radii.append(np.clip(radii, 1e-3 * r_max, r_max))
-            peak_directions.append(V)
+        peak_radii, peak_directions = self.model_ellipsoids(
+            peaks_ws, res, r_cut
+        )
 
         diagnostics = self.peaks.integrate_peaks_normalized(
             data_ws,

@@ -1,3 +1,5 @@
+import pytest
+
 from garnet.reduction.plan import ReductionPlan
 from garnet.reduction.integration import Integration
 
@@ -43,3 +45,18 @@ def test_get_file_modulated():
     ext = ".nxs"
 
     assert data == base + app + ext
+
+
+def test_quick_integration_rejects_satellites():
+    rp = ReductionPlan()
+    rp.generate_plan("TOPAZ")
+    rp.plan["OutputName"] = "test"
+    rp.plan["Integration"]["ProfileFit"] = False
+
+    Integration(rp.plan)
+
+    rp.plan["Integration"]["MaxOrder"] = 1
+    rp.plan["Integration"]["ModVec1"] = [0, 0, 0.5]
+
+    with pytest.raises(Exception, match="satellite"):
+        Integration(rp.plan)

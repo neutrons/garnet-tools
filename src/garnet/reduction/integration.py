@@ -5,7 +5,9 @@ import subprocess
 import traceback
 import numpy as np
 
-from mantid.simpleapi import mtd
+from mantid.simpleapi import mtd, CloneWorkspace
+from mantid.dataobjects import PeakShapeEllipsoid
+from mantid.kernel import SpecialCoordinateSystem, V3D
 from mantid import config
 
 config["Q.convention"] = "Crystallography"
@@ -99,6 +101,14 @@ class Integration(PeakProjection):
             bool,
             "ProfileFit must be a boolean",
         )
+        if not self.params["ProfileFit"]:
+            self.check(
+                self.params["MaxOrder"],
+                "==",
+                0,
+                "Quick integration does not support satellite peaks; "
+                "disable it or set MaxOrder to 0",
+            )
 
     @staticmethod
     def integrate_parallel(plan, runs, proc):
@@ -400,26 +410,7 @@ class Integration(PeakProjection):
                     if self.make_plot:
                         self.peak_plot.close()
             else:
-                data.convert_to_Q_sample("data", "md", lorentz_corr=False)
-
-                peaks.stash_run_number("peaks")
-
-                radii = res.renumber_by_size(5)
-
-                peaks.integrate_peaks_with_radii(
-                    "md",
-                    "peaks",
-                    radii,
-                    centroid=False,
-                    update=False,
-                )
-
-                peaks.restore_run_number("peaks")
-
-                data.delete_workspace("md")
-
-                self.stub_peak_info("peaks")
-                self.correct_intensities("peaks")
+                self.integrate_peaks_normalized("data", "peaks", res, r_cut)
 
             peaks.update_scale_factor("peaks", data.monitor)
 
@@ -971,59 +962,127 @@ class Integration(PeakProjection):
             else:
                 peak.set_peak_intensity(i, 0, 0)
 
-    def stub_peak_info(self, peaks_ws):
+    def integrate_peaks_normalized(self, data_ws, peaks_ws, res, r_cut):
         """
-        Populate placeholder diagnostic info.
+        Quick integration of every peak by IntegratePeaksShapeMD: the events
+        in its resolution ellipsoid less those in the equal-volume shell
+        around it, normalized by the flux and solid angle along each
+        detector's trajectory through them (as MDNorm, but without binning).
+
+        Parameters
+        ----------
+        data_ws : str
+            Name of the events, cropped for normalization.
+        peaks_ws : str
+            Name of peaks table; its peak shapes are left unchanged.
+        res : ResolutionEllipsoid
+            Resolution model giving each peak's ellipsoid; if it has no
+            model, spheres filling the radius are used instead.
+        r_cut : float
+            Radius of the region around each peak, which bounds the
+            background shell.
+
         """
+
+        try:
+            from mantid.simpleapi import IntegratePeaksShapeMD
+        except ImportError:
+            raise RuntimeError(
+                "Quick integration needs a Mantid with IntegratePeaksShapeMD "
+                "flux normalization (mantidproject/mantid#42501)"
+            )
+
+        inner_fact, outer_fact = np.cbrt(2), np.cbrt(3)
+        r_max = r_cut / outer_fact
+
+        shapes_ws = peaks_ws + "_shapes"
+        diagnostics_ws = peaks_ws + "_diagnostics"
+
+        CloneWorkspace(InputWorkspace=peaks_ws, OutputWorkspace=shapes_ws)
+
+        for i in range(mtd[shapes_ws].getNumberPeaks()):
+            if res is not None and res.model is not None:
+                # S = V diag(r^2) V^T, in Q-lab
+                r2, V = np.linalg.eigh(res.predict_lab_S(i))
+                radii = np.sqrt(np.clip(r2, 0, None))
+            else:
+                radii, V = np.full(3, r_max), np.eye(3)
+            radii = np.clip(radii, 1e-3 * r_max, r_max)
+            shape = PeakShapeEllipsoid(
+                [V3D(*V[:, j]) for j in range(3)],
+                list(radii),
+                list(radii * inner_fact),
+                list(radii * outer_fact),
+                SpecialCoordinateSystem.QLab,
+            )
+            mtd[shapes_ws].getPeak(i).setPeakShape(shape)
+
         peak = PeakModel(peaks_ws)
 
-        for i in range(peak.get_number_peaks()):
-            intens_raw, sig_raw = peak.get_peak_intensity(i)
+        try:
+            IntegratePeaksShapeMD(
+                InputWorkspace=data_ws,
+                PeaksWorkspace=shapes_ws,
+                RegionRadius=r_cut,
+                SolidAngleWorkspace="sa",
+                FluxWorkspace="flux",
+                OutputWorkspace=shapes_ws,
+                OutputDiagnosticsWorkspace=diagnostics_ws,
+            )
+        except RuntimeError as e:
+            print("Exception integrating peaks: {}".format(e))
+            for i in range(peak.get_number_peaks()):
+                peak.set_peak_intensity(i, 0, 0)
+            self.data.delete_workspace(shapes_ws)
+            return
+
+        diagnostics = mtd[diagnostics_ws]
+
+        # the peak and shell volumes are equal
+        ratio = 1 / (outer_fact**3 - inner_fact**3)
+
+        for i, integrated in enumerate(mtd[shapes_ws]):
+            peak.set_peak_intensity(
+                i, integrated.getIntensity(), integrated.getSigmaIntensity()
+            )
+
+            pk_data = diagnostics.cell("CountsPeak", i)
+            pk_norm = diagnostics.cell("NormPeak", i)
+            bkg_data = diagnostics.cell("CountsShell", i)
+            bkg_norm = diagnostics.cell("NormShell", i)
+
+            # with detectors missing or a momentum band cut through the
+            # peak, the fraction of it measured, from how much less exposed
+            # it is than its shell
+            vol_frac = 1.0
+            partial = diagnostics.cell("ClippedByMomentumRange", i) or (
+                diagnostics.cell("MaskedDetectors", i)
+            )
+            if partial and bkg_norm > 0:
+                vol_frac = float(np.clip(pk_norm / bkg_norm / ratio, 0, 1))
 
             info = {
                 "d3x": 0.0,
-                "bkg": 0.0,
-                "bkg_err": 0.0,
+                "bkg": bkg_data / bkg_norm if bkg_norm > 0 else 0.0,
+                "bkg_err": (
+                    np.sqrt(bkg_data) / bkg_norm if bkg_norm > 0 else 0.0
+                ),
                 "n_vox": 0,
-                "vol_frac": 1.0,
-                "intens_raw": intens_raw,
-                "sig_raw": sig_raw,
-                "pk_data": 1.0,
-                "pk_norm": 1.0,
-                "bkg_data": 0.0,
-                "bkg_norm": 1.0,
-                "ratio": 1.0,
+                "vol_frac": vol_frac,
+                "intens_raw": pk_data - ratio * bkg_data,
+                "sig_raw": np.sqrt(pk_data + ratio**2 * bkg_data),
+                "pk_data": pk_data,
+                "pk_norm": pk_norm,
+                "bkg_data": bkg_data,
+                "bkg_norm": bkg_norm,
+                "ratio": ratio,
                 "cntrt": self.cntrt,
             }
 
             peak.add_diagnostic_info(i, info)
 
-    def correct_intensities(self, peaks_ws):
-        """
-        Apply the delta-function absolute-scale normalization.
-        """
-        peak = PeakModel(peaks_ws)
-
-        proton_charge = self.data.monitor
-
-        for i in range(peak.get_number_peaks()):
-            lamda = peak.get_wavelength(i)
-            two_theta, _ = peak.get_angles(i)
-            det_ID = peak.get_detector_id(i)
-
-            norm = self.data.approximate_norm(
-                lamda, two_theta, det_ID, proton_charge
-            )
-
-            if not (np.isfinite(norm) and norm > 0):
-                continue
-
-            intens, sig = peak.get_peak_intensity(i)
-
-            intens /= norm
-            sig /= norm
-
-            peak.set_peak_intensity(i, intens, sig)
+        self.data.delete_workspace(shapes_ws)
+        self.data.delete_workspace(diagnostics_ws)
 
     def extract_peak_counts(self, peaks_ws, r_cut, n_bins, peak_indices=None):
         """

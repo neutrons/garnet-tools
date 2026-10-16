@@ -1529,6 +1529,11 @@ class FormView(QWidget):
 
         self.quick_integration_box = QCheckBox("Quick Integration", self)
         self.quick_integration_box.setChecked(False)
+        self.quick_integration_box.setToolTip(
+            "Sum the events in each peak's resolution ellipsoid with "
+            "IntegratePeaksShapeMD, normalized by flux and solid angle, "
+            "instead of fitting profiles. Satellite peaks are not supported."
+        )
 
         int_layout.addWidget(self.optimize_ub_box, 4, 0)
         int_layout.addWidget(self.optimize_peaks_box, 4, 1)

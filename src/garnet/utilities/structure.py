@@ -71,10 +71,7 @@ class StructureAnalysis:
             parameters = [parameters] * 3
         self.parameters = parameters
 
-        self.profile_fit = defaults.get("ProfileFit", True)
         self.plan = plan
-        self.vanadium_file = defaults.get("VanadiumFile")
-        self.flux_file = defaults.get("FluxFile")
         self.control_software = defaults.get("ControlSoftware")
 
         self.mu = 0.0
@@ -86,11 +83,6 @@ class StructureAnalysis:
         if self.space_group is not None and self.sites is not None:
             self.peaks.remove_forbidden_reflections(
                 self.cell, self.space_group, self.sites
-            )
-
-        if not self.profile_fit:
-            self.peaks.renormalize_intensities(
-                self.plan, self.vanadium_file, self.flux_file
             )
 
         apply_corr = False

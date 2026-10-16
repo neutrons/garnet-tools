@@ -5,9 +5,7 @@ import subprocess
 import traceback
 import numpy as np
 
-from mantid.simpleapi import mtd, CloneWorkspace
-from mantid.dataobjects import PeakShapeEllipsoid
-from mantid.kernel import SpecialCoordinateSystem, V3D
+from mantid.simpleapi import mtd
 from mantid import config
 
 config["Q.convention"] = "Crystallography"
@@ -964,10 +962,9 @@ class Integration(PeakProjection):
 
     def integrate_peaks_normalized(self, data_ws, peaks_ws, res, r_cut):
         """
-        Quick integration of every peak by IntegratePeaksShapeMD: the events
-        in its resolution ellipsoid less those in the equal-volume shell
-        around it, normalized by the flux and solid angle along each
-        detector's trajectory through them (as MDNorm, but without binning).
+        Quick integration of every peak: the events in its resolution
+        ellipsoid less those in the equal-volume shell around it, already
+        normalized by flux and solid angle by IntegratePeaksShapeMD.
 
         Parameters
         ----------
@@ -984,105 +981,69 @@ class Integration(PeakProjection):
 
         """
 
-        try:
-            from mantid.simpleapi import IntegratePeaksShapeMD
-        except ImportError:
-            raise RuntimeError(
-                "Quick integration needs a Mantid with IntegratePeaksShapeMD "
-                "flux normalization (mantidproject/mantid#42501)"
-            )
-
         inner_fact, outer_fact = np.cbrt(2), np.cbrt(3)
         r_max = r_cut / outer_fact
 
-        shapes_ws = peaks_ws + "_shapes"
-        diagnostics_ws = peaks_ws + "_diagnostics"
+        peak = PeakModel(peaks_ws)
 
-        CloneWorkspace(InputWorkspace=peaks_ws, OutputWorkspace=shapes_ws)
-
-        for i in range(mtd[shapes_ws].getNumberPeaks()):
+        peak_radii, peak_directions = [], []
+        for i in range(peak.get_number_peaks()):
             if res is not None and res.model is not None:
                 # S = V diag(r^2) V^T, in Q-lab
                 r2, V = np.linalg.eigh(res.predict_lab_S(i))
                 radii = np.sqrt(np.clip(r2, 0, None))
             else:
                 radii, V = np.full(3, r_max), np.eye(3)
-            radii = np.clip(radii, 1e-3 * r_max, r_max)
-            shape = PeakShapeEllipsoid(
-                [V3D(*V[:, j]) for j in range(3)],
-                list(radii),
-                list(radii * inner_fact),
-                list(radii * outer_fact),
-                SpecialCoordinateSystem.QLab,
-            )
-            mtd[shapes_ws].getPeak(i).setPeakShape(shape)
+            peak_radii.append(np.clip(radii, 1e-3 * r_max, r_max))
+            peak_directions.append(V)
 
-        peak = PeakModel(peaks_ws)
+        diagnostics = self.peaks.integrate_peaks_normalized(
+            data_ws,
+            peaks_ws,
+            peak_radii,
+            peak_directions,
+            r_cut,
+            background_inner_fact=inner_fact,
+            background_outer_fact=outer_fact,
+        )
 
-        try:
-            IntegratePeaksShapeMD(
-                InputWorkspace=data_ws,
-                PeaksWorkspace=shapes_ws,
-                RegionRadius=r_cut,
-                SolidAngleWorkspace="sa",
-                FluxWorkspace="flux",
-                OutputWorkspace=shapes_ws,
-                OutputDiagnosticsWorkspace=diagnostics_ws,
-            )
-        except RuntimeError as e:
-            print("Exception integrating peaks: {}".format(e))
+        if diagnostics is None:
             for i in range(peak.get_number_peaks()):
                 peak.set_peak_intensity(i, 0, 0)
-            self.data.delete_workspace(shapes_ws)
             return
-
-        diagnostics = mtd[diagnostics_ws]
 
         # the peak and shell volumes are equal
         ratio = 1 / (outer_fact**3 - inner_fact**3)
 
-        for i, integrated in enumerate(mtd[shapes_ws]):
-            peak.set_peak_intensity(
-                i, integrated.getIntensity(), integrated.getSigmaIntensity()
-            )
-
-            pk_data = diagnostics.cell("CountsPeak", i)
-            pk_norm = diagnostics.cell("NormPeak", i)
-            bkg_data = diagnostics.cell("CountsShell", i)
-            bkg_norm = diagnostics.cell("NormShell", i)
+        for i, diag in enumerate(diagnostics):
+            pk_data, bkg_data = diag["pk_data"], diag["bkg_data"]
 
             # with detectors missing or a momentum band cut through the
             # peak, the fraction of it measured, from how much less exposed
             # it is than its shell
             vol_frac = 1.0
-            partial = diagnostics.cell("ClippedByMomentumRange", i) or (
-                diagnostics.cell("MaskedDetectors", i)
-            )
-            if partial and bkg_norm > 0:
-                vol_frac = float(np.clip(pk_norm / bkg_norm / ratio, 0, 1))
+            if diag["partial"] and diag["bkg_norm"] > 0:
+                exposure = diag["pk_norm"] / diag["bkg_norm"] / ratio
+                vol_frac = float(np.clip(exposure, 0, 1))
 
+            # the intensities are already normalized
             info = {
                 "d3x": 0.0,
-                "bkg": bkg_data / bkg_norm if bkg_norm > 0 else 0.0,
-                "bkg_err": (
-                    np.sqrt(bkg_data) / bkg_norm if bkg_norm > 0 else 0.0
-                ),
+                "bkg": 0.0,
+                "bkg_err": 0.0,
                 "n_vox": 0,
                 "vol_frac": vol_frac,
                 "intens_raw": pk_data - ratio * bkg_data,
                 "sig_raw": np.sqrt(pk_data + ratio**2 * bkg_data),
                 "pk_data": pk_data,
-                "pk_norm": pk_norm,
+                "pk_norm": 1.0,
                 "bkg_data": bkg_data,
-                "bkg_norm": bkg_norm,
+                "bkg_norm": 1.0,
                 "ratio": ratio,
                 "cntrt": self.cntrt,
             }
 
             peak.add_diagnostic_info(i, info)
-
-        self.data.delete_workspace(shapes_ws)
-        self.data.delete_workspace(diagnostics_ws)
 
     def extract_peak_counts(self, peaks_ws, r_cut, n_bins, peak_indices=None):
         """

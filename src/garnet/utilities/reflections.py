@@ -52,8 +52,6 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 import argparse
 
-from garnet.config.instruments import beamlines
-from garnet.reduction.data import DataModel
 from garnet.reduction.ub import Optimization
 from garnet.reduction.resolution import ResolutionEllipsoid
 from garnet.utilities.absorption import AbsorptionEllipsoid
@@ -110,34 +108,6 @@ point_group_dict = {
     "-43m": "-43m (Cubic)",
     "m-3m": "m-3m (Cubic)",
 }
-
-
-def plot_normalization(data, filename):
-    """
-    Debug plot of the per-spectrum wavelength-dependent flux spectra.
-    """
-    fig, ax = plt.subplots(1, 1, layout="constrained")
-    for y in data.spect_y:
-        ax.plot(data.lamda_x, y)
-    ax.set_xlabel(r"$\lambda$ [$\AA$]")
-    ax.set_ylabel(r"Flux [counts/$\AA$]")
-    ax.minorticks_on()
-    fig.savefig(filename + "_flux.pdf")
-    plt.close(fig)
-
-    fig, ax = plt.subplots(1, 1, layout="constrained")
-    sca = ax.scatter(
-        np.rad2deg(data.sa_gamma),
-        np.rad2deg(data.sa_nu),
-        c=data.sa_y,
-        s=4,
-    )
-    ax.set_xlabel(r"$\gamma$ [deg]")
-    ax.set_ylabel(r"$\nu$ [deg]")
-    fig.colorbar(sca, ax=ax, label="Solid angle efficiency")
-    ax.minorticks_on()
-    fig.savefig(filename + "_efficiency.pdf")
-    plt.close(fig)
 
 
 def error_volume(
@@ -1300,48 +1270,6 @@ class Peaks:
             ColumnNameToSortBy="Intens",
             SortAscending=False,
         )
-
-    def renormalize_intensities(self, plan, vanadium_file, flux_file):
-        """
-        Reapply the flux/solid-angle/Lorentz normalization
-        (``DataModel.approximate_norm``) to each peak's raw
-        intensity/sigma (``self.norm_dict``) -- e.g. to redo the
-        correction with an updated flux file without re-integrating.
-        Builds the detector geometry from the first real run in the
-        plan (``DataModel.update_raw_path``), the same way the real
-        reduction does, rather than simulating an instrument.
-        """
-        data = DataModel(beamlines[plan["Instrument"]])
-        data.update_raw_path(plan)
-
-        data.load_generate_normalization(vanadium_file, flux_file)
-        data.preprocess_detectors(data.instrument)
-
-        norm_file = os.path.splitext(self.filename)[0] + "_normalization"
-        plot_normalization(data, norm_file)
-
-        for peak in mtd[self.peaks]:
-            h, k, l = [int(val) for val in peak.getIntHKL()]
-            m, n, p = [int(val) for val in peak.getIntMNP()]
-
-            run = int(peak.getRunNumber())
-            key = (run, h, k, l, m, n, p)
-            raw_intens, raw_sig = self.norm_dict[key]
-
-            lamda = peak.getWavelength()
-            two_theta = np.rad2deg(peak.getScattering())
-            det_ID = peak.getDetectorID()
-            proton_charge = peak.getBinCount()
-
-            norm = data.approximate_norm(
-                lamda, two_theta, det_ID, proton_charge
-            )
-
-            if not (np.isfinite(norm) and norm > 0):
-                continue
-
-            peak.setIntensity(raw_intens / norm)
-            peak.setSigmaIntensity(raw_sig / norm)
 
     def merge_intensities(self, name=None):
         if name is not None:

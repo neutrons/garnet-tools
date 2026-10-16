@@ -42,7 +42,6 @@ from mantid.simpleapi import (
     CompressEvents,
     CreateGroupingWorkspace,
     LoadEmptyInstrument,
-    SolidAngle,
     CopyInstrumentParameters,
     ConvertToMD,
     ConvertHFIRSCDtoMDE,
@@ -173,7 +172,6 @@ class BaseDataModel:
         self.elastic = None
         self.grouping = None
         self.custom_path = False
-        self.det_IDs = None
 
         self.instrument_config = instrument_config
         self.instrument = self.instrument_config["FancyName"]
@@ -1848,24 +1846,6 @@ class LaueData(BaseDataModel):
                 InputWorkspace=ws, OutputWorkspace="detectors"
             )
 
-            self.det_IDs = mtd["detectors"].column("DetectorID")
-
-            self._generate_flux_normalization()
-
-            if not mtd.doesExist("solid_angle"):
-                SolidAngle(InputWorkspace=ws, OutputWorkspace="solid_angle")
-
-                inds = mtd["solid_angle"].getIndicesFromDetectorIDs(
-                    self.det_IDs
-                )
-
-                self.solid_angle_y = mtd["solid_angle"].extractY().ravel()
-
-                self.solid_angle_ind = {
-                    det_ID: ind for det_ID, ind in zip(self.det_IDs, inds)
-                }
-                self.solid_angle_ind[-1] = 0
-
             two_theta = mtd["detectors"].column("TwoTheta")
 
             self.theta_max = 0.5 * np.max(two_theta)
@@ -2433,102 +2413,10 @@ class LaueData(BaseDataModel):
             self.k_min = mtd["flux"].getXDimension().getMinimum()
             self.k_max = mtd["flux"].getXDimension().getMaximum()
 
-        self._generate_flux_normalization()
-
-    def _generate_flux_normalization(self):
-        """
-        Populate the per-detector flux/solid-angle normalization.
-        """
-        if self.det_IDs is None:
-            return
-
-        if not (mtd.doesExist("sa") and mtd.doesExist("flux")):
-            return
-
-        if hasattr(self, "lamda_x"):
-            return
-
-        inds = mtd["sa"].getIndicesFromDetectorIDs(self.det_IDs)
-
-        self.sa_y = mtd["sa"].extractY().ravel()
-
-        self.sa_ind = {det_ID: ind for det_ID, ind in zip(self.det_IDs, inds)}
-        self.sa_ind[-1] = 0
-
-        two_theta = np.asarray(mtd["detectors"].column("TwoTheta"))
-        azimuthal = np.asarray(mtd["detectors"].column("Azimuthal"))
-
-        gamma = np.arctan2(
-            np.sin(two_theta) * np.cos(azimuthal), np.cos(two_theta)
-        )
-        nu = np.arcsin(np.sin(two_theta) * np.sin(azimuthal))
-
-        self.sa_gamma = np.zeros(self.sa_y.shape)
-        self.sa_nu = np.zeros(self.sa_y.shape)
-        self.sa_gamma[inds] = gamma
-        self.sa_nu[inds] = nu
-
-        lamda_min = 2 * np.pi / self.k_max
-        lamda_max = 2 * np.pi / self.k_min
-
-        self.wavelength_band = [lamda_min, lamda_max]
-
-        y = mtd["flux"].extractY()
-        x = mtd["flux"].extractX()
-
-        k = 0.5 * (x[:, 1:] + x[:, :-1])
-
-        p = np.gradient(y, axis=1) / np.gradient(k, axis=1)
-
-        y = p * k**2 / (2 * np.pi)
-
-        x = 2 * np.pi / k
-
-        order = np.argsort(x, axis=1)
-        x = np.take_along_axis(x, order, axis=1)
-        y = np.take_along_axis(x, order, axis=1)
-
-        inds = mtd["flux"].getIndicesFromDetectorIDs(self.det_IDs)
-
-        self.spec_ind = {
-            det_ID: ind for det_ID, ind in zip(self.det_IDs, inds)
-        }
-        self.spec_ind[-1] = 0
-
-        self.lamda_x = x[:, ::-1].mean(axis=0)
-        self.spect_y = y[:, ::-1]
-
-    def get_volume_in_Q(self, lamda, two_theta, det_ID):
-        L_inv = 2 * np.sin(0.5 * np.deg2rad(two_theta)) ** 2 / lamda**4
-
-        solid_angle_ind = self.solid_angle_ind[det_ID]
-
-        return L_inv * self.solid_angle_y[solid_angle_ind]
-
-    def approximate_norm(self, lamda, two_theta, det_ID, pc):
-        """
-        Delta-function normalization for a single peak.
-
-        Parameters
-        ----------
-        lamda : float
-            Peak wavelength (Angstrom).
-        two_theta : float
-            Scattering angle (degrees).
-        det_ID : int
-            Detector ID the peak lands on.
-        pc : float
-            Proton charge of the run being integrated.
-
-        """
-        vol = self.get_volume_in_Q(lamda, two_theta, det_ID)
-
-        i = np.searchsorted(self.lamda_x, lamda, side="right") - 1
-
-        spec_ind = self.spec_ind[det_ID]
-        sa_ind = self.sa_ind[det_ID]
-
-        return self.spect_y[spec_ind][i] * self.sa_y[sa_ind] * pc / vol
+            self.wavelength_band = [
+                2 * np.pi / self.k_max,
+                2 * np.pi / self.k_min,
+            ]
 
     def crop_for_normalization(self, event_name):
         """

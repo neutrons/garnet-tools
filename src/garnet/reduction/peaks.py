@@ -27,7 +27,7 @@ from mantid.simpleapi import (
     mtd,
 )
 
-from mantid.kernel import V3D
+from mantid.kernel import V3D, SpecialCoordinateSystem
 from mantid.dataobjects import PeakShapeEllipsoid, NoShape
 from mantid.geometry import (
     CrystalStructure,
@@ -501,6 +501,107 @@ class PeaksModel:
         RenameWorkspace(InputWorkspace=peaks + "_tmp", OutputWorkspace=peaks)
 
         DeleteWorkspace(Workspace="tmp")
+
+    def integrate_peaks_normalized(
+        self,
+        data,
+        peaks,
+        peak_radii,
+        peak_directions,
+        region_radius,
+        background_inner_fact=np.cbrt(2),
+        background_outer_fact=np.cbrt(3),
+        solid_angle="sa",
+        flux="flux",
+    ):
+        """
+        Integrate peaks in fixed ellipsoids, normalized by flux and solid
+        angle along each detector's trajectory through them (as MDNorm, but
+        without binning). The peaks' own shapes are left unchanged.
+
+        Parameters
+        ----------
+        data : str
+            Name of events, cropped for normalization.
+        peaks : str
+            Name of peaks table.
+        peak_radii : list
+            Principal radii of each peak's ellipsoid.
+        peak_directions : list
+            Principal axes (columns) of each peak's ellipsoid in Q-lab.
+        region_radius : float
+            Radius of the events considered around each peak.
+        background_inner_fact : float, optional
+            Factor of peak radii for background shell. The default is cbrt(2).
+        background_outer_fact : float, optional
+            Factor of peak radii for background shell. The default is cbrt(3).
+        solid_angle : str, optional
+            Name of solid angle workspace. The default is "sa".
+        flux : str, optional
+            Name of integrated flux workspace. The default is "flux".
+
+        Returns
+        -------
+        diagnostics : list or None
+            For each peak, counts and normalization in the peak and the
+            shell, and whether the peak is only partly covered by the
+            detectors or momentum band; None if integration failed.
+
+        """
+
+        # not in Mantid releases before mantidproject/mantid#42501
+        from mantid.simpleapi import IntegratePeaksShapeMD
+
+        shapes = peaks + "_shapes"
+        table = peaks + "_diagnostics"
+
+        CloneWorkspace(InputWorkspace=peaks, OutputWorkspace=shapes)
+
+        for i, (radii, V) in enumerate(zip(peak_radii, peak_directions)):
+            radii = np.asarray(radii)
+            shape = PeakShapeEllipsoid(
+                [V3D(*V[:, j]) for j in range(3)],
+                list(radii),
+                list(radii * background_inner_fact),
+                list(radii * background_outer_fact),
+                SpecialCoordinateSystem.QLab,
+            )
+            mtd[shapes].getPeak(i).setPeakShape(shape)
+
+        try:
+            IntegratePeaksShapeMD(
+                InputWorkspace=data,
+                PeaksWorkspace=shapes,
+                RegionRadius=region_radius,
+                SolidAngleWorkspace=solid_angle,
+                FluxWorkspace=flux,
+                OutputWorkspace=shapes,
+                OutputDiagnosticsWorkspace=table,
+            )
+        except RuntimeError as e:
+            print("Exception integrating peaks: {}".format(e))
+            DeleteWorkspace(Workspace=shapes)
+            return None
+
+        diagnostics = []
+        for i, peak in enumerate(mtd[shapes]):
+            mtd[peaks].getPeak(i).setIntensity(peak.getIntensity())
+            mtd[peaks].getPeak(i).setSigmaIntensity(peak.getSigmaIntensity())
+            diagnostics.append(
+                {
+                    "pk_data": mtd[table].cell("CountsPeak", i),
+                    "pk_norm": mtd[table].cell("NormPeak", i),
+                    "bkg_data": mtd[table].cell("CountsShell", i),
+                    "bkg_norm": mtd[table].cell("NormShell", i),
+                    "partial": mtd[table].cell("ClippedByMomentumRange", i)
+                    or mtd[table].cell("MaskedDetectors", i),
+                }
+            )
+
+        DeleteWorkspace(Workspace=shapes)
+        DeleteWorkspace(Workspace=table)
+
+        return diagnostics
 
     def renumber_by_size(self, peaks, n=None):
         """

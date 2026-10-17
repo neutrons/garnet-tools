@@ -1,99 +1,118 @@
+import os
 import time
 
-from garnet.reduction.timing import Timer
+from garnet.reduction.timing import (
+    Timer,
+    combine_timings,
+    write_timing_table,
+)
 from garnet.reduction.plan import ReductionPlan
 from garnet.reduction.integration import Integration
 
 
-def read_rows(filename):
+def read_table(filename):
+    """The rows of a timing table, as [step, total, per run, fraction, count]."""
     with open(filename) as f:
-        return [
-            line.rstrip("\n").split("\t")
-            for line in f
-            if not line.startswith("#")
-        ]
+        lines = f.read().splitlines()[4:]
+    rows = []
+    for line in lines:
+        fields = line.split()
+        name_end = len(line) - len(line.lstrip()) + len(" ".join(fields[:-4]))
+        rows.append([line[:name_end]] + fields[-4:])
+    return rows
 
 
-def test_laps_and_sections(tmp_path):
-    filename = tmp_path / "timing.txt"
-    timer = Timer(str(filename), label="_p0")
-
-    timer.set_run(123)
-    time.sleep(0.02)
-    timer.lap("load")
-    with timer.section("inner"):
-        time.sleep(0.02)
-    time.sleep(0.01)
-    timer.lap("work")
-
-    rows = read_rows(filename)
-    assert [row[3] for row in rows] == ["load", "  inner", "work"]
-    assert all(row[1] == "_p0" and row[2] == "123" for row in rows)
-
-    seconds = {row[3].strip(): float(row[4]) for row in rows}
-    assert seconds["load"] >= 0.02
-    assert seconds["inner"] >= 0.02
-    # a lap includes the sections in it
-    assert seconds["work"] >= seconds["inner"] + 0.01
-
-    summary = tmp_path / "summary.txt"
-    timer.write_summary(str(summary))
-    lines = read_rows(summary)
-    fractions = {line[0]: float(line[4]) for line in lines}
-    # fractions are of the laps alone
-    assert abs(fractions["load"] + fractions["work"] - 1) < 1e-2
-    assert lines[0][0] == "work"
-
-
-def test_repeated_segments_are_summed(tmp_path):
-    timer = Timer(str(tmp_path / "timing.txt"))
-    for run in [1, 2, 3]:
+def test_laps_and_sections_are_summed_over_runs():
+    timer = Timer()
+    for run in [1, 2]:
         timer.set_run(run)
+        time.sleep(0.01)
         timer.lap("load")
-    count, total, depth = timer.totals["load"]
-    assert count == 3
-    assert depth == 0
+        with timer.section("inner"):
+            time.sleep(0.01)
+        timer.lap("work")
+
+    assert timer.runs == 2
+    assert list(timer.totals) == ["load", "inner", "work"]
+    load, inner, work = (timer.totals[n] for n in ["load", "inner", "work"])
+    assert load[1] == 2 and load[2] == 0
+    assert inner[2] == 1
+    assert load[0] >= 0.02
+    # a lap includes the sections in it
+    assert work[0] >= inner[0]
 
 
-def test_disabled_timer_writes_nothing(tmp_path):
+def test_add_nests_external_times():
+    timer = Timer()
+    timer.set_run(1)
+    with timer.section("algorithm"):
+        timer.add("fits", 1.5, count=10)
+    timer.lap("step")
+    assert timer.totals["fits"] == [1.5, 10, 2, "algorithm"]
+    assert timer.totals["algorithm"][3] == "step"
+
+
+def test_combine_and_table(tmp_path):
+    a = {"runs": 2, "steps": [["load", 4.0, 2, 0, None]]}
+    b = {
+        "runs": 3,
+        "steps": [
+            ["load", 6.0, 3, 0, None],
+            ["fits", 2.0, 30, 1, "save"],
+            ["save", 10.0, 3, 0, None],
+        ],
+    }
+    combined = combine_timings([a, b])
+    assert combined["runs"] == 5
+    assert combined["steps"] == [
+        ["load", 10.0, 5, 0, None],
+        ["fits", 2.0, 30, 1, "save"],
+        ["save", 10.0, 3, 0, None],
+    ]
+
     filename = tmp_path / "timing.txt"
-    timer = Timer(str(filename), enabled=False)
-    timer.lap("load")
-    with timer.section("inner"):
-        pass
-    timer.write_summary(str(tmp_path / "summary.txt"))
-    assert not filename.exists()
-    assert not (tmp_path / "summary.txt").exists()
+    write_timing_table(combined, str(filename))
+    rows = read_table(filename)
+    # each step followed by the steps in it
+    assert [row[0] for row in rows] == ["load", "save", "  fits"]
+    # total, mean per run, and fraction of the outermost steps
+    assert rows[0][1:4] == ["10.000", "2.000", "50.0%"]
+    assert rows[2][1:5] == ["2.000", "0.400", "10.0%", "30"]
+    with open(filename) as f:
+        lines = f.read().splitlines()
+    assert lines[0] == "5 runs, 20.0 s in total"
+    # the columns line up
+    assert len({len(line) for line in lines[2:4]}) == 1
+    starts = {line.index("%") for line in lines[4:]}
+    assert len(starts) == 1
 
 
-def test_plan_timer_file_per_process(tmp_path):
+def test_processes_combined_into_one_file(tmp_path):
     rp = ReductionPlan()
     rp.generate_plan("TOPAZ")
     rp.plan["OutputName"] = "test"
     rp.plan["OutputPath"] = str(tmp_path)
-    rp.plan["ProcName"] = "_p2"
 
-    integration = Integration(rp.plan)
-    integration.timer.lap("load")
-    integration.write_timing_summary()
+    for proc in [0, 1]:
+        plan = dict(rp.plan)
+        plan["ProcName"] = "_p{}".format(proc)
+        worker = Integration(plan)
+        worker.timer.set_run(proc)
+        worker.timer.lap("load")
+        worker.save_timing()
 
-    output = tmp_path / integration.output
-    assert (output / "test_p2_timing.txt").exists()
-    assert (output / "test_p2_timing_summary.txt").exists()
+    main = Integration(rp.plan)
+    main.write_timing()
 
-    rp.plan["Timing"] = False
-    quiet = Integration(rp.plan)
-    assert not quiet.timer.enabled
-
-
-def test_add_nests_external_times(tmp_path):
-    filename = tmp_path / "timing.txt"
-    timer = Timer(str(filename))
-    with timer.section("algorithm"):
-        timer.add("fits", 1.5, count=10)
-    timer.lap("step")
-
-    rows = read_rows(filename)
-    assert [row[3] for row in rows] == ["    fits", "  algorithm", "step"]
-    count, total, depth = timer.totals["fits"]
-    assert (count, total, depth) == (10, 1.5, 2)
+    output = tmp_path / main.output
+    assert (output / "test_timing.txt").exists()
+    rows = read_table(output / "test_timing.txt")
+    assert rows[0][0] == "load"
+    with open(output / "test_timing.txt") as f:
+        assert f.readline().startswith("2 runs")
+    # no per-process files are left
+    assert not any("_p" in name for name in os.listdir(output))
+    assert not any(
+        name.startswith("timing")
+        for name in os.listdir(main.get_diagnostic_path())
+    )

@@ -1,4 +1,5 @@
 import os
+import glob
 import yaml
 import json
 import shutil
@@ -6,7 +7,11 @@ import operator
 import concurrent.futures
 
 from garnet.config.instruments import beamlines
-from garnet.reduction.timing import Timer
+from garnet.reduction.timing import (
+    Timer,
+    combine_timings,
+    write_timing_table,
+)
 
 
 class Dumper(yaml.SafeDumper):
@@ -170,30 +175,50 @@ class SubPlan:
     @property
     def timer(self):
         """
-        Timer for the segments of this reduction, writing to
-        ``<OutputName>[<ProcName>]_timing.txt`` beside its output, unless the
-        plan sets ``Timing: false``.
+        Timer for the steps of this reduction.
         """
 
         if getattr(self, "_timer", None) is None:
-            enabled = bool(self.plan.get("Timing", True))
-            self._timer = Timer(
-                self.get_output_file(ext="_timing.txt") if enabled else None,
-                enabled=enabled,
-                label=self.plan.get("ProcName") or "",
-            )
+            self._timer = Timer()
         return self._timer
 
-    def write_timing_summary(self):
+    def save_timing(self):
         """
-        Write the total time of each timed segment to
-        ``<OutputName>[<ProcName>]_timing_summary.txt``.
+        Save the timings of this process (in the diagnostics directory,
+        which is cleared at the start of each reduction), for
+        ``write_timing`` to combine.
         """
 
-        if getattr(self, "_timer", None) is not None and self._timer.enabled:
-            self._timer.write_summary(
-                self.get_output_file(ext="_timing_summary.txt")
-            )
+        path = self.get_diagnostic_path()
+        os.makedirs(path, exist_ok=True)
+        proc = self.plan.get("ProcName") or ""
+        self.timer.save(os.path.join(path, "timing{}.json".format(proc)))
+
+    def write_timing(self):
+        """
+        Combine the timings saved by every process into
+        ``<OutputName>_timing.txt``, with each step's total over all runs
+        and its mean per run, and remove them.
+        """
+
+        files = glob.glob(
+            os.path.join(self.get_diagnostic_path(), "timing*.json")
+        )
+        if not files:
+            return
+
+        timings = []
+        for file in files:
+            with open(file) as f:
+                timings.append(json.load(f))
+
+        filename = os.path.join(
+            self.get_output_path(), self.plan["OutputName"] + "_timing.txt"
+        )
+        write_timing_table(combine_timings(timings), filename)
+
+        for file in files:
+            os.remove(file)
 
     def create_directories(self):
         output = self.get_output_path()

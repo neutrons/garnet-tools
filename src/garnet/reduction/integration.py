@@ -143,6 +143,8 @@ class Integration(PeakProjection):
             peaks.load_peaks(file, "tmp")
             peaks.combine_peaks("tmp", "combine")
 
+        self.write_timing()
+
         for file in files:
             os.remove(file)
 
@@ -482,13 +484,14 @@ class Integration(PeakProjection):
 
             timer.lap("save and clean up")
 
+            self.save_timing()
+
         peaks.remove_weak_peaks("combine", -100)
 
         peaks.save_peaks(result_file, "combine")
 
-        timer.set_run("")
         timer.lap("save result")
-        self.write_timing_summary()
+        self.save_timing()
 
         # ---
 

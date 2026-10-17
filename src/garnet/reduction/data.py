@@ -2418,12 +2418,14 @@ class LaueData(BaseDataModel):
                 2 * np.pi / self.k_min,
             ]
 
-    def crop_for_normalization(self, event_name):
+    def crop_for_normalization(self, event_name, tolerance=1e-2):
         """
         Convert units to momentum and crop to momentum band.
 
         event_name : str
             Name of raw event data.
+        factor : float
+            Compression tolerance.
 
         """
 
@@ -2451,7 +2453,7 @@ class LaueData(BaseDataModel):
             CompressEvents(
                 InputWorkspace=event_name,
                 OutputWorkspace=event_name,
-                Tolerance=1e-2,
+                Tolerance=tolerance,
             )
 
     def load_background(
@@ -2617,7 +2619,7 @@ class LaueData(BaseDataModel):
 
                     DeleteWorkspace(Workspace="mask_bkg")
 
-            self.crop_for_normalization("bkg")
+            self.crop_for_normalization("bkg", 1e-1)
 
             mtd["bkg"].run()["gd_prtn_chrg"] = pc_bkg
 

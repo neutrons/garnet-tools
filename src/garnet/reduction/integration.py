@@ -388,14 +388,6 @@ class Integration(PeakProjection):
 
             timer.lap("predict peaks")
 
-            data.bin_Q_sample_to_hkl("md", "peaks", "hist", d_min=d_min)
-
-            hist_file = self.get_diagnostic_file("run#{}_hist".format(run))
-            data.save_histograms(hist_file, "hist")
-            data.delete_workspace("hist")
-
-            timer.lap("HKL histogram")
-
             pk_file = self.get_diagnostic_file("run#{}_peaks".format(run))
             peaks.save_peaks(pk_file, "peaks")
 
@@ -1446,9 +1438,7 @@ class Integration(PeakProjection):
                 }
             )
 
-            shape_file = self.get_diagnostic_file(
-                peak_name + "_shape", ext=".png"
-            )
+            shape_file = self.get_plot_file(peak_name + "_shape")
 
             os.makedirs(os.path.dirname(shape_file), exist_ok=True)
 

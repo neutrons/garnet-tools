@@ -6,6 +6,7 @@ import operator
 import concurrent.futures
 
 from garnet.config.instruments import beamlines
+from garnet.reduction.timing import Timer
 
 
 class Dumper(yaml.SafeDumper):
@@ -165,6 +166,34 @@ class SubPlan:
         self.proc = 0
         self.n_proc = 1
         self.total = 0
+
+    @property
+    def timer(self):
+        """
+        Timer for the segments of this reduction, writing to
+        ``<OutputName>[<ProcName>]_timing.txt`` beside its output, unless the
+        plan sets ``Timing: false``.
+        """
+
+        if getattr(self, "_timer", None) is None:
+            enabled = bool(self.plan.get("Timing", True))
+            self._timer = Timer(
+                self.get_output_file(ext="_timing.txt") if enabled else None,
+                enabled=enabled,
+                label=self.plan.get("ProcName") or "",
+            )
+        return self._timer
+
+    def write_timing_summary(self):
+        """
+        Write the total time of each timed segment to
+        ``<OutputName>[<ProcName>]_timing_summary.txt``.
+        """
+
+        if getattr(self, "_timer", None) is not None and self._timer.enabled:
+            self._timer.write_summary(
+                self.get_output_file(ext="_timing_summary.txt")
+            )
 
     def create_directories(self):
         output = self.get_output_path()

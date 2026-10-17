@@ -201,16 +201,24 @@ class Integration(PeakProjection):
 
         result_file = self.get_file(output_file, "")
 
+        timer = self.timer
+
         for run in runs:
             self.run += 1
 
             self.status = "{}: {:}/{:}".format(self.proc, self.run, len(runs))
 
+            timer.set_run(run)
+
             data.load_data("data", self.plan["IPTS"], run)
+
+            timer.lap("load data")
 
             data.load_generate_normalization(
                 self.plan["VanadiumFile"], self.plan.get("FluxFile")
             )
+
+            timer.lap("load normalization")
 
             data.apply_calibration(
                 "data",
@@ -219,13 +227,23 @@ class Integration(PeakProjection):
                 self.plan.get("GoniometerCalibration"),
             )
 
+            timer.lap("calibration")
+
             data.preprocess_detectors("data")
+
+            timer.lap("preprocess detectors")
 
             data.crop_for_normalization("data")
 
+            timer.lap("crop for normalization")
+
             data.apply_mask("data", self.plan.get("MaskFile"))
 
+            timer.lap("mask")
+
             data.load_clear_UB(self.plan["UBFile"], "data", run)
+
+            timer.lap("load UB")
 
             data.load_background(
                 self.plan.get("BackgroundFile"),
@@ -236,6 +254,8 @@ class Integration(PeakProjection):
             )
 
             lamda_min, lamda_max = data.wavelength_band
+
+            timer.lap("load background")
 
             d_min = self.params["MinD"]
 
@@ -251,9 +271,13 @@ class Integration(PeakProjection):
 
             data.subtract_background("data")
 
+            timer.lap("subtract background")
+
             app = "_sub" if data.workspace_exists("data_sub") else ""
 
             data.convert_to_Q_sample("data" + app, "md", lorentz_corr=True)
+
+            timer.lap("convert to Q sample")
 
             self.predict_all_peaks(
                 "data" + app,
@@ -272,10 +296,14 @@ class Integration(PeakProjection):
                 for i in range(peak.get_number_peaks())
             }
 
+            timer.lap("predict peaks")
+
             if self.params["OptimizePeaks"]:
                 self.optimize_peaks(
                     "data" + app, "md", "peaks", centering, cell, run
                 )
+
+            timer.lap("optimize peaks")
 
             # md_file = self.get_diagnostic_file("run#{}_data".format(run))
             # data.save_histograms(md_file, "md")
@@ -292,6 +320,8 @@ class Integration(PeakProjection):
                     "peaks", r_cut=r_cut, mosaic="full"
                 )
                 self.prior_res.set_variance_parameters_deg(div_params)
+
+            timer.lap("prior resolution model")
 
             if not self.params["ProfileFit"]:
                 self.refine_peak_shapes(
@@ -316,14 +346,20 @@ class Integration(PeakProjection):
                     update=True,
                 )
 
+            timer.lap("observed peak shapes")
+
             if self.params["OptimizeUB"]:
                 self.optimize_ub("data" + app, "md", "peaks", cell, run)
+
+            timer.lap("optimize UB")
 
             res = ResolutionEllipsoid("peaks", r_cut=r_cut, mosaic="isotropic")
             fixed_instrumental = (
                 self.prior_res.model if self.prior_res is not None else None
             )
             res.fit(fixed_instrumental=fixed_instrumental)
+
+            timer.lap("fit resolution model")
 
             if res.model is not None:
                 res_file = self.get_plot_file("run#{}_res".format(run))
@@ -336,6 +372,8 @@ class Integration(PeakProjection):
 
                 self.plot_peak_shape_diagnostics("peaks", res, r_cut, 21)
 
+            timer.lap("resolution diagnostics")
+
             self.predict_all_peaks(
                 "data" + app,
                 "md",
@@ -345,6 +383,8 @@ class Integration(PeakProjection):
                 lamda_min,
                 lamda_max,
             )
+
+            timer.lap("predict peaks")
 
             data.bin_Q_sample_to_hkl("md", "peaks", "hist", d_min=d_min)
 
@@ -352,8 +392,12 @@ class Integration(PeakProjection):
             data.save_histograms(hist_file, "hist")
             data.delete_workspace("hist")
 
+            timer.lap("HKL histogram")
+
             pk_file = self.get_diagnostic_file("run#{}_peaks".format(run))
             peaks.save_peaks(pk_file, "peaks")
+
+            timer.lap("save peaks")
 
             self.predict_all_peaks(
                 "data" + app,
@@ -364,6 +408,8 @@ class Integration(PeakProjection):
                 lamda_min,
                 lamda_max,
             )
+
+            timer.lap("predict peaks")
 
             if res.model is not None:
                 res.apply()
@@ -372,6 +418,8 @@ class Integration(PeakProjection):
 
             ub = UBModel("peaks")
             self.P = ub.centering_matrix(centering)
+
+            timer.lap("apply resolution model")
 
             self.peaks, self.data = peaks, data
             self.r_cut = r_cut
@@ -416,6 +464,8 @@ class Integration(PeakProjection):
             else:
                 self.integrate_peaks_normalized("data", "peaks", res, r_cut)
 
+            timer.lap("integrate peaks")
+
             peaks.update_scale_factor("peaks", data.monitor)
 
             peaks.combine_peaks("peaks", "combine")
@@ -430,9 +480,15 @@ class Integration(PeakProjection):
 
             data.delete_workspace("peaks")
 
+            timer.lap("save and clean up")
+
         peaks.remove_weak_peaks("combine", -100)
 
         peaks.save_peaks(result_file, "combine")
+
+        timer.set_run("")
+        timer.lap("save result")
+        self.write_timing_summary()
 
         # ---
 
@@ -1035,18 +1091,36 @@ class Integration(PeakProjection):
         # containment radius of a standard deviation
         scale = np.sqrt(_CONTAINMENT_SCALE_3D)
 
-        radii, directions = self.model_ellipsoids(peaks_ws, prior_res, r_cut)
+        with self.timer.section("prior ellipsoids"):
+            radii, directions = self.model_ellipsoids(
+                peaks_ws, prior_res, r_cut
+            )
 
-        diagnostics = peaks.integrate_peaks_normalized(
-            data_ws,
-            peaks_ws,
-            [r / scale for r in radii],
-            directions,
-            r_cut,
-            profile_fit=True,
-            adjust_center=True,
-            adjust_shape=True,
-        )
+        with self.timer.section("IntegratePeaksShapeMD refining shapes"):
+            diagnostics = peaks.integrate_peaks_normalized(
+                data_ws,
+                peaks_ws,
+                [r / scale for r in radii],
+                directions,
+                r_cut,
+                profile_fit=True,
+                adjust_center=True,
+                adjust_shape=True,
+            )
+
+            if diagnostics is not None:
+                refined = [d for d in diagnostics if d["shape_adjusted"]]
+                kept = [d for d in diagnostics if not d["shape_adjusted"]]
+                self.timer.add(
+                    "fits refining shapes",
+                    sum(d["fit_seconds"] for d in refined),
+                    len(refined),
+                )
+                self.timer.add(
+                    "fits keeping stored shapes",
+                    sum(d["fit_seconds"] for d in kept),
+                    len(kept),
+                )
 
         peak = PeakModel(peaks_ws)
         ws = mtd[peaks_ws]
@@ -1095,19 +1169,21 @@ class Integration(PeakProjection):
 
         peak = PeakModel(peaks_ws)
 
-        peak_radii, peak_directions = self.model_ellipsoids(
-            peaks_ws, res, r_cut
-        )
+        with self.timer.section("model ellipsoids"):
+            peak_radii, peak_directions = self.model_ellipsoids(
+                peaks_ws, res, r_cut
+            )
 
-        diagnostics = self.peaks.integrate_peaks_normalized(
-            data_ws,
-            peaks_ws,
-            peak_radii,
-            peak_directions,
-            r_cut,
-            background_inner_fact=inner_fact,
-            background_outer_fact=outer_fact,
-        )
+        with self.timer.section("IntegratePeaksShapeMD counting"):
+            diagnostics = self.peaks.integrate_peaks_normalized(
+                data_ws,
+                peaks_ws,
+                peak_radii,
+                peak_directions,
+                r_cut,
+                background_inner_fact=inner_fact,
+                background_outer_fact=outer_fact,
+            )
 
         if diagnostics is None:
             for i in range(peak.get_number_peaks()):

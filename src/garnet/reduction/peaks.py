@@ -572,7 +572,8 @@ class PeaksModel:
             region) and the shell, whether the peak is only partly covered
             by the detectors or momentum band, and whether its shape was
             refined, with the refined standard deviations, Q-lab axes
-            (columns) and center offset; None if integration failed.
+            (columns) and center offset, and the time spent integrating
+            it; None if integration failed.
 
         """
 
@@ -641,6 +642,11 @@ class PeaksModel:
                     "partial": mtd[table].cell("ClippedByMomentumRange", i)
                     or mtd[table].cell("MaskedDetectors", i),
                     "shape_adjusted": mtd[table].cell("ShapeAdjusted", i),
+                    "fit_seconds": (
+                        mtd[table].cell("FitSeconds", i)
+                        if "FitSeconds" in mtd[table].getColumnNames()
+                        else 0.0
+                    ),
                     "sigmas": sigmas,
                     "directions": V,
                     "offset": offset,

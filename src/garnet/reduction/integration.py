@@ -30,7 +30,7 @@ from garnet.reduction.peaks import PeaksModel, PeakModel, centering_reflection
 from garnet.reduction.ellipsoid import PeakEllipsoid
 from garnet.reduction.resolution import (
     ResolutionEllipsoid,
-    _plot_peak_shape_diagnostics,
+    PeakShapePlot,
     _CONTAINMENT_SCALE_3D,
 )
 from garnet.reduction.data import DataModel
@@ -277,7 +277,9 @@ class Integration(PeakProjection):
 
             app = "_sub" if data.workspace_exists("data_sub") else ""
 
-            data.convert_to_Q_sample("data" + app, "md", lorentz_corr=True)
+            # in quick mode only the optional peak optimization needs MD
+            if self.params["ProfileFit"] or self.params["OptimizePeaks"]:
+                data.convert_to_Q_sample("data" + app, "md", lorentz_corr=True)
 
             timer.lap("convert to Q sample")
 
@@ -548,7 +550,8 @@ class Integration(PeakProjection):
         if source != peaks_ws:
             ub.copy_UB(peaks_ws)
         ub.copy_UB(data)
-        ub.copy_UB(md)
+        if mtd.doesExist(md):
+            ub.copy_UB(md)
 
         if source != peaks_ws:
             mtd.remove(source)
@@ -1114,6 +1117,10 @@ class Integration(PeakProjection):
                 profile_fit=True,
                 adjust_center=True,
                 adjust_shape=True,
+                # the predicted positions are off by the calibration's
+                # errors, which can be several standard deviations along a
+                # peak's narrow axis
+                max_center_shift=4.0,
             )
 
             if diagnostics is not None:
@@ -1231,15 +1238,13 @@ class Integration(PeakProjection):
 
             peak.add_diagnostic_info(i, info)
 
-    def extract_peak_counts(self, peaks_ws, r_cut, n_bins, peak_indices=None):
+    def extract_peak_counts(
+        self, peaks_ws, r_cut, n_bins, peak_indices=None, event_ws="data"
+    ):
         """
         Obtain raw event counts in an axis-aligned Q-sample box around
-        each peak, without normalization or ellipsoid fitting.
-
-        Each peak's binned box is also saved to the diagnostic directory
-        (as "..._counts.nxs", same peak-named-subdirectory convention as
-        `extract_peak_info`'s "_data"/"_norm" files) for manual
-        inspection of what's actually inside the box.
+        each peak, binned straight from the events (without converting to
+        MD), without normalization or ellipsoid fitting.
 
         Parameters
         ----------
@@ -1253,22 +1258,18 @@ class Integration(PeakProjection):
         n_bins : int
             Number of bins along each Q-sample axis.
         peak_indices : iterable of int, optional
-            Only bin these peaks. Defaults to all peaks. Useful for
-            pulling a handful of boxes (e.g. for a diagnostic plot)
-            without re-binning the whole peaks table.
+            Only bin these peaks. Defaults to all peaks.
+        event_ws : str, optional
+            Name of the events, in momentum. The default is "data".
 
         Returns
         -------
         peak_dict : dict
-            Keyed by peak index, each value a dict with "counts",
-            "Q", "R", "lamda", "two_theta", "az_phi". "counts" is
-            signal from "md", which is Lorentz-corrected (see
-            `convert_to_Q_sample`'s `lorentz_corr`) -- a real-valued
-            weighted sum, not raw event counts.
+            Keyed by peak index, each value a dict with "counts" (raw,
+            weighted event counts), "Q0", "Q1", "Q2" (bin centers), "Q",
+            "R", "lamda", "two_theta", "az_phi".
 
         """
-
-        data = self.data
 
         peak = PeakModel(peaks_ws)
 
@@ -1276,49 +1277,29 @@ class Integration(PeakProjection):
 
         r_cuts = np.broadcast_to(r_cut, n_peak)
 
-        bins = np.full(3, n_bins, dtype=int)
-        projections = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-
-        Qs = [np.array(peak.get_sample_Q(i)) for i in range(n_peak)]
+        indices = list(range(n_peak) if peak_indices is None else peak_indices)
 
         peak_dict = {}
+        if not indices:
+            return peak_dict
 
-        indices = range(n_peak) if peak_indices is None else peak_indices
+        Qs = [np.array(peak.get_sample_Q(i)) for i in indices]
+        R = peak.get_goniometer_matrix(indices[0])
 
-        for i in indices:
-            Q = Qs[i]
+        boxes = self.data.bin_events_in_Q(
+            event_ws, Qs, [r_cuts[i] for i in indices], R, n_bins
+        )
 
-            lamda = peak.get_wavelength(i)
+        for i, Q, (counts, Q0, Q1, Q2) in zip(indices, Qs, boxes):
             two_theta, az_phi = peak.get_angles(i)
-            R = peak.get_goniometer_matrix(i)
-
-            extents = [[q - r_cuts[i], q + r_cuts[i]] for q in Q]
-
-            counts, _, Q0, Q1, Q2 = data.bin_in_Q(
-                "md", extents, bins.copy(), projections
-            )
-
-            orig_d = self.orig_d.get(peak.get_hklmnp(i))
-            peak_name = peak.get_peak_name(i, d=orig_d)
-
-            counts_file = self.get_diagnostic_file(peak_name + "_counts")
-
-            directory = os.path.dirname(counts_file)
-
-            os.makedirs(directory, exist_ok=True)
-
-            data.save_histograms(counts_file, "md_bin")
-
-            data.delete_workspace("md_bin")
-
             peak_dict[i] = {
                 "counts": counts,
                 "Q0": Q0,
                 "Q1": Q1,
                 "Q2": Q2,
                 "Q": Q,
-                "R": R,
-                "lamda": lamda,
+                "R": peak.get_goniometer_matrix(i),
+                "lamda": peak.get_wavelength(i),
                 "two_theta": two_theta,
                 "az_phi": az_phi,
             }
@@ -1364,7 +1345,19 @@ class Integration(PeakProjection):
         """
         peak = PeakModel(peaks_ws)
 
-        peak_dict = self.extract_peak_counts(peaks_ws, r_cut, n_bins)
+        # only the peaks with a shape are plotted, so only they are binned
+        shaped = [
+            i
+            for i in range(peak.get_number_peaks())
+            if np.all(np.isfinite(peak.get_peak_shape(i, r_cut=r_cut)[3:6]))
+        ]
+
+        peak_dict = self.extract_peak_counts(
+            peaks_ws, r_cut, n_bins, peak_indices=shaped
+        )
+
+        # one figure, reused for every peak
+        shape_plot = PeakShapePlot()
 
         for i, info in peak_dict.items():
             c0, c1, c2, r0, r1, r2, v0, v1, v2 = peak.get_peak_shape(
@@ -1455,4 +1448,6 @@ class Integration(PeakProjection):
 
             os.makedirs(os.path.dirname(shape_file), exist_ok=True)
 
-            _plot_peak_shape_diagnostics(samples, shape_file)
+            shape_plot.draw(samples, shape_file)
+
+        shape_plot.close()

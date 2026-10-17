@@ -1082,6 +1082,99 @@ class BaseDataModel:
 
             return y, e, x0, x1, x2
 
+    def bin_events_in_Q(self, event_name, centers, half_widths, R, bins):
+        """
+        Histogram the raw events about each of several Q-sample centers
+        into a cube, straight from the events rather than by converting to
+        MD: only the pixels whose lines Q = k u cross each cube, and only
+        the momenta that can reach it, are read.
+
+        Parameters
+        ----------
+        event_name : str
+            Name of the events, in momentum, with "detectors" from
+            `preprocess_detectors`.
+        centers : list
+            Q-sample center of each cube.
+        half_widths : list
+            Half the side of each cube.
+        R : array
+            Goniometer matrix.
+        bins : int
+            Number of bins along each side.
+
+        Returns
+        -------
+        boxes : list
+            For each cube, the counts and the Q-sample coordinates of the
+            bin centers (each indexed as [i, j, k] along the three axes).
+
+        """
+
+        ws = mtd[event_name]
+        detectors = mtd["detectors"]
+
+        two_theta = np.asarray(detectors.column("TwoTheta"), dtype=float)
+        azimuthal = np.asarray(detectors.column("Azimuthal"), dtype=float)
+        spectra = np.asarray(detectors.column("detIDMap"))
+        valid = np.isfinite(np.asarray(detectors.column("L2"), dtype=float))
+
+        # Q = k u, with u as for the events (MDTransfQ3D), in Q-sample
+        s = np.sin(two_theta)
+        u = np.column_stack(
+            [s * np.cos(azimuthal), s * np.sin(azimuthal), np.cos(two_theta)]
+        )
+        u[:, 2] -= 1.0
+        if config["Q.convention"] != "Crystallography":
+            u = -u
+        u = u @ np.asarray(R)
+        u_norm = np.linalg.norm(u, axis=1)
+        valid &= u_norm > 1e-10
+        u_hat = np.divide(
+            u, u_norm[:, None], out=np.zeros_like(u), where=valid[:, None]
+        )
+
+        boxes = []
+        for center, half_width in zip(centers, half_widths):
+            center = np.asarray(center, dtype=float)
+            distance = np.linalg.norm(center)
+            # the lines that can reach the cube's bounding sphere
+            bound = half_width * np.sqrt(3)
+            if distance > bound:
+                cos_min = np.cos(np.arcsin(bound / distance))
+                rows = np.flatnonzero(
+                    valid & (u_hat @ (center / distance) >= cos_min)
+                )
+            else:
+                rows = np.flatnonzero(valid)
+
+            Qs, weights = [], []
+            for row in rows:
+                k_min = (distance - bound) / u_norm[row]
+                k_max = (distance + bound) / u_norm[row]
+                events = ws.getSpectrum(int(spectra[row]))
+                k = np.asarray(events.getTofs())
+                keep = (k >= k_min) & (k <= k_max)
+                if np.any(keep):
+                    Qs.append(np.outer(k[keep], u[row]))
+                    weights.append(np.asarray(events.getWeights())[keep])
+
+            edges = [
+                np.linspace(c - half_width, c + half_width, bins + 1)
+                for c in center
+            ]
+            if Qs:
+                counts, _ = np.histogramdd(
+                    np.vstack(Qs), bins=edges, weights=np.concatenate(weights)
+                )
+            else:
+                counts = np.zeros((bins, bins, bins))
+
+            centers_1d = [0.5 * (e[1:] + e[:-1]) for e in edges]
+            boxes.append((counts, *np.meshgrid(*centers_1d, indexing="ij")))
+
+        return boxes
+
     def bin_Q_sample_to_hkl(self, md, peaks, hkl_histo, bins=201, d_min=None):
         """
         Bin Q-sample data into a rough HKL histogram for a diagnostic check

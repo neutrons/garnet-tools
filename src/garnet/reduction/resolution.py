@@ -272,10 +272,11 @@ def _plot_resolution_diagnostics(rows, filename, sn_label="$I/\\sigma$"):
     fig.savefig(filename, bbox_inches="tight")
 
 
-def _ellipse_patch(S_2d, center_2d, **kwargs):
+def _ellipse_geometry(S_2d):
     """
-    A `matplotlib.patches.Ellipse` for a 2D containment-scale covariance
-    (same convention as `_CONTAINMENT_SCALE_3D` -- radii, not sigma).
+    Width, height and angle (degrees) of the ellipse of a 2D
+    containment-scale covariance (same convention as
+    `_CONTAINMENT_SCALE_3D` -- radii, not sigma).
     """
     eigvals, eigvecs = np.linalg.eigh(0.5 * (S_2d + S_2d.T))
     eigvals = np.maximum(eigvals, 0.0)
@@ -284,40 +285,34 @@ def _ellipse_patch(S_2d, center_2d, **kwargs):
     vec_major = eigvecs[:, 1]
     angle = np.degrees(np.arctan2(vec_major[1], vec_major[0]))
 
+    return 2 * major, 2 * minor, angle
+
+
+def _ellipse_patch(S_2d, center_2d, **kwargs):
+    """
+    A `matplotlib.patches.Ellipse` for a 2D containment-scale covariance.
+    """
+    width, height, angle = _ellipse_geometry(S_2d)
+
     return Ellipse(
-        center_2d,
-        width=2 * major,
-        height=2 * minor,
-        angle=angle,
-        **kwargs,
+        center_2d, width=width, height=height, angle=angle, **kwargs
     )
 
 
-def _plot_peak_shape_diagnostics(samples, filename, axis_labels=None):
+class PeakShapePlot:
     """
-    Render the per-peak box + overlaid ellipse diagnostic figure -- a
-    spatial complement to `_plot_resolution_diagnostics`'s
-    population-level obs-vs-pred scatter, showing the actual counts
-    box each peak's shape estimate(s) came from.
+    The per-peak box + overlaid ellipse diagnostic figure -- a spatial
+    complement to `_plot_resolution_diagnostics`'s population-level
+    obs-vs-pred scatter, showing the actual counts box each peak's shape
+    estimate(s) came from.
 
-    Used by `Integration.plot_peak_shape_diagnostics` -- observed vs.
-    population-model-predicted shape, and (when an instrument prior
-    model was used to size the integration radii) prior vs. observed
-    shape too -- on a small, signal/noise- and |Q|-stratified sample of
-    peaks (plotting every peak this way doesn't scale).
+    The figure is built once, for the first peak drawn, and reused for
+    every later peak with the same layout (number of rows and ellipses),
+    updating its images and ellipses rather than building and laying out a
+    new figure each time. Call `close` when done.
 
     Parameters
     ----------
-    samples : list of dict
-        Per-peak rows with keys "label", "Q0"/"Q1"/"Q2" (dense grids
-        from `data.bin_in_Q`, ij-indexed), "counts" (matching 3D
-        array), and "ellipses": a list of dict, each with "center"
-        (3-tuple, same frame as "Q0"/"Q1"/"Q2"), "S" (3x3,
-        containment-scale, same frame), "label", "color", and
-        "linestyle" -- one dashed/solid pair overlaid on the counts
-        image per sample, in the order given.
-    filename : str
-        Output image path.
     axis_labels : list of (str, str), optional
         Per-projection axis labels, one pair per dimension dropped
         (i.e. projections onto the other two). Defaults to the
@@ -326,88 +321,197 @@ def _plot_peak_shape_diagnostics(samples, filename, axis_labels=None):
         "Q0"/"Q1"/"Q2" aren't literal Q-sample components.
 
     """
-    n_rows = len(samples)
 
-    if axis_labels is None:
-        axis_labels = [("Q_1", "Q_2"), ("Q_0", "Q_2"), ("Q_0", "Q_1")]
+    def __init__(self, axis_labels=None):
+        if axis_labels is None:
+            axis_labels = [("Q_1", "Q_2"), ("Q_0", "Q_2"), ("Q_0", "Q_1")]
+        self.axis_labels = axis_labels
+        self.fig = None
+        self.layout = None
 
-    fig, axes = plt.subplots(
-        n_rows, 3, figsize=(12, 4 * n_rows), squeeze=False
-    )
+    def _build(self, samples):
+        self.close()
 
-    for row, sample in enumerate(samples):
-        xs = [
-            sample["Q0"][:, 0, 0],
-            sample["Q1"][0, :, 0],
-            sample["Q2"][0, 0, :],
-        ]
-        counts = sample["counts"]
-        ellipses = sample["ellipses"]
+        n_rows = len(samples)
+        self.layout = [len(sample["ellipses"]) for sample in samples]
 
-        for k in range(3):
-            a, b = [d for d in range(3) if d != k]
+        self.fig, self.axes = plt.subplots(
+            n_rows, 3, figsize=(12, 4 * n_rows), squeeze=False
+        )
 
-            ax = axes[row, k]
-
-            proj = counts.sum(axis=k)
-
-            ax.imshow(
-                proj.T,
-                origin="lower",
-                extent=[xs[a].min(), xs[a].max(), xs[b].min(), xs[b].max()],
-                aspect="auto",
-                cmap="viridis",
-            )
-
-            idx = [a, b]
-
-            for ellipse in ellipses:
-                center_2d = (ellipse["center"][a], ellipse["center"][b])
-
-                ax.add_patch(
-                    _ellipse_patch(
-                        ellipse["S"][np.ix_(idx, idx)],
-                        center_2d,
+        self.images = {}
+        self.patches = {}
+        for row, sample in enumerate(samples):
+            for k in range(3):
+                ax = self.axes[row, k]
+                self.images[row, k] = ax.imshow(
+                    np.zeros((2, 2)),
+                    origin="lower",
+                    extent=[0, 1, 0, 1],
+                    aspect="auto",
+                    cmap="viridis",
+                )
+                patches = []
+                for ellipse in sample["ellipses"]:
+                    patch = Ellipse(
+                        (0, 0),
+                        width=0,
+                        height=0,
                         edgecolor=ellipse["color"],
                         facecolor="none",
                         linestyle=ellipse["linestyle"],
                         linewidth=1.2,
                     )
-                )
+                    ax.add_patch(patch)
+                    patches.append(patch)
+                self.patches[row, k] = patches
 
-            lab_a, lab_b = axis_labels[k]
-            ax.minorticks_on()
-            ax.set_xlabel("${}$ [$\\AA^{{-1}}$]".format(lab_a))
-            if k == 0:
-                ax.set_ylabel(
-                    "{}\n${}$ [$\\AA^{{-1}}$]".format(sample["label"], lab_b)
-                )
-            else:
-                ax.set_ylabel("${}$ [$\\AA^{{-1}}$]".format(lab_b))
-            if row == 0:
-                ax.set_title("{} vs {}".format(lab_a, lab_b))
+                lab_a, lab_b = self.axis_labels[k]
+                ax.minorticks_on()
+                ax.set_xlabel("${}$ [$\\AA^{{-1}}$]".format(lab_a))
+                if k > 0:
+                    ax.set_ylabel("${}$ [$\\AA^{{-1}}$]".format(lab_b))
+                if row == 0:
+                    ax.set_title("{} vs {}".format(lab_a, lab_b))
 
-    seen = set()
-    handles = []
-    for sample in samples:
-        for ellipse in sample["ellipses"]:
-            key = (ellipse["label"], ellipse["color"], ellipse["linestyle"])
-            if key not in seen:
-                seen.add(key)
-                handles.append(
-                    plt.Line2D(
-                        [0],
-                        [0],
-                        color=ellipse["color"],
-                        linestyle=ellipse["linestyle"],
-                        label=ellipse["label"],
+        seen = set()
+        handles = []
+        for sample in samples:
+            for ellipse in sample["ellipses"]:
+                key = (
+                    ellipse["label"],
+                    ellipse["color"],
+                    ellipse["linestyle"],
+                )
+                if key not in seen:
+                    seen.add(key)
+                    handles.append(
+                        plt.Line2D(
+                            [0],
+                            [0],
+                            color=ellipse["color"],
+                            linestyle=ellipse["linestyle"],
+                            label=ellipse["label"],
+                        )
                     )
-                )
-    fig.legend(handles=handles, loc="upper center", ncol=len(handles))
+        # on the colormap's dark background, so white ellipses show
+        self.fig.legend(
+            handles=handles,
+            loc="upper center",
+            ncol=len(handles),
+            facecolor=plt.get_cmap("viridis")(0.0),
+            labelcolor="white",
+        )
 
-    fig.tight_layout(rect=[0, 0, 1, 0.97])
-    fig.savefig(filename, bbox_inches="tight")
-    plt.close(fig)
+    def _layout(self):
+        """
+        Lay the figure out once, with the first peak's data and labels in
+        place (their tick and row labels set the margins), and keep it.
+        """
+
+        self.fig.tight_layout(rect=[0, 0, 1, 0.97])
+
+        # tight_layout can leave the long row labels hanging off the left
+        # edge; widen the left margin by however far they do
+        self.fig.canvas.draw()
+        overhang = -min(
+            self.axes[row, 0].yaxis.label.get_window_extent().x0
+            for row in range(self.axes.shape[0])
+        )
+        if overhang > 0:
+            left = self.fig.subplotpars.left
+            self.fig.subplots_adjust(
+                left=left + (overhang + 4) / self.fig.bbox.width
+            )
+
+    def _set_row_label(self, row, label):
+        lab_b = self.axis_labels[0][1]
+        self.axes[row, 0].set_ylabel(
+            "{}\n${}$ [$\\AA^{{-1}}$]".format(label, lab_b)
+        )
+
+    def draw(self, samples, filename):
+        """
+        Draw one peak's figure and save it.
+
+        Parameters
+        ----------
+        samples : list of dict
+            Per-peak rows with keys "label", "Q0"/"Q1"/"Q2" (dense grids,
+            ij-indexed), "counts" (matching 3D array), and "ellipses": a
+            list of dict, each with "center" (3-tuple, same frame as
+            "Q0"/"Q1"/"Q2"), "S" (3x3, containment-scale, same frame),
+            "label", "color", and "linestyle" -- overlaid on the counts
+            image per sample, in the order given.
+        filename : str
+            Output image path.
+
+        """
+
+        layout = [len(sample["ellipses"]) for sample in samples]
+        built = self.fig is None or layout != self.layout
+        if built:
+            self._build(samples)
+
+        for row, sample in enumerate(samples):
+            xs = [
+                sample["Q0"][:, 0, 0],
+                sample["Q1"][0, :, 0],
+                sample["Q2"][0, 0, :],
+            ]
+            counts = sample["counts"]
+
+            for k in range(3):
+                a, b = [d for d in range(3) if d != k]
+
+                proj = counts.sum(axis=k)
+                image = self.images[row, k]
+                image.set_data(proj.T)
+                image.set_extent(
+                    [xs[a].min(), xs[a].max(), xs[b].min(), xs[b].max()]
+                )
+                low, high = proj.min(), proj.max()
+                image.set_clim(low, high if high > low else low + 1)
+
+                ax = self.axes[row, k]
+                ax.set_xlim(xs[a].min(), xs[a].max())
+                ax.set_ylim(xs[b].min(), xs[b].max())
+
+                idx = [a, b]
+                for patch, ellipse in zip(
+                    self.patches[row, k], sample["ellipses"]
+                ):
+                    width, height, angle = _ellipse_geometry(
+                        ellipse["S"][np.ix_(idx, idx)]
+                    )
+                    patch.set_center(
+                        (ellipse["center"][a], ellipse["center"][b])
+                    )
+                    patch.set_width(width)
+                    patch.set_height(height)
+                    patch.set_angle(angle)
+
+            self._set_row_label(row, sample["label"])
+
+        if built:
+            self._layout()
+
+        self.fig.savefig(filename)
+
+    def close(self):
+        if self.fig is not None:
+            plt.close(self.fig)
+            self.fig = None
+
+
+def _plot_peak_shape_diagnostics(samples, filename, axis_labels=None):
+    """
+    Render one per-peak box + overlaid ellipse diagnostic figure; see
+    `PeakShapePlot`, which reuses one figure for many peaks.
+    """
+    plot = PeakShapePlot(axis_labels)
+    plot.draw(samples, filename)
+    plot.close()
 
 
 class ResolutionEllipsoid:

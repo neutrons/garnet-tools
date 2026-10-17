@@ -520,6 +520,7 @@ class PeaksModel:
         adjust_shape=False,
         min_signal_to_noise=10.0,
         max_shape_change=2.0,
+        max_center_shift=3.0,
     ):
         """
         Integrate peaks in ellipsoids, normalized by flux and solid angle
@@ -564,6 +565,10 @@ class PeaksModel:
         max_shape_change : float, optional
             Largest factor by which a refined standard deviation may change.
             The default is 2.
+        max_center_shift : float, optional
+            With adjust_shape and adjust_center, the largest distance a
+            refined center may move, in standard deviations of the peak's
+            ellipsoid along each of its axes. The default is 3.
 
         Returns
         -------
@@ -606,6 +611,7 @@ class PeaksModel:
                 AdjustShape=adjust_shape,
                 AdjustShapeMinSignalToNoise=min_signal_to_noise,
                 MaxShapeChange=max_shape_change,
+                MaxCenterShift=max_center_shift,
                 SolidAngleWorkspace=solid_angle,
                 FluxWorkspace=flux,
                 OutputWorkspace=shapes,

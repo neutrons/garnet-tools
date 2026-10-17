@@ -1708,6 +1708,36 @@ class PeaksModel:
                 Operator="!=",
             )
 
+    def copy_shaped_peaks(self, peaks, shaped):
+        """
+        Copy only the peaks that have an ellipsoidal shape.
+
+        Parameters
+        ----------
+        peaks : str
+            Name of peaks table.
+        shaped : str
+            Name of the copy.
+
+        Returns
+        -------
+        n : int
+            Number of peaks copied.
+
+        """
+
+        CloneWorkspace(InputWorkspace=peaks, OutputWorkspace=shaped)
+
+        unshaped = [
+            i
+            for i, peak in enumerate(mtd[shaped])
+            if peak.getPeakShape().shapeName() != "ellipsoid"
+        ]
+        if unshaped:
+            mtd[shaped].removePeaks(unshaped)
+
+        return mtd[shaped].getNumberPeaks()
+
     def remove_unindexed_peaks(self, peaks):
         """
         Filter out unindexes peaks.

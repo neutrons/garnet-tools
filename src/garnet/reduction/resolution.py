@@ -376,6 +376,7 @@ def _plot_peak_shape_diagnostics(samples, filename, axis_labels=None):
                 )
 
             lab_a, lab_b = axis_labels[k]
+            ax.minorticks_on()
             ax.set_xlabel("${}$ [$\\AA^{{-1}}$]".format(lab_a))
             if k == 0:
                 ax.set_ylabel(

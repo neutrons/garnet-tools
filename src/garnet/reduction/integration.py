@@ -525,23 +525,36 @@ class Integration(PeakProjection):
         self.predict_add_satellite_peaks(peaks_ws, md, lamda_min, lamda_max)
 
     def optimize_ub(self, data, md, peaks_ws, cell, run):
-        opt = Optimization(peaks_ws, tol=0.15)
+        source = peaks_ws
+        if not self.params["ProfileFit"]:
+            # Only the peaks whose centers were refined: the others are
+            # still at the positions predicted from the current UB, which
+            # carry no information and would only pull it back.
+            source = peaks_ws + "_refined"
+            PeaksModel().copy_shaped_peaks(peaks_ws, source)
+
+        opt = Optimization(source, tol=0.15)
         opt.optimize_lattice(cell)
 
         ub_file = self.get_diagnostic_file("run#{}_ub".format(run))
         ub_file = os.path.splitext(ub_file)[0] + ".mat"
 
-        ub = UBModel(peaks_ws)
+        ub = UBModel(source)
         ub.save_UB(ub_file)
 
         info_file = self.get_diagnostic_file("run#{}_ub".format(run), ".txt")
         write_ub_info(info_file, run, self.params["MinD"], opt, ub)
 
+        if source != peaks_ws:
+            ub.copy_UB(peaks_ws)
         ub.copy_UB(data)
         ub.copy_UB(md)
 
+        if source != peaks_ws:
+            mtd.remove(source)
+
     def optimize_peaks(
-        self, data, md, peaks_ws, centering, cell, run, reindex=False
+        self, data, md, peaks_ws, centering, cell, run, reindex=False, tol=0.15
     ):
         ub = UBModel(peaks_ws)
 
@@ -565,13 +578,13 @@ class Integration(PeakProjection):
         ub = UBModel(peaks_ws)
 
         if reindex:
-            ub.determine_UB_with_primitive_cell(min_d, max_d, tol=0.15)
+            ub.determine_UB_with_primitive_cell(min_d, max_d, tol=tol)
 
-            ub.select_type(cell, centering, 0.15)
+            ub.select_type(cell, centering, tol)
 
-            ub.index_peaks(0.15)
+            ub.index_peaks(tol)
 
-            ub.refine_UB_with_constraints(cell, 0.15)
+            ub.refine_UB_with_constraints(cell, tol)
 
             Reorient(peaks_ws, UB, cell)
 
@@ -1398,7 +1411,7 @@ class Integration(PeakProjection):
                                 "center": (c0, c1, c2),
                                 "S": S_prior,
                                 "label": "instrument config guess",
-                                "color": "gold",
+                                "color": "white",
                                 "linestyle": "--",
                             },
                             {
@@ -1423,15 +1436,15 @@ class Integration(PeakProjection):
                             "center": (c0, c1, c2),
                             "S": S_obs,
                             "label": obs_label,
-                            "color": "red" if has_prior else "white",
-                            "linestyle": "-" if has_prior else "--",
+                            "color": "red",
+                            "linestyle": "-",
                         },
                         {
                             "center": (c0, c1, c2),
                             "S": S_pred,
                             "label": pred_label,
-                            "color": "cyan" if has_prior else "red",
-                            "linestyle": "-." if has_prior else "-",
+                            "color": "white",
+                            "linestyle": "-." if has_prior else "--",
                         },
                     ],
                     **grid,

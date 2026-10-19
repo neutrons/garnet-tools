@@ -904,6 +904,58 @@ mask =</p>
 </dd></dl>
 
 <dl class="py class">
+<dt class="sig sig-object py" id="garnet.plots.peaks.RadialProfilePlot">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">RadialProfilePlot</span></span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1843-L1941"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.RadialProfilePlot" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#garnet.plots.base.BasePlot" title="garnet.plots.base.BasePlot"><code class="xref py py-class docutils literal notranslate"><span class="pre">BasePlot</span></code></a></p>
+<p>A peak’s radial profile fit: the counts along Q (summed over the disc
+across it) with the counts expected from the fit, and the counts across
+the disc with its boundary and the peak’s own transverse ellipse. The
+figure is built once and reused for every peak drawn. Call <cite>close</cite> when
+done.</p>
+<p class="rubric">Methods</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#garnet.plots.peaks.RadialProfilePlot.draw" title="garnet.plots.peaks.RadialProfilePlot.draw"><code class="xref py py-obj docutils literal notranslate"><span class="pre">draw</span></code></a>(profile, title, filename[, containment])</p></td>
+<td><p>Draw a peak's profiles and save the figure.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_plot</span></code>(filename)</p></td>
+<td><p>Save plot.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="pst-scrollable-table-container"><table class="table">
+<tbody>
+<tr class="row-odd"><td><p><strong>close</strong></p></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="garnet.plots.peaks.RadialProfilePlot.draw">
+<span class="sig-name descname"><span class="pre">draw</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">profile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">containment</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L1892-L1941"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.RadialProfilePlot.draw" title="Link to this definition">#</a></dt>
+<dd><p>Draw a peak’s profiles and save the figure.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>profile</strong><span class="classifier">dict</span></dt><dd><p>Profiles, as from <cite>integrate_radial_profiles</cite>.</p>
+</dd>
+<dt><strong>title</strong><span class="classifier">str</span></dt><dd><p>Figure title.</p>
+</dd>
+<dt><strong>filename</strong><span class="classifier">str</span></dt><dd><p>Image file.</p>
+</dd>
+<dt><strong>containment</strong><span class="classifier">float, optional</span></dt><dd><p>Scale of the transverse ellipse, in standard deviations. The
+default is 1.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
 <dt class="sig sig-object py" id="garnet.plots.peaks.ScanPlot">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">ScanPlot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">thresholds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indexed_peaks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cutoff</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/neutrons/garnet-tools/blob/main/src/garnet/plots/peaks.py#L168-L182"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#garnet.plots.peaks.ScanPlot" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#garnet.plots.base.BasePlot" title="garnet.plots.base.BasePlot"><code class="xref py py-class docutils literal notranslate"><span class="pre">BasePlot</span></code></a></p>
@@ -1063,6 +1115,10 @@ mask =</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.peaks.PeakProfilePlot.draw_boundary"><code class="docutils literal notranslate"><span class="pre">PeakProfilePlot.draw_boundary()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.peaks.PeakProfilePlot.plot_peak_bins"><code class="docutils literal notranslate"><span class="pre">PeakProfilePlot.plot_peak_bins()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.peaks.PeakProfilePlot.plot_peaks"><code class="docutils literal notranslate"><span class="pre">PeakProfilePlot.plot_peaks()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.peaks.RadialProfilePlot"><code class="docutils literal notranslate"><span class="pre">RadialProfilePlot</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.peaks.RadialProfilePlot.draw"><code class="docutils literal notranslate"><span class="pre">RadialProfilePlot.draw()</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#garnet.plots.peaks.ScanPlot"><code class="docutils literal notranslate"><span class="pre">ScanPlot</span></code></a></li>

@@ -84,6 +84,8 @@ class Integration(PeakProjection):
             self.params["OptimizePeaks"] = False
         if self.params.get("ProfileFit") is None:
             self.params["ProfileFit"] = True
+        if self.params.get("RadialFit") is None:
+            self.params["RadialFit"] = False
 
         self.check(
             self.params["MaxOrder"], ">=", 0, "MaxOrder must be non-negative"
@@ -100,6 +102,20 @@ class Integration(PeakProjection):
             bool,
             "ProfileFit must be a boolean",
         )
+        self.check(
+            type(self.params["RadialFit"]),
+            "is",
+            bool,
+            "RadialFit must be a boolean",
+        )
+        if self.params["RadialFit"]:
+            self.check(
+                self.params["ProfileFit"],
+                "==",
+                False,
+                "RadialFit is only supported with quick integration "
+                "(ProfileFit false)",
+            )
         if not self.params["ProfileFit"]:
             self.check(
                 self.params["MaxOrder"],
@@ -459,6 +475,10 @@ class Integration(PeakProjection):
                         self.peak_plot.close()
             else:
                 self.integrate_peaks_normalized("data", "peaks", res, r_cut)
+                if self.params["RadialFit"]:
+                    self.integrate_peaks_radial(
+                        "data", "peaks", res, r_cut, run
+                    )
 
             timer.lap("integrate peaks")
 
@@ -1237,6 +1257,107 @@ class Integration(PeakProjection):
             }
 
             peak.add_diagnostic_info(i, info)
+
+    def integrate_peaks_radial(self, data_ws, peaks_ws, res, r_cut, run):
+        """
+        Replace each peak's intensity with that of a fit of its profile
+        along Q only, summed over a disc across it of six of the
+        resolution model's transverse standard deviations, so that a peak
+        split by misoriented grains (whose parts have the same |Q|) is
+        integrated whole. The intensities from `integrate_peaks_normalized`
+        are written with them, for comparison, to a diagnostic table.
+
+        Parameters
+        ----------
+        data_ws : str
+            Name of the events, cropped for normalization.
+        peaks_ws : str
+            Name of peaks table, already integrated.
+        res : ResolutionEllipsoid
+            Resolution model giving each peak's shape; without a model the
+            intensities are left unchanged.
+        r_cut : float
+            Radius of the region around each peak, which bounds the
+            half-length and disc radius.
+        run : int
+            Run number, for the diagnostic table.
+
+        """
+
+        if res is None or res.model is None:
+            print("no resolution model, radial fit skipped")
+            return
+
+        peak = PeakModel(peaks_ws)
+        n_peaks = peak.get_number_peaks()
+        if n_peaks == 0:
+            return
+
+        with self.timer.section("radial profile fits"):
+            centers = [np.array(peak.get_sample_Q(i)) for i in range(n_peaks)]
+            # containment scale to standard deviations
+            covariances = [
+                res.predict_sample_S(i) / _CONTAINMENT_SCALE_3D
+                for i in range(n_peaks)
+            ]
+            R = peak.get_goniometer_matrix(0)
+
+            results = self.data.integrate_radial_profiles(
+                data_ws,
+                centers,
+                covariances,
+                R,
+                transverse_sigma=6.0,
+                max_extent=r_cut,
+            )
+
+        table = self.get_diagnostic_file("run#{}_radial".format(run), ".txt")
+        lines = [
+            "{:>6} {:>18} {:>12} {:>9} {:>12} {:>9} {:>8} {:>9} {:>9} "
+            "{:>9} {:>9} {:>7}".format(
+                "peak",
+                "hkl",
+                "I_count",
+                "I/s",
+                "I_radial",
+                "I/s",
+                "ratio",
+                "coverage",
+                "sigma_r",
+                "half_len",
+                "disc_rad",
+                "pixels",
+            )
+        ]
+        for i, result in enumerate(results):
+            I_count = mtd[peaks_ws].getPeak(i).getIntensity()
+            s_count = mtd[peaks_ws].getPeak(i).getSigmaIntensity()
+            I, sigma = result["intensity"], result["sigma"]
+            hkl = "({:.0f},{:.0f},{:.0f})".format(*peak.get_hklmnp(i)[:3])
+            lines.append(
+                "{:6d} {:>18} {:12.4g} {:9.1f} {:12.4g} {:9.1f} {:8.3f} "
+                "{:9.3f} {:9.4f} {:9.4f} {:9.4f} {:7d}".format(
+                    i,
+                    hkl,
+                    I_count,
+                    I_count / s_count if s_count > 0 else 0.0,
+                    I,
+                    I / sigma if sigma > 0 else 0.0,
+                    I / I_count if I_count != 0 else np.nan,
+                    result["coverage"],
+                    result["radial_sigma"],
+                    result["half_length"],
+                    result["disc_radius"],
+                    result["pixels"],
+                )
+            )
+            if np.isfinite(I) and np.isfinite(sigma) and sigma > 0:
+                peak.set_peak_intensity(i, I, sigma)
+            else:
+                peak.set_peak_intensity(i, 0, 0)
+
+        with open(table, "w") as f:
+            f.write("\n".join(lines) + "\n")
 
     def extract_peak_counts(
         self, peaks_ws, r_cut, n_bins, peak_indices=None, event_ws="data"

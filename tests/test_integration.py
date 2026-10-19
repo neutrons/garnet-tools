@@ -60,3 +60,17 @@ def test_quick_integration_rejects_satellites():
 
     with pytest.raises(Exception, match="satellite"):
         Integration(rp.plan)
+
+
+def test_radial_fit_requires_quick_integration():
+    rp = ReductionPlan()
+    rp.generate_plan("TOPAZ")
+    rp.plan["OutputName"] = "test"
+    rp.plan["Integration"]["ProfileFit"] = False
+    rp.plan["Integration"]["RadialFit"] = True
+
+    Integration(rp.plan)
+
+    rp.plan["Integration"]["ProfileFit"] = True
+    with pytest.raises(Exception, match="RadialFit"):
+        Integration(rp.plan)

@@ -1175,6 +1175,257 @@ class BaseDataModel:
 
         return boxes
 
+    def integrate_radial_profiles(
+        self,
+        event_name,
+        centers,
+        covariances,
+        R,
+        transverse_sigma=6.0,
+        radial_sigma=7.5,
+        max_extent=np.inf,
+        solid_angle="sa",
+        flux="flux",
+        n_sub=64,
+    ):
+        """
+        Integrate each peak by fitting its profile along Q only, summing
+        over a disc across it, so that everything at the peak's |Q| within
+        the disc is included: a peak split by grains misoriented by a small
+        rotation, whose parts have the same |Q|, is integrated whole.
+
+        The region is the cylinder along n = c / |c| through the peak
+        center c, within radial_sigma of the peak's radial standard
+        deviation along it and transverse_sigma of its largest transverse
+        one across it, each at most max_extent. Its events are fitted, by
+        Poisson maximum likelihood, with a Gaussian along n of the peak's
+        radial standard deviation, uniform over the disc, on a flat
+        background, normalized by flux and solid angle as
+        IntegratePeaksShapeMD is: the expected counts are those along each
+        pixel's line Q = k u through the region.
+
+        Where the disc is not uniformly exposed (e.g. at the edge of a
+        detector) a peak uniform over it is not normalized as one at its
+        center is, so the intensity is then scaled by the coverage: the
+        exposure of the peak uniform over the disc over that of the peak
+        with its own transverse Gaussian. A single peak is then normalized
+        as by a profile fit; a peak split across a partly exposed disc
+        is not exactly.
+
+        Parameters
+        ----------
+        event_name : str
+            Name of the events, in momentum, cropped for normalization, with
+            "detectors" from `preprocess_detectors`.
+        centers : list
+            Q-sample center of each peak.
+        covariances : list
+            Q-sample covariance (standard deviation scale) of each peak.
+        R : array
+            Goniometer matrix.
+        transverse_sigma : float, optional
+            Radius of the disc in transverse standard deviations. The default
+            is 6.
+        radial_sigma : float, optional
+            Half-length of the region in radial standard deviations. The
+            default is 7.5.
+        max_extent : float, optional
+            Largest half-length and disc radius, e.g. to keep the region
+            clear of other peaks. The default is unbounded.
+        solid_angle : str, optional
+            Name of solid angle workspace. The default is "sa".
+        flux : str, optional
+            Name of integrated flux workspace. The default is "flux".
+        n_sub : int, optional
+            Number of steps along each pixel's line through the region for
+            the exposure of the peak. The default is 64.
+
+        Returns
+        -------
+        results : list of dict
+            For each peak, "intensity" and "sigma", the "counts" in the
+            region, the number of "pixels" through it, the peak's
+            "radial_sigma", the region's "half_length" and "disc_radius",
+            and the "coverage", 1 if the disc is uniformly exposed.
+
+        """
+
+        ws = mtd[event_name]
+        detectors = mtd["detectors"]
+
+        two_theta = np.asarray(detectors.column("TwoTheta"), dtype=float)
+        azimuthal = np.asarray(detectors.column("Azimuthal"), dtype=float)
+        spectra = np.asarray(detectors.column("detIDMap")).astype(int)
+        det_ids = np.asarray(detectors.column("DetectorID")).astype(int)
+        valid = np.isfinite(np.asarray(detectors.column("L2"), dtype=float))
+
+        # Q = k u, with u as for the events (MDTransfQ3D), in Q-sample
+        s = np.sin(two_theta)
+        u = np.column_stack(
+            [s * np.cos(azimuthal), s * np.sin(azimuthal), np.cos(two_theta)]
+        )
+        u[:, 2] -= 1.0
+        if config["Q.convention"] != "Crystallography":
+            u = -u
+        u = u @ np.asarray(R)
+
+        # each pixel's exposure as for IntegratePeaksShapeMD: its solid
+        # angle times the proton charge, its integrated flux spectrum, and
+        # its momentum band from CropWorkspaceForMDNorm
+        run = ws.run()
+        k_low = np.asarray(run["MDNorm_low"].value, dtype=float)[spectra]
+        k_high = np.asarray(run["MDNorm_high"].value, dtype=float)[spectra]
+        charge = run.getProtonCharge()
+
+        sa_ws, flux_ws = mtd[solid_angle], mtd[flux]
+        sa_index = sa_ws.getDetectorIDToWorkspaceIndexMap(False, True)
+        flux_index = flux_ws.getDetectorIDToWorkspaceIndexMap(False, True)
+        spectrum_info = ws.spectrumInfo()
+
+        weight = np.zeros(len(u))
+        pixel_flux = np.full(len(u), -1)
+        for row in np.flatnonzero(valid):
+            det_id = int(det_ids[row])
+            if (
+                spectrum_info.isMasked(int(spectra[row]))
+                or det_id not in sa_index
+                or det_id not in flux_index
+            ):
+                valid[row] = False
+                continue
+            weight[row] = sa_ws.readY(sa_index[det_id])[0] * charge
+            pixel_flux[row] = flux_index[det_id]
+
+        fluxes = {}
+        for j in np.unique(pixel_flux[valid]):
+            y = np.asarray(flux_ws.readY(int(j)), dtype=float)
+            x = np.asarray(flux_ws.readX(int(j)), dtype=float)[: len(y)]
+            fluxes[int(j)] = (x, y)
+
+        def integrated_flux(k, x, y):
+            # as interpolateIntegratedFlux: 0 below x[0], y[-1] above x[-1]
+            return np.interp(k, x, y, left=0.0, right=y[-1])
+
+        results = []
+        for center, cov in zip(centers, covariances):
+            c = np.asarray(center, dtype=float)
+            cov = np.asarray(cov, dtype=float)
+            Q = np.linalg.norm(c)
+            n = c / Q
+
+            sigma_r = np.sqrt(n @ cov @ n)
+            P = np.eye(3) - np.outer(n, n)
+            values, vectors = np.linalg.eigh(P @ cov @ P)
+            # the two transverse axes (the smallest eigenvalue, 0, is along n)
+            t_axes = vectors[:, 1:]
+            t_sigmas = np.sqrt(np.maximum(values[1:], 1e-300))
+            T = min(transverse_sigma * t_sigmas.max(), max_extent)
+            half = min(radial_sigma * sigma_r, max_extent)
+
+            result = {
+                "intensity": 0.0,
+                "sigma": 0.0,
+                "counts": 0.0,
+                "pixels": 0,
+                "coverage": np.nan,
+                "radial_sigma": sigma_r,
+                "half_length": half,
+                "disc_radius": T,
+            }
+            results.append(result)
+
+            un = u @ n
+            u_perp = u - np.outer(un, n)
+            u_perp_norm = np.linalg.norm(u_perp, axis=1)
+
+            # the lines through the cylinder, and their momenta in it: along
+            # a line the radial coordinate is r = k u.n - Q, and the
+            # distance from the axis k |u_perp|
+            rows = np.flatnonzero(
+                valid & (un > 0) & ((Q - half) * u_perp_norm <= T * un)
+            )
+            k1 = np.maximum((Q - half) / un[rows], k_low[rows])
+            k2 = np.minimum((Q + half) / un[rows], k_high[rows])
+            k2 = np.minimum(
+                k2,
+                np.divide(
+                    T,
+                    u_perp_norm[rows],
+                    out=np.full(len(rows), np.inf),
+                    where=u_perp_norm[rows] > 0,
+                ),
+            )
+            inside = k2 > k1
+            rows, k1, k2 = rows[inside], k1[inside], k2[inside]
+            result["pixels"] = len(rows)
+
+            # exposure of a uniform background over the region, of the peak
+            # uniform over the disc, and of the peak with its own transverse
+            # Gaussian
+            norm_r = 1 / (np.sqrt(2 * np.pi) * sigma_r)
+            norm_t = 1 / (2 * np.pi * t_sigmas[0] * t_sigmas[1])
+            area = np.pi * T**2
+            B = G_disc = G_peak = 0.0
+            r_events, w_events = [], []
+            for row, a, b in zip(rows, k1, k2):
+                x, y = fluxes[int(pixel_flux[row])]
+                k = np.linspace(a, b, n_sub + 1)
+                d_phi = np.diff(integrated_flux(k, x, y)) * weight[row]
+                k_mid = 0.5 * (k[1:] + k[:-1])
+                g_r = norm_r * np.exp(
+                    -0.5 * ((k_mid * un[row] - Q) / sigma_r) ** 2
+                )
+                t = np.outer(k_mid, u_perp[row] @ t_axes) / t_sigmas
+                g_t = norm_t * np.exp(-0.5 * np.sum(t**2, axis=1))
+                B += d_phi.sum()
+                G_disc += np.sum(d_phi * g_r) / area
+                G_peak += np.sum(d_phi * g_r * g_t)
+
+                events = ws.getSpectrum(int(spectra[row]))
+                k_events = np.asarray(events.getTofs())
+                keep = (k_events >= a) & (k_events <= b)
+                if np.any(keep):
+                    r_events.append(k_events[keep] * un[row] - Q)
+                    w_events.append(np.asarray(events.getWeights())[keep])
+
+            if not r_events or B <= 0 or G_disc <= 0 or G_peak <= 0:
+                continue
+
+            result["coverage"] = G_disc / G_peak
+
+            r = np.concatenate(r_events)
+            w = np.concatenate(w_events)
+            result["counts"] = w.sum()
+
+            # Poisson maximum likelihood of I g + b, by EM
+            g = norm_r * np.exp(-0.5 * (r / sigma_r) ** 2) / area
+            I, bkg = 0.5 * w.sum() / G_disc, 0.5 * w.sum() / B
+            for _ in range(1000):
+                mu = I * g + bkg
+                I_new = I * np.sum(w * g / mu) / G_disc
+                bkg_new = bkg * np.sum(w / mu) / B
+                # relative to the scales of all the counts as either
+                converged = (
+                    abs(I_new - I) <= 1e-9 * w.sum() / G_disc
+                    and abs(bkg_new - bkg) <= 1e-9 * w.sum() / B
+                )
+                I, bkg = I_new, bkg_new
+                if converged:
+                    break
+
+            mu = I * g + bkg
+            J = np.vstack([g, np.ones_like(g)])
+            information = (J * (w / mu**2)) @ J.T
+            try:
+                sigma = np.sqrt(np.linalg.inv(information)[0, 0])
+            except np.linalg.LinAlgError:
+                sigma = np.nan
+
+            result["intensity"] = I * result["coverage"]
+            result["sigma"] = sigma * result["coverage"]
+
+        return results
+
     def bin_Q_sample_to_hkl(self, md, peaks, hkl_histo, bins=201, d_min=None):
         """
         Bin Q-sample data into a rough HKL histogram for a diagnostic check

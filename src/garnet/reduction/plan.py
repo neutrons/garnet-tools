@@ -713,6 +713,7 @@ class ReductionPlan:
         params["SatMinD"] = min_d
         params["Radius"] = 0.2
         params["ProfileFit"] = True
+        params["RadialFit"] = False
 
         return params
 

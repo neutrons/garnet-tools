@@ -17,7 +17,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["TBB_THREAD_ENABLED"] = "0"
 
-from garnet.plots.peaks import PeakPlot, ScanPlot
+from garnet.plots.peaks import PeakPlot, ScanPlot, RadialProfilePlot
 from garnet.config.instruments import beamlines
 from garnet.reduction.ub import (
     UBModel,
@@ -1309,6 +1309,7 @@ class Integration(PeakProjection):
                 R,
                 transverse_sigma=6.0,
                 max_extent=r_cut,
+                profile_bins=41 if self.make_plot else None,
             )
 
         table = self.get_diagnostic_file("run#{}_radial".format(run), ".txt")
@@ -1329,8 +1330,10 @@ class Integration(PeakProjection):
                 "pixels",
             )
         ]
+        I_counts = []
         for i, result in enumerate(results):
             I_count = mtd[peaks_ws].getPeak(i).getIntensity()
+            I_counts.append(I_count)
             s_count = mtd[peaks_ws].getPeak(i).getSigmaIntensity()
             I, sigma = result["intensity"], result["sigma"]
             hkl = "({:.0f},{:.0f},{:.0f})".format(*peak.get_hklmnp(i)[:3])
@@ -1358,6 +1361,70 @@ class Integration(PeakProjection):
 
         with open(table, "w") as f:
             f.write("\n".join(lines) + "\n")
+
+        if self.make_plot:
+            with self.timer.section("radial profile plots"):
+                self.plot_radial_profiles(peaks_ws, results, I_counts)
+
+    def plot_radial_profiles(self, peaks_ws, results, I_counts, n_max=100):
+        """
+        Plot the radial profile fits of the strongest peaks (radial I/sigma
+        at least 10, at most n_max of them), one image per peak in the plots
+        directory.
+
+        Parameters
+        ----------
+        peaks_ws : str
+            Name of peaks table.
+        results : list of dict
+            Radial fits, with profiles, from `integrate_radial_profiles`.
+        I_counts : list
+            Intensities of the count integration, for comparison.
+        n_max : int, optional
+            Largest number of peaks to plot. The default is 100.
+
+        """
+
+        peak = PeakModel(peaks_ws)
+
+        sig_noise = [
+            (r["intensity"] / r["sigma"] if r["sigma"] > 0 else 0.0)
+            for r in results
+        ]
+        strong = [
+            int(i)
+            for i in np.argsort(sig_noise)[::-1][:n_max]
+            if sig_noise[i] >= 10 and "profile" in results[i]
+        ]
+        if not strong:
+            return
+
+        orig_d = getattr(self, "orig_d", {})
+        containment = np.sqrt(_CONTAINMENT_SCALE_3D)
+
+        radial_plot = RadialProfilePlot()
+        for i in strong:
+            result = results[i]
+            ratio = (
+                result["intensity"] / I_counts[i] if I_counts[i] else np.nan
+            )
+            title = (
+                "peak {} {}: I/sigma = {:.1f}, radial/count = {:.3f}, "
+                "coverage = {:.2f}".format(
+                    i,
+                    "({:.0f},{:.0f},{:.0f})".format(*peak.get_hklmnp(i)[:3]),
+                    sig_noise[i],
+                    ratio,
+                    result["coverage"],
+                )
+            )
+            peak_name = peak.get_peak_name(i, d=orig_d.get(peak.get_hklmnp(i)))
+            filename = self.get_plot_file(peak_name + "_radial")
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
+            radial_plot.draw(
+                result["profile"], title, filename, containment=containment
+            )
+        radial_plot.close()
 
     def extract_peak_counts(
         self, peaks_ws, r_cut, n_bins, peak_indices=None, event_ws="data"

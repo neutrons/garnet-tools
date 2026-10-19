@@ -1187,6 +1187,7 @@ class BaseDataModel:
         solid_angle="sa",
         flux="flux",
         n_sub=64,
+        profile_bins=None,
     ):
         """
         Integrate each peak by fitting its profile along Q only, summing
@@ -1239,6 +1240,10 @@ class BaseDataModel:
         n_sub : int, optional
             Number of steps along each pixel's line through the region for
             the exposure of the peak. The default is 64.
+        profile_bins : int, optional
+            If given, also return each peak's binned profiles, for plotting:
+            the counts along n in this many bins with those expected from
+            the fit, and the counts across the disc. The default is None.
 
         Returns
         -------
@@ -1246,7 +1251,13 @@ class BaseDataModel:
             For each peak, "intensity" and "sigma", the "counts" in the
             region, the number of "pixels" through it, the peak's
             "radial_sigma", the region's "half_length" and "disc_radius",
-            and the "coverage", 1 if the disc is uniformly exposed.
+            and the "coverage", 1 if the disc is uniformly exposed. With
+            profile_bins, also a "profile" dict: the radial bin "edges",
+            the "counts" in them and the expected "peak" and "background"
+            counts from the fit (for the peak uniform over the disc), the
+            "transverse" counts in a square of profile_bins bins across the
+            disc (along the peak's transverse axes, as for "t_sigmas"), and
+            its "t_edges".
 
         """
 
@@ -1366,7 +1377,11 @@ class BaseDataModel:
             norm_t = 1 / (2 * np.pi * t_sigmas[0] * t_sigmas[1])
             area = np.pi * T**2
             B = G_disc = G_peak = 0.0
-            r_events, w_events = [], []
+            r_events, w_events, t_events = [], [], []
+            if profile_bins:
+                edges = np.linspace(-half, half, profile_bins + 1)
+                B_bins = np.zeros(profile_bins)
+                G_bins = np.zeros(profile_bins)
             for row, a, b in zip(rows, k1, k2):
                 x, y = fluxes[int(pixel_flux[row])]
                 k = np.linspace(a, b, n_sub + 1)
@@ -1380,6 +1395,19 @@ class BaseDataModel:
                 B += d_phi.sum()
                 G_disc += np.sum(d_phi * g_r) / area
                 G_peak += np.sum(d_phi * g_r * g_t)
+                if profile_bins:
+                    # steps within the radial bins, so each is in one bin
+                    nodes = np.clip((Q + edges) / un[row], a, b)
+                    k = np.linspace(nodes[:-1], nodes[1:], 5).T
+                    d_phi = (
+                        np.diff(integrated_flux(k, x, y), axis=1) * weight[row]
+                    )
+                    k_mid = 0.5 * (k[:, 1:] + k[:, :-1])
+                    g_r = norm_r * np.exp(
+                        -0.5 * ((k_mid * un[row] - Q) / sigma_r) ** 2
+                    )
+                    B_bins += d_phi.sum(axis=1)
+                    G_bins += np.sum(d_phi * g_r, axis=1) / area
 
                 events = ws.getSpectrum(int(spectra[row]))
                 k_events = np.asarray(events.getTofs())
@@ -1387,6 +1415,10 @@ class BaseDataModel:
                 if np.any(keep):
                     r_events.append(k_events[keep] * un[row] - Q)
                     w_events.append(np.asarray(events.getWeights())[keep])
+                    if profile_bins:
+                        t_events.append(
+                            np.outer(k_events[keep], u_perp[row] @ t_axes)
+                        )
 
             if not r_events or B <= 0 or G_disc <= 0 or G_peak <= 0:
                 continue
@@ -1423,6 +1455,23 @@ class BaseDataModel:
 
             result["intensity"] = I * result["coverage"]
             result["sigma"] = sigma * result["coverage"]
+
+            if profile_bins:
+                t_edges = np.linspace(-T, T, profile_bins + 1)
+                transverse, _, _ = np.histogram2d(
+                    *np.vstack(t_events).T,
+                    bins=[t_edges, t_edges],
+                    weights=w,
+                )
+                result["profile"] = {
+                    "edges": edges,
+                    "counts": np.histogram(r, bins=edges, weights=w)[0],
+                    "peak": I * G_bins,
+                    "background": bkg * B_bins,
+                    "transverse": transverse,
+                    "t_edges": t_edges,
+                    "t_sigmas": t_sigmas,
+                }
 
         return results
 

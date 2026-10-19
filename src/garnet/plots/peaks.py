@@ -1838,3 +1838,104 @@ class PeakEstimatePlot(BasePlot):
         if peak > 0:
             w_mean = w_mean / peak
         ax.stairs(w_mean, z_bins, color="k", linewidth=1.5, zorder=100)
+
+
+class RadialProfilePlot(BasePlot):
+    """
+    A peak's radial profile fit: the counts along Q (summed over the disc
+    across it) with the counts expected from the fit, and the counts across
+    the disc with its boundary and the peak's own transverse ellipse. The
+    figure is built once and reused for every peak drawn. Call `close` when
+    done.
+
+    """
+
+    def __init__(self):
+        plt.close("all")
+
+        self.fig, (self.ax_r, self.ax_t) = plt.subplots(
+            1, 2, figsize=(6.4 * 2, 4.8), layout="constrained"
+        )
+
+        ax = self.ax_r
+        self.errors = ax.vlines([], [], [], color="k", linewidth=1)
+        (self.data,) = ax.plot([], [], "o", color="k", ms=3, label="counts")
+        (self.total,) = ax.plot([], [], "-", color="C3", label="fit")
+        (self.background,) = ax.plot(
+            [], [], "--", color="C0", label="background"
+        )
+        ax.set_xlabel(r"$|Q|-|Q_0|$ [$\AA^{-1}$]")
+        ax.set_ylabel("counts")
+        ax.legend(loc="upper right", frameon=False)
+        ax.minorticks_on()
+
+        ax = self.ax_t
+        self.image = ax.imshow(
+            np.zeros((2, 2)),
+            origin="lower",
+            interpolation="nearest",
+            cmap="viridis",
+            aspect="equal",
+        )
+        self.disc = plt.Circle(
+            (0, 0), 1, fill=False, color="white", linestyle="-"
+        )
+        self.ellipse = Ellipse(
+            (0, 0), 1, 1, fill=False, color="white", linestyle="--"
+        )
+        ax.add_patch(self.disc)
+        ax.add_patch(self.ellipse)
+        ax.set_xlabel(r"$Q_\perp$ (first axis) [$\AA^{-1}$]")
+        ax.set_ylabel(r"$Q_\perp$ (second axis) [$\AA^{-1}$]")
+        ax.minorticks_on()
+
+    def draw(self, profile, title, filename, containment=1.0):
+        """
+        Draw a peak's profiles and save the figure.
+
+        Parameters
+        ----------
+        profile : dict
+            Profiles, as from `integrate_radial_profiles`.
+        title : str
+            Figure title.
+        filename : str
+            Image file.
+        containment : float, optional
+            Scale of the transverse ellipse, in standard deviations. The
+            default is 1.
+
+        """
+
+        edges = profile["edges"]
+        r = 0.5 * (edges[1:] + edges[:-1])
+        counts = profile["counts"]
+        background = profile["background"]
+        total = profile["peak"] + background
+        errors = np.sqrt(np.maximum(counts, 0))
+
+        self.data.set_data(r, counts)
+        self.errors.set_segments(
+            [[(x, c - e), (x, c + e)] for x, c, e in zip(r, counts, errors)]
+        )
+        self.total.set_data(r, total)
+        self.background.set_data(r, background)
+        top = max(np.max(counts + errors), np.max(total), 1)
+        self.ax_r.set_xlim(edges[0], edges[-1])
+        self.ax_r.set_ylim(0, 1.05 * top)
+
+        t_edges = profile["t_edges"]
+        transverse = profile["transverse"]
+        self.image.set_data(transverse.T)
+        self.image.set_extent([t_edges[0], t_edges[-1]] * 2)
+        self.image.set_clim(0, max(transverse.max(), 1))
+        T = t_edges[-1]
+        self.disc.set_radius(T)
+        s0, s1 = profile["t_sigmas"]
+        self.ellipse.set_width(2 * containment * s0)
+        self.ellipse.set_height(2 * containment * s1)
+        self.ax_t.set_xlim(-T, T)
+        self.ax_t.set_ylim(-T, T)
+
+        self.fig.suptitle(title)
+        self.fig.savefig(filename)

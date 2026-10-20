@@ -474,7 +474,10 @@ class Integration(PeakProjection):
                     if self.make_plot:
                         self.peak_plot.close()
             else:
-                self.integrate_peaks_normalized("data", "peaks", res, r_cut)
+                # the count is of the background-subtracted events, if any
+                self.integrate_peaks_normalized(
+                    "data" + app, "peaks", res, r_cut
+                )
                 if self.params["RadialFit"]:
                     self.integrate_peaks_radial(
                         "data", "peaks", res, r_cut, run
@@ -1264,8 +1267,11 @@ class Integration(PeakProjection):
         along Q only, summed over a disc across it of six of the
         resolution model's transverse standard deviations, so that a peak
         split by misoriented grains (whose parts have the same |Q|) is
-        integrated whole. The intensities from `integrate_peaks_normalized`
-        are written with them, for comparison, to a diagnostic table.
+        integrated whole. The events fitted are counts, not
+        background-subtracted: a reference background, if loaded, is
+        instead a known part of the expected counts. The intensities from
+        `integrate_peaks_normalized` are written with them, for comparison,
+        to a diagnostic table.
 
         Parameters
         ----------
@@ -1302,6 +1308,10 @@ class Integration(PeakProjection):
             ]
             R = peak.get_goniometer_matrix(0)
 
+            # the Poisson fit is of the counts, with the reference background
+            # as a known part of the expected counts
+            scale = self.data.background_scale(data_ws)
+
             results = self.data.integrate_radial_profiles(
                 data_ws,
                 centers,
@@ -1310,12 +1320,14 @@ class Integration(PeakProjection):
                 transverse_sigma=6.0,
                 max_extent=r_cut,
                 profile_bins=41 if self.make_plot else None,
+                background="bkg" if scale is not None else None,
+                background_scale=scale if scale is not None else 1.0,
             )
 
         table = self.get_diagnostic_file("run#{}_radial".format(run), ".txt")
         lines = [
             "{:>6} {:>18} {:>12} {:>9} {:>12} {:>9} {:>8} {:>9} {:>9} "
-            "{:>9} {:>9} {:>7}".format(
+            "{:>9} {:>9} {:>9} {:>12} {:>7}".format(
                 "peak",
                 "hkl",
                 "I_count",
@@ -1325,8 +1337,10 @@ class Integration(PeakProjection):
                 "ratio",
                 "coverage",
                 "sigma_r",
+                "offset",
                 "half_len",
                 "disc_rad",
+                "reference",
                 "pixels",
             )
         ]
@@ -1339,7 +1353,8 @@ class Integration(PeakProjection):
             hkl = "({:.0f},{:.0f},{:.0f})".format(*peak.get_hklmnp(i)[:3])
             lines.append(
                 "{:6d} {:>18} {:12.4g} {:9.1f} {:12.4g} {:9.1f} {:8.3f} "
-                "{:9.3f} {:9.4f} {:9.4f} {:9.4f} {:7d}".format(
+                "{:9.3f} {:9.4f} {:9.4f} {:9.4f} {:9.4f} {:12.4g} "
+                "{:7d}".format(
                     i,
                     hkl,
                     I_count,
@@ -1349,8 +1364,10 @@ class Integration(PeakProjection):
                     I / I_count if I_count != 0 else np.nan,
                     result["coverage"],
                     result["radial_sigma"],
+                    result["offset"],
                     result["half_length"],
                     result["disc_radius"],
+                    result["reference"],
                     result["pixels"],
                 )
             )

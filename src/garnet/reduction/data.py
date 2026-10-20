@@ -5,6 +5,7 @@ from concurrent.futures import ProcessPoolExecutor
 
 import h5py
 import numpy as np
+import scipy.optimize
 
 from mantid.simpleapi import (
     Load,
@@ -1186,8 +1187,12 @@ class BaseDataModel:
         max_extent=np.inf,
         solid_angle="sa",
         flux="flux",
-        n_sub=64,
+        n_sub=4,
         profile_bins=None,
+        max_offset=2.0,
+        min_signal_to_noise=10.0,
+        background=None,
+        background_scale=1.0,
     ):
         """
         Integrate each peak by fitting its profile along Q only, summing
@@ -1198,12 +1203,16 @@ class BaseDataModel:
         The region is the cylinder along n = c / |c| through the peak
         center c, within radial_sigma of the peak's radial standard
         deviation along it and transverse_sigma of its largest transverse
-        one across it, each at most max_extent. Its events are fitted, by
-        Poisson maximum likelihood, with a Gaussian along n of the peak's
+        one across it, each at most max_extent. Its counts, binned along n
+        in bins of a quarter of the radial standard deviation, are fitted by
+        Poisson maximum likelihood with a Gaussian along n of the peak's
         radial standard deviation, uniform over the disc, on a flat
-        background, normalized by flux and solid angle as
+        background and the scaled counts of a reference background if given
+        (with the center along n relaxed, within max_offset, for a strong
+        enough peak), normalized by flux and solid angle as
         IntegratePeaksShapeMD is: the expected counts are those along each
-        pixel's line Q = k u through the region.
+        pixel's line Q = k u through the region. The events are counts, not
+        background-subtracted, so that the fit is a Poisson one.
 
         Where the disc is not uniformly exposed (e.g. at the edge of a
         detector) a peak uniform over it is not normalized as one at its
@@ -1238,12 +1247,28 @@ class BaseDataModel:
         flux : str, optional
             Name of integrated flux workspace. The default is "flux".
         n_sub : int, optional
-            Number of steps along each pixel's line through the region for
-            the exposure of the peak. The default is 64.
+            Number of steps along each pixel's line through each radial bin
+            for the exposure. The default is 4.
         profile_bins : int, optional
-            If given, also return each peak's binned profiles, for plotting:
-            the counts along n in this many bins with those expected from
-            the fit, and the counts across the disc. The default is None.
+            If given, also return each peak's profiles, for plotting: the
+            counts in the radial bins with those expected from the fit, and
+            the counts across the disc in this many bins along each
+            transverse axis. The default is None.
+        max_offset : float, optional
+            Largest radial offset of the center of a peak of at least
+            min_signal_to_noise, in its radial standard deviations; 0 keeps
+            every center fixed. The default is 2.
+        min_signal_to_noise : float, optional
+            Smallest intensity over sigma (with the center fixed) for which
+            the center is relaxed. The default is 10.
+        background : str, optional
+            Name of reference background events (e.g. an empty container),
+            in momentum like the events, whose counts along the same lines
+            through the region, times background_scale, are a known part of
+            the expected counts. The default is None.
+        background_scale : float, optional
+            Scale of the reference background to the events, e.g. the ratio
+            of their proton charges. The default is 1.
 
         Returns
         -------
@@ -1251,10 +1276,12 @@ class BaseDataModel:
             For each peak, "intensity" and "sigma", the "counts" in the
             region, the number of "pixels" through it, the peak's
             "radial_sigma", the region's "half_length" and "disc_radius",
-            and the "coverage", 1 if the disc is uniformly exposed. With
-            profile_bins, also a "profile" dict: the radial bin "edges",
-            the "counts" in them and the expected "peak" and "background"
-            counts from the fit (for the peak uniform over the disc), the
+            the "coverage", 1 if the disc is uniformly exposed, the radial
+            "offset" of the fitted center, and the scaled "reference"
+            background counts in the region. With profile_bins, also a
+            "profile" dict: the radial bin "edges", the "counts" in them and
+            the expected "peak", flat "background" and "reference" counts
+            from the fit (for the peak uniform over the disc), the
             "transverse" counts in a square of profile_bins bins across the
             disc (along the peak's transverse axes, as for "t_sigmas"), and
             its "t_edges".
@@ -1317,6 +1344,11 @@ class BaseDataModel:
             # as interpolateIntegratedFlux: 0 below x[0], y[-1] above x[-1]
             return np.interp(k, x, y, left=0.0, right=y[-1])
 
+        bkg_ws, bkg_index = None, {}
+        if background is not None and mtd.doesExist(background):
+            bkg_ws = mtd[background]
+            bkg_index = bkg_ws.getDetectorIDToWorkspaceIndexMap(False, True)
+
         results = []
         for center, cov in zip(centers, covariances):
             c = np.asarray(center, dtype=float)
@@ -1339,6 +1371,8 @@ class BaseDataModel:
                 "counts": 0.0,
                 "pixels": 0,
                 "coverage": np.nan,
+                "offset": 0.0,
+                "reference": 0.0,
                 "radial_sigma": sigma_r,
                 "half_length": half,
                 "disc_radius": T,
@@ -1370,44 +1404,32 @@ class BaseDataModel:
             rows, k1, k2 = rows[inside], k1[inside], k2[inside]
             result["pixels"] = len(rows)
 
-            # exposure of a uniform background over the region, of the peak
-            # uniform over the disc, and of the peak with its own transverse
-            # Gaussian
+            # Radial bins of a quarter of the peak's radial standard
+            # deviation, and in each the exposure, along each line through
+            # it in n_sub steps, of a uniform background (B), of the peak
+            # uniform over the disc (G, at any radial offset), and of the
+            # peak with its own transverse Gaussian (for the coverage).
+            n_bins = max(int(np.ceil(8 * half / sigma_r)), 20)
+            edges = np.linspace(-half, half, n_bins + 1)
             norm_r = 1 / (np.sqrt(2 * np.pi) * sigma_r)
             norm_t = 1 / (2 * np.pi * t_sigmas[0] * t_sigmas[1])
             area = np.pi * T**2
-            B = G_disc = G_peak = 0.0
+            r_steps, phi_steps, t_steps, bin_steps = [], [], [], []
             r_events, w_events, t_events = [], [], []
-            if profile_bins:
-                edges = np.linspace(-half, half, profile_bins + 1)
-                B_bins = np.zeros(profile_bins)
-                G_bins = np.zeros(profile_bins)
+            reference = np.zeros(n_bins)
             for row, a, b in zip(rows, k1, k2):
                 x, y = fluxes[int(pixel_flux[row])]
-                k = np.linspace(a, b, n_sub + 1)
-                d_phi = np.diff(integrated_flux(k, x, y)) * weight[row]
-                k_mid = 0.5 * (k[1:] + k[:-1])
-                g_r = norm_r * np.exp(
-                    -0.5 * ((k_mid * un[row] - Q) / sigma_r) ** 2
+                nodes = np.clip((Q + edges) / un[row], a, b)
+                k = np.linspace(nodes[:-1], nodes[1:], n_sub + 1).T
+                phi_steps.append(
+                    np.diff(integrated_flux(k, x, y), axis=1).ravel()
+                    * weight[row]
                 )
+                k_mid = 0.5 * (k[:, 1:] + k[:, :-1]).ravel()
+                r_steps.append(k_mid * un[row] - Q)
                 t = np.outer(k_mid, u_perp[row] @ t_axes) / t_sigmas
-                g_t = norm_t * np.exp(-0.5 * np.sum(t**2, axis=1))
-                B += d_phi.sum()
-                G_disc += np.sum(d_phi * g_r) / area
-                G_peak += np.sum(d_phi * g_r * g_t)
-                if profile_bins:
-                    # steps within the radial bins, so each is in one bin
-                    nodes = np.clip((Q + edges) / un[row], a, b)
-                    k = np.linspace(nodes[:-1], nodes[1:], 5).T
-                    d_phi = (
-                        np.diff(integrated_flux(k, x, y), axis=1) * weight[row]
-                    )
-                    k_mid = 0.5 * (k[:, 1:] + k[:, :-1])
-                    g_r = norm_r * np.exp(
-                        -0.5 * ((k_mid * un[row] - Q) / sigma_r) ** 2
-                    )
-                    B_bins += d_phi.sum(axis=1)
-                    G_bins += np.sum(d_phi * g_r, axis=1) / area
+                t_steps.append(norm_t * np.exp(-0.5 * np.sum(t**2, axis=1)))
+                bin_steps.append(np.repeat(np.arange(n_bins), n_sub))
 
                 events = ws.getSpectrum(int(spectra[row]))
                 k_events = np.asarray(events.getTofs())
@@ -1420,39 +1442,119 @@ class BaseDataModel:
                             np.outer(k_events[keep], u_perp[row] @ t_axes)
                         )
 
-            if not r_events or B <= 0 or G_disc <= 0 or G_peak <= 0:
+                # the reference background along the same line
+                if bkg_ws is not None and int(det_ids[row]) in bkg_index:
+                    events = bkg_ws.getSpectrum(bkg_index[int(det_ids[row])])
+                    k_events = np.asarray(events.getTofs())
+                    keep = (k_events >= a) & (k_events <= b)
+                    if np.any(keep):
+                        reference += np.histogram(
+                            k_events[keep] * un[row] - Q,
+                            bins=edges,
+                            weights=np.asarray(events.getWeights())[keep],
+                        )[0]
+            reference *= background_scale
+
+            if not r_events:
                 continue
 
-            result["coverage"] = G_disc / G_peak
+            r_steps = np.concatenate(r_steps)
+            phi_steps = np.concatenate(phi_steps)
+            t_steps = np.concatenate(t_steps)
+            bin_steps = np.concatenate(bin_steps)
+            B = np.bincount(bin_steps, weights=phi_steps, minlength=n_bins)
+
+            def exposure(offset, gradient=False):
+                z = (r_steps - offset) / sigma_r
+                g_r = norm_r * np.exp(-0.5 * z**2) * phi_steps
+                G = np.bincount(bin_steps, weights=g_r, minlength=n_bins)
+                G /= area
+                if gradient:
+                    dG = np.bincount(
+                        bin_steps, weights=g_r * z / sigma_r, minlength=n_bins
+                    )
+                    return G, dG / area
+                return G, np.sum(g_r * t_steps)
 
             r = np.concatenate(r_events)
             w = np.concatenate(w_events)
-            result["counts"] = w.sum()
+            counts = np.histogram(r, bins=edges, weights=w)[0]
+            N = counts.sum()
+            result["counts"] = N
+            result["reference"] = reference.sum()
 
-            # Poisson maximum likelihood of I g + b, by EM
-            g = norm_r * np.exp(-0.5 * (r / sigma_r) ** 2) / area
-            I, bkg = 0.5 * w.sum() / G_disc, 0.5 * w.sum() / B
-            for _ in range(1000):
-                mu = I * g + bkg
-                I_new = I * np.sum(w * g / mu) / G_disc
-                bkg_new = bkg * np.sum(w / mu) / B
-                # relative to the scales of all the counts as either
-                converged = (
-                    abs(I_new - I) <= 1e-9 * w.sum() / G_disc
-                    and abs(bkg_new - bkg) <= 1e-9 * w.sum() / B
+            def fit(offset, start=None):
+                # Poisson maximum likelihood of the binned counts, expected
+                # I G + b B + reference, at a radial offset, by EM from start
+                G, _ = exposure(offset)
+                G_sum, B_sum = G.sum(), B.sum()
+                I, bkg = start or (0.5 * N / G_sum, 0.5 * N / B_sum)
+                for _ in range(1000):
+                    mu = np.maximum(I * G + bkg * B + reference, 1e-300)
+                    I_new = I * np.sum(counts * G / mu) / G_sum
+                    bkg_new = bkg * np.sum(counts * B / mu) / B_sum
+                    # relative to the scales of all the counts as either
+                    converged = (
+                        abs(I_new - I) <= 1e-9 * N / G_sum
+                        and abs(bkg_new - bkg) <= 1e-9 * N / B_sum
+                    )
+                    I, bkg = I_new, bkg_new
+                    if converged:
+                        break
+                mu = np.maximum(I * G + bkg * B + reference, 1e-300)
+                log_likelihood = np.sum(counts * np.log(mu) - mu)
+                return I, bkg, log_likelihood
+
+            def uncertainty(I, bkg, offset, free_offset):
+                # from the information over (I, b), and the offset if free
+                G, dG = exposure(offset, gradient=True)
+                mu = np.maximum(I * G + bkg * B + reference, 1e-300)
+                J = [G, B]
+                if free_offset:
+                    J.append(I * dG)
+                J = np.vstack(J)
+                information = (J * (counts / mu**2)) @ J.T
+                try:
+                    return np.sqrt(np.linalg.inv(information)[0, 0])
+                except np.linalg.LinAlgError:
+                    return np.nan
+
+            if B.sum() <= 0 or exposure(0.0)[0].sum() <= 0:
+                continue
+
+            offset = 0.0
+            I, bkg, log_likelihood = fit(offset)
+            sigma = uncertainty(I, bkg, offset, False)
+
+            # Relax the center along n of a strong enough peak, within
+            # max_offset of its radial standard deviations, to follow a
+            # calibration or lattice that moves it; a weaker one keeps its
+            # predicted center, as fitting it would chase the noise.
+            free_offset = (
+                max_offset > 0
+                and np.isfinite(sigma)
+                and sigma > 0
+                and I / sigma >= min_signal_to_noise
+            )
+            if free_offset:
+                bound = max_offset * sigma_r
+                start = (I, bkg)
+                search = scipy.optimize.minimize_scalar(
+                    lambda d: -fit(d, start)[2],
+                    bounds=(-bound, bound),
+                    method="bounded",
+                    options={"xatol": 1e-3 * sigma_r},
                 )
-                I, bkg = I_new, bkg_new
-                if converged:
-                    break
+                if -search.fun > log_likelihood:
+                    offset = search.x
+                    I, bkg, log_likelihood = fit(offset, start)
+                sigma = uncertainty(I, bkg, offset, True)
 
-            mu = I * g + bkg
-            J = np.vstack([g, np.ones_like(g)])
-            information = (J * (w / mu**2)) @ J.T
-            try:
-                sigma = np.sqrt(np.linalg.inv(information)[0, 0])
-            except np.linalg.LinAlgError:
-                sigma = np.nan
-
+            G, G_peak = exposure(offset)
+            if G_peak <= 0:
+                continue
+            result["coverage"] = G.sum() / G_peak
+            result["offset"] = offset
             result["intensity"] = I * result["coverage"]
             result["sigma"] = sigma * result["coverage"]
 
@@ -1465,12 +1567,14 @@ class BaseDataModel:
                 )
                 result["profile"] = {
                     "edges": edges,
-                    "counts": np.histogram(r, bins=edges, weights=w)[0],
-                    "peak": I * G_bins,
-                    "background": bkg * B_bins,
+                    "counts": counts,
+                    "peak": I * G,
+                    "background": bkg * B,
+                    "reference": reference,
                     "transverse": transverse,
                     "t_edges": t_edges,
                     "t_sigmas": t_sigmas,
+                    "offset": offset,
                 }
 
         return results
@@ -3043,6 +3147,32 @@ class LaueData(BaseDataModel):
                 DeleteWorkspace(Workspace="bkg")
 
         self.delete_workspace("_detectors")
+
+    def background_scale(self, event_name):
+        """
+        Scale of the reference background to events, the ratio of their
+        proton charges, as in `subtract_background`.
+
+        Parameters
+        ----------
+        event_name : str
+            Name of the events.
+
+        Returns
+        -------
+        scale : float or None
+            The scale, or None without a reference background.
+
+        """
+
+        if not mtd.doesExist("bkg") or not mtd.doesExist(event_name):
+            return None
+
+        pc_bkg = getattr(self, "pc_bkg", np.nan)
+        if not (np.isfinite(pc_bkg) and pc_bkg > 0):
+            return None
+
+        return mtd[event_name].run().getProtonCharge() / pc_bkg
 
     def subtract_background(self, event_name):
         if not mtd.doesExist("bkg") or not mtd.doesExist(event_name):

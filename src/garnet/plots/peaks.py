@@ -1864,6 +1864,9 @@ class RadialProfilePlot(BasePlot):
         (self.background,) = ax.plot(
             [], [], "--", color="C0", label="background"
         )
+        (self.reference,) = ax.plot(
+            [], [], ":", color="C2", label="reference background"
+        )
         ax.set_xlabel(r"$|Q|-|Q_0|$ [$\AA^{-1}$]")
         ax.set_ylabel("counts")
         ax.legend(loc="upper right", frameon=False)
@@ -1910,7 +1913,8 @@ class RadialProfilePlot(BasePlot):
         edges = profile["edges"]
         r = 0.5 * (edges[1:] + edges[:-1])
         counts = profile["counts"]
-        background = profile["background"]
+        reference = profile.get("reference", np.zeros_like(counts))
+        background = profile["background"] + reference
         total = profile["peak"] + background
         errors = np.sqrt(np.maximum(counts, 0))
 
@@ -1920,6 +1924,13 @@ class RadialProfilePlot(BasePlot):
         )
         self.total.set_data(r, total)
         self.background.set_data(r, background)
+        # the reference background, shown only if there is one
+        has_reference = np.any(reference > 0)
+        self.reference.set_data(r, reference if has_reference else [])
+        self.reference.set_label(
+            "reference background" if has_reference else "_nolegend_"
+        )
+        self.ax_r.legend(loc="upper right", frameon=False)
         top = max(np.max(counts + errors), np.max(total), 1)
         self.ax_r.set_xlim(edges[0], edges[-1])
         self.ax_r.set_ylim(0, 1.05 * top)

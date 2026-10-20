@@ -1201,17 +1201,18 @@ class BaseDataModel:
         rotation, whose parts have the same |Q|, is integrated whole.
 
         The region is the cylinder along n = c / |c| through the peak
-        center c, within radial_sigma of the peak's radial standard
-        deviation along it and transverse_sigma of its largest transverse
-        one across it, each at most max_extent. Its counts, binned along n
-        in bins of a quarter of the radial standard deviation, are fitted by
-        Poisson maximum likelihood with a Gaussian along n of the peak's
-        radial standard deviation, uniform over the disc, on a flat
-        background and the scaled counts of a reference background if given
-        (with the center along n relaxed, within max_offset, for a strong
-        enough peak), normalized by flux and solid angle as
-        IntegratePeaksShapeMD is: the expected counts are those along each
-        pixel's line Q = k u through the region. The events are counts, not
+        center c, of radius transverse_sigma of the peak's largest
+        transverse standard deviation, between the spheres within
+        radial_sigma of its radial one of |c|, each at most max_extent.
+        Its counts, binned in |Q| in bins of a quarter of the radial
+        standard deviation, are fitted by Poisson maximum likelihood
+        with a Gaussian in |Q| of the peak's radial standard deviation,
+        uniform over the disc, on a flat background and the scaled
+        counts of a reference background if given (with its center in
+        |Q| relaxed, within max_offset, for a strong enough peak),
+        normalized by flux and solid angle as IntegratePeaksShapeMD is:
+        the expected counts are those along each pixel's line Q = k u
+        through the region. The events are counts, not
         background-subtracted, so that the fit is a Poisson one.
 
         Where the disc is not uniformly exposed (e.g. at the edge of a
@@ -1380,17 +1381,19 @@ class BaseDataModel:
             results.append(result)
 
             un = u @ n
+            u_norm = np.linalg.norm(u, axis=1)
             u_perp = u - np.outer(un, n)
             u_perp_norm = np.linalg.norm(u_perp, axis=1)
 
-            # the lines through the cylinder, and their momenta in it: along
-            # a line the radial coordinate is r = k u.n - Q, and the
-            # distance from the axis k |u_perp|
+            # the lines through the region, and their momenta in it: along
+            # a line the radial coordinate is r = k |u| - Q, the distance
+            # from |Q| of the peak, so that everything at the same |Q| is in
+            # the same bin, and the distance from the axis k |u_perp|
             rows = np.flatnonzero(
-                valid & (un > 0) & ((Q - half) * u_perp_norm <= T * un)
+                valid & (un > 0) & ((Q - half) * u_perp_norm <= T * u_norm)
             )
-            k1 = np.maximum((Q - half) / un[rows], k_low[rows])
-            k2 = np.minimum((Q + half) / un[rows], k_high[rows])
+            k1 = np.maximum((Q - half) / u_norm[rows], k_low[rows])
+            k2 = np.minimum((Q + half) / u_norm[rows], k_high[rows])
             k2 = np.minimum(
                 k2,
                 np.divide(
@@ -1419,14 +1422,14 @@ class BaseDataModel:
             reference = np.zeros(n_bins)
             for row, a, b in zip(rows, k1, k2):
                 x, y = fluxes[int(pixel_flux[row])]
-                nodes = np.clip((Q + edges) / un[row], a, b)
+                nodes = np.clip((Q + edges) / u_norm[row], a, b)
                 k = np.linspace(nodes[:-1], nodes[1:], n_sub + 1).T
                 phi_steps.append(
                     np.diff(integrated_flux(k, x, y), axis=1).ravel()
                     * weight[row]
                 )
                 k_mid = 0.5 * (k[:, 1:] + k[:, :-1]).ravel()
-                r_steps.append(k_mid * un[row] - Q)
+                r_steps.append(k_mid * u_norm[row] - Q)
                 t = np.outer(k_mid, u_perp[row] @ t_axes) / t_sigmas
                 t_steps.append(norm_t * np.exp(-0.5 * np.sum(t**2, axis=1)))
                 bin_steps.append(np.repeat(np.arange(n_bins), n_sub))
@@ -1435,7 +1438,7 @@ class BaseDataModel:
                 k_events = np.asarray(events.getTofs())
                 keep = (k_events >= a) & (k_events <= b)
                 if np.any(keep):
-                    r_events.append(k_events[keep] * un[row] - Q)
+                    r_events.append(k_events[keep] * u_norm[row] - Q)
                     w_events.append(np.asarray(events.getWeights())[keep])
                     if profile_bins:
                         t_events.append(
@@ -1449,7 +1452,7 @@ class BaseDataModel:
                     keep = (k_events >= a) & (k_events <= b)
                     if np.any(keep):
                         reference += np.histogram(
-                            k_events[keep] * un[row] - Q,
+                            k_events[keep] * u_norm[row] - Q,
                             bins=edges,
                             weights=np.asarray(events.getWeights())[keep],
                         )[0]

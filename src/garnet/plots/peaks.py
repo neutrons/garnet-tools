@@ -1857,15 +1857,25 @@ class RadialProfilePlot(BasePlot):
             1, 2, figsize=(6.4 * 2, 4.8), layout="constrained"
         )
 
+        # the fit, counts and background in the first colors of Set2
+        colors = plt.get_cmap("Set2").colors
         ax = self.ax_r
-        self.errors = ax.vlines([], [], [], color="k", linewidth=1)
-        (self.data,) = ax.plot([], [], "o", color="k", ms=3, label="counts")
-        (self.total,) = ax.plot([], [], "-", color="C3", label="fit")
+        self.total = ax.stairs([0], [0, 1], color=colors[0], label="fit")
+        self.errors = ax.vlines([], [], [], color=colors[1], linewidth=1)
+        (self.data,) = ax.plot(
+            [], [], "o", color=colors[1], ms=4, label="counts"
+        )
         (self.background,) = ax.plot(
-            [], [], "--", color="C0", label="background"
+            [], [], "s", color=colors[2], ms=3, label="background"
         )
         (self.reference,) = ax.plot(
-            [], [], ":", color="C2", label="reference background"
+            [],
+            [],
+            "s",
+            color=colors[3],
+            ms=3,
+            fillstyle="none",
+            label="reference background",
         )
         ax.set_xlabel(r"$|Q|-|Q_0|$ [$\AA^{-1}$]")
         ax.set_ylabel("counts")
@@ -1922,11 +1932,14 @@ class RadialProfilePlot(BasePlot):
         self.errors.set_segments(
             [[(x, c - e), (x, c + e)] for x, c, e in zip(r, counts, errors)]
         )
-        self.total.set_data(r, total)
+        self.total.set_data(total, edges)
         self.background.set_data(r, background)
         # the reference background, shown only if there is one
         has_reference = np.any(reference > 0)
-        self.reference.set_data(r, reference if has_reference else [])
+        if has_reference:
+            self.reference.set_data(r, reference)
+        else:
+            self.reference.set_data([], [])
         self.reference.set_label(
             "reference background" if has_reference else "_nolegend_"
         )

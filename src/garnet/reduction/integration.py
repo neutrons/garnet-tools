@@ -1380,8 +1380,14 @@ class Integration(PeakProjection):
             f.write("\n".join(lines) + "\n")
 
         if self.make_plot:
+            # the plots are diagnostics: failing to make them must not lose
+            # the integration
             with self.timer.section("radial profile plots"):
-                self.plot_radial_profiles(peaks_ws, results, I_counts)
+                try:
+                    self.plot_radial_profiles(peaks_ws, results, I_counts)
+                except Exception:
+                    print("radial profile plots failed:")
+                    traceback.print_exc()
 
     def plot_radial_profiles(self, peaks_ws, results, I_counts, n_max=100):
         """

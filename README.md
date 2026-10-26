@@ -48,7 +48,7 @@ garnet
 Reduction workflows can also be run directly. For example:
 
 ```bash
-python src/garnet/workflow.py <reduction-plan.yaml>
+python src/garnet/workflow.py <reduction-plan.yaml> norm 4
 ```
 
 See the [documentation](docs/index.rst) and the tutorial guides for workflow
@@ -114,5 +114,5 @@ style, testing, and pull-request guidance.
 
 ## License
 
-Garnet is distributed under the GPL-3.0-or-later license. See [LICENSE](LICENSE)
+Garnet is distributed under the GPL-3.0-only license. See [LICENSE](LICENSE)
 for the full license text.

@@ -50,6 +50,6 @@ test:
 
 about:
   home: https://github.com/neutrons/garnet-tools
-  license: GPL-3.0-or-later
+  license: GPL-3.0-only
   license_file: LICENSE
   summary: Single Crystal Graphical Advanced Reduction Neutron Event Toolkit

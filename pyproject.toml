@@ -12,7 +12,7 @@ dependencies = [
   "plotly",
   "pyyaml",
 ]
-license = { text = "GPL3.0" }
+license = { text = "GPL-3.0-only" }
 
 [project.gui-scripts]
 garnet = "garnet.application:gui"

@@ -116,14 +116,6 @@ class Integration(PeakProjection):
                 "RadialFit is only supported with quick integration "
                 "(ProfileFit false)",
             )
-        if not self.params["ProfileFit"]:
-            self.check(
-                self.params["MaxOrder"],
-                "==",
-                0,
-                "Quick integration does not support satellite peaks; "
-                "disable it or set MaxOrder to 0",
-            )
 
     @staticmethod
     def integrate_parallel(plan, runs, proc):
@@ -547,7 +539,11 @@ class Integration(PeakProjection):
             data, peaks_ws, centering, d_min, lamda_min, lamda_max
         )
 
-        self.predict_add_satellite_peaks(peaks_ws, md, lamda_min, lamda_max)
+        # quick integration makes no MD, so the goniometers are the events'
+        gon_ws = md if mtd.doesExist(md) else data
+        self.predict_add_satellite_peaks(
+            peaks_ws, gon_ws, lamda_min, lamda_max
+        )
 
     def optimize_ub(self, data, md, peaks_ws, cell, run):
         source = peaks_ws

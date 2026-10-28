@@ -1532,7 +1532,7 @@ class FormView(QWidget):
         self.quick_integration_box.setToolTip(
             "Sum the events in each peak's resolution ellipsoid with "
             "IntegratePeaksShapeMD, normalized by flux and solid angle, "
-            "instead of fitting profiles. Satellite peaks are not supported."
+            "instead of fitting profiles."
         )
 
         int_layout.addWidget(self.optimize_ub_box, 4, 0)

@@ -1440,7 +1440,7 @@ class PeaksModel:
         Parameters
         ----------
         ws : str
-            Name of workspace with goniometer indexing.
+            Name of MD or matrix workspace with goniometer(s).
 
         Returns
         -------
@@ -1451,9 +1451,16 @@ class PeaksModel:
 
         Rs = []
 
-        for ei in range(mtd[ws].getNumExperimentInfo()):
-            run = mtd[ws].getExperimentInfo(ei).run()
+        # an MD workspace has experiment infos, a matrix workspace one run
+        if hasattr(mtd[ws], "getNumExperimentInfo"):
+            runs = [
+                mtd[ws].getExperimentInfo(ei).run()
+                for ei in range(mtd[ws].getNumExperimentInfo())
+            ]
+        else:
+            runs = [mtd[ws].run()]
 
+        for run in runs:
             n_gon = run.getNumGoniometers()
 
             Rs += [run.getGoniometer(i).getR() for i in range(n_gon)]

@@ -1,9 +1,11 @@
 import os
+import re
 import sys
 import gc
 import subprocess
 import traceback
 import numpy as np
+from scipy.integrate import trapezoid
 
 from mantid.simpleapi import mtd
 from mantid import config
@@ -35,6 +37,20 @@ from garnet.reduction.resolution import (
 )
 from garnet.reduction.data import DataModel
 from garnet.reduction.projection import PeakProjection
+
+# with a structure in the plan, the signal to noise expected of a peak below
+# which its shape is not refined, and above which it may move as far as the
+# bounds allow, scaled by its logarithm between them
+_SHAPE_SN_MIN = 3.0
+_SHAPE_SN_MAX = 30.0
+
+# largest change of a refined standard deviation, and shift of a refined
+# center in standard deviations, that refine_peak_shapes allows
+_MAX_SHAPE_CHANGE = 2.0
+_MAX_CENTER_SHIFT = 4.0
+
+# isotropic displacement parameter of sites given without one (A^2)
+_DEFAULT_UISO = 0.005
 
 INTEGRATION = os.path.abspath(__file__)
 directory = os.path.dirname(INTEGRATION)
@@ -1116,6 +1132,13 @@ class Integration(PeakProjection):
         r_cut : float
             Radius of the region around each peak.
 
+        With a structure in the plan's Material, a refined shape is kept
+        only if it moved no further from the prior than the signal to noise
+        expected of the peak allows (see shape_relaxation), so that a peak
+        expected to be weak, e.g. one made to look strong by contamination
+        from the sample environment, does not shape the resolution model.
+        The intensities are not affected.
+
         """
 
         # containment radius of a standard deviation
@@ -1126,20 +1149,23 @@ class Integration(PeakProjection):
                 peaks_ws, prior_res, r_cut
             )
 
+        prior_sigmas = [r / scale for r in radii]
+
         with self.timer.section("IntegratePeaksShapeMD refining shapes"):
             diagnostics = peaks.integrate_peaks_normalized(
                 data_ws,
                 peaks_ws,
-                [r / scale for r in radii],
+                prior_sigmas,
                 directions,
                 r_cut,
                 profile_fit=True,
                 adjust_center=True,
                 adjust_shape=True,
+                max_shape_change=_MAX_SHAPE_CHANGE,
                 # the predicted positions are off by the calibration's
                 # errors, which can be several standard deviations along a
                 # peak's narrow axis
-                max_center_shift=4.0,
+                max_center_shift=_MAX_CENTER_SHIFT,
             )
 
             if diagnostics is not None:
@@ -1156,16 +1182,37 @@ class Integration(PeakProjection):
                     len(kept),
                 )
 
+        relaxation = None
+        if diagnostics is not None:
+            F2 = self.expected_structure_factors(peaks_ws)
+            if F2 is not None:
+                relaxation = self.shape_relaxation(
+                    peaks_ws, diagnostics, prior_sigmas, r_cut, F2
+                )
+
         peak = PeakModel(peaks_ws)
         ws = mtd[peaks_ws]
 
-        n_refined = 0
+        n_refined = n_held = 0
         for i in range(ws.getNumberPeaks()):
             if diagnostics is None or not diagnostics[i]["shape_adjusted"]:
                 peak.clear_peak_shape(i)
                 continue
 
             diag = diagnostics[i]
+
+            if relaxation is not None and not self.within_relaxation(
+                prior_sigmas[i],
+                directions[i],
+                diag["sigmas"],
+                diag["directions"],
+                diag["offset"],
+                relaxation[i],
+            ):
+                peak.clear_peak_shape(i)
+                n_held += 1
+                continue
+
             R = ws.getPeak(i).getGoniometerMatrix()
 
             Q = np.array(ws.getPeak(i).getQLabFrame()) + diag["offset"]
@@ -1177,6 +1224,249 @@ class Integration(PeakProjection):
             n_refined += 1
 
         print("refined {} peak shapes".format(n_refined))
+        if relaxation is not None:
+            print(
+                "{} refined shapes moved further than expected of "
+                "their peaks' structure factors".format(n_held)
+            )
+
+    def expected_structure_factors(self, peaks_ws):
+        """
+        Each peak's squared structure factor, from the structure in the
+        plan's Material (SpaceGroup and Sites, with TwinLaws if any, the
+        twin domains weighted equally) and the peaks' lattice. Satellites,
+        whose modulation is not known, and unindexed peaks are taken as
+        absent.
+
+        Parameters
+        ----------
+        peaks_ws : str
+            Name of peaks table.
+
+        Returns
+        -------
+        F2 : ndarray or None
+            Squared structure factor of each peak; None if the plan has no
+            structure.
+
+        """
+
+        material = self.plan.get("Material") or {}
+        space_group, sites = material.get("SpaceGroup"), material.get("Sites")
+        if not space_group or not sites:
+            return None
+
+        from mantid.geometry import CrystalStructure, ReflectionGenerator
+        from mantid.kernel import V3D
+        from garnet.reduction.crystallography import space_groups
+
+        ws = mtd[peaks_ws]
+        ol = ws.sample().getOrientedLattice()
+        cell = " ".join(
+            str(v)
+            for v in (
+                ol.a(),
+                ol.b(),
+                ol.c(),
+                ol.alpha(),
+                ol.beta(),
+                ol.gamma(),
+            )
+        )
+
+        scatterers = []
+        for site in sites:
+            atom = str(site[0])
+            # a site label such as Si1 to its element; isotopes as (Li7)
+            if not atom.startswith("("):
+                match = re.match(r"[A-Z][a-z]?", atom)
+                atom = match.group(0) if match else atom
+            x, y, z = (float(v) for v in site[1:4])
+            occ = float(site[4]) if len(site) > 4 else 1.0
+            u_iso = float(site[5]) if len(site) > 5 else _DEFAULT_UISO
+            scatterers.append(
+                "{} {} {} {} {} {}".format(atom, x, y, z, occ, u_iso)
+            )
+
+        try:
+            symbol = space_groups.get(str(space_group).replace(" ", ""))
+            structure = CrystalStructure(
+                cell, symbol or space_group, "; ".join(scatterers)
+            )
+            generator = ReflectionGenerator(structure)
+        except (RuntimeError, ValueError) as e:
+            print("Structure factors not used: {}".format(e))
+            return None
+
+        twins = [np.eye(3)]
+        twins += [
+            np.array(T, dtype=float) for T in material.get("TwinLaws") or []
+        ]
+
+        n_peaks = ws.getNumberPeaks()
+        hkls, owners = [], []
+        for i in range(n_peaks):
+            peak = ws.getPeak(i)
+            hkl = np.array(peak.getIntHKL())
+            if np.any(np.array(peak.getIntMNP()) != 0) or not hkl.any():
+                continue
+            # each domain contributes the reflection it puts at this peak
+            for T in twins:
+                h = T @ hkl
+                if np.allclose(h, np.round(h), atol=1e-3):
+                    hkls.append(V3D(*np.round(h)))
+                    owners.append(i)
+
+        F2 = np.zeros(n_peaks)
+        if hkls:
+            np.add.at(F2, owners, generator.getFsSquared(hkls))
+
+        return F2 / len(twins)
+
+    def shape_relaxation(self, peaks_ws, diagnostics, sigmas, r_cut, F2):
+        """
+        How far each peak's shape and center may move from the prior, from
+        0 (not at all) to 1 (as far as the refinement's bounds), from the
+        signal to noise expected of it, scaled by its logarithm between
+        _SHAPE_SN_MIN and _SHAPE_SN_MAX.
+
+        The expected intensity is the squared structure factor times one
+        scale, the median ratio of the intensities of the strong peaks to
+        theirs; the flux, solid angle and Lorentz factor are already in the
+        normalization. Its uncertainty is that of a Gaussian of the prior
+        shape on the fitted background, from the Fisher information, with
+        the exposure at the peak from the fit. No extinction or absorption
+        is modeled; it only decides which shapes are kept, never the
+        intensities.
+
+        Parameters
+        ----------
+        peaks_ws : str
+            Name of peaks table, with the intensities of the profile fit.
+        diagnostics : list
+            The profile fit's diagnostics of each peak.
+        sigmas : list
+            Standard deviations of each peak's prior shape.
+        r_cut : float
+            Radius of the fit region around each peak.
+        F2 : ndarray
+            Squared structure factor of each peak.
+
+        Returns
+        -------
+        relaxation : ndarray or None
+            Relaxation of each peak; None if too few peaks are strong
+            enough to scale the structure factors.
+
+        """
+
+        ws = mtd[peaks_ws]
+        n_peaks = ws.getNumberPeaks()
+        I = np.array([ws.getPeak(i).getIntensity() for i in range(n_peaks)])
+        sig = np.array(
+            [ws.getPeak(i).getSigmaIntensity() for i in range(n_peaks)]
+        )
+
+        # expected counts per unit intensity, i.e. the exposure at the peak,
+        # and fitted background counts per unit volume of the fit region
+        exposure = np.array([d["pk_norm"] for d in diagnostics])
+        bkg = np.array([d["bkg_data"] for d in diagnostics])
+        bkg = bkg / (4 / 3 * np.pi * r_cut**3)
+
+        usable = (F2 > 0) & (sig > 0) & (exposure > 0)
+        for threshold in (10, 3):
+            strong = usable & (I > threshold * sig)
+            if strong.sum() >= 3:
+                break
+        else:
+            print("Too few strong peaks to scale the structure factors")
+            return None
+
+        scale = np.median(I[strong] / F2[strong])
+        I_exp = scale * F2
+
+        # Fisher information of the intensity of a Gaussian on a flat
+        # background, integrated over its Mahalanobis radius u
+        u = np.linspace(0, 6, 241)[None, :]
+        vol = np.prod(sigmas, axis=1)[:, None]
+        g = np.exp(-0.5 * u**2) / ((2 * np.pi) ** 1.5 * vol)
+        e = exposure[:, None]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            integrand = (e * g) ** 2 / (I_exp[:, None] * e * g + bkg[:, None])
+            info = trapezoid(4 * np.pi * vol * u**2 * integrand, u, axis=1)
+            sn = np.where(exposure > 0, I_exp * np.sqrt(info), 0)
+            w = np.log(sn / _SHAPE_SN_MIN) / np.log(
+                _SHAPE_SN_MAX / _SHAPE_SN_MIN
+            )
+
+        w = np.clip(np.nan_to_num(w, nan=0, posinf=1, neginf=0), 0, 1)
+
+        # strong, but expected weak: e.g. contamination, or a satellite
+        unexpected = (I > 10 * sig) & ~(sn >= _SHAPE_SN_MIN)
+
+        print(
+            "structure factor scale {:.4g} from {} peaks; expected weak {}, "
+            "moderate {}, strong {}; strong but expected weak {}".format(
+                scale,
+                strong.sum(),
+                np.sum(w == 0),
+                np.sum((w > 0) & (w < 1)),
+                np.sum(w == 1),
+                unexpected.sum(),
+            )
+        )
+
+        return w
+
+    @staticmethod
+    def within_relaxation(
+        prior_sigmas, prior_directions, sigmas, directions, offset, w
+    ):
+        """
+        Whether a refined shape and center are within the bounds of the
+        refinement scaled by a relaxation: each standard deviation, in the
+        prior's frame, within a factor 1 + w (_MAX_SHAPE_CHANGE - 1) of the
+        prior's, and the center within w _MAX_CENTER_SHIFT of its standard
+        deviations. Nothing is within a relaxation of 0.
+
+        Parameters
+        ----------
+        prior_sigmas, sigmas : array-like
+            Standard deviations of the prior and refined shapes.
+        prior_directions, directions : array-like
+            Principal axes (columns) of the prior and refined shapes.
+        offset : array-like
+            Shift of the refined center from the prior's.
+        w : float
+            Relaxation, from 0 to 1.
+
+        Returns
+        -------
+        within : bool
+            Whether the refined shape and center are within the bounds.
+
+        """
+
+        if not w > 0:
+            return False
+
+        # the refined covariance whitened by the prior's
+        V0, s0 = np.asarray(prior_directions), np.asarray(prior_sigmas)
+        V, s = np.asarray(directions), np.asarray(sigmas)
+        W = V0 / s0
+        S = W.T @ (V * s**2) @ V.T @ W
+        lamda = np.linalg.eigvalsh(0.5 * (S + S.T))
+
+        change = 1 + w * (_MAX_SHAPE_CHANGE - 1)
+        tol = 1 + 1e-6
+        if np.any(lamda > change**2 * tol) or np.any(
+            lamda * change**2 * tol < 1
+        ):
+            return False
+
+        shift = np.linalg.norm(W.T @ np.asarray(offset))
+
+        return shift <= w * _MAX_CENTER_SHIFT * tol
 
     def integrate_peaks_normalized(self, data_ws, peaks_ws, res, r_cut):
         """

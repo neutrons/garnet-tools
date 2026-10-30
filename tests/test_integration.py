@@ -128,3 +128,66 @@ def test_expected_structure_factors():
     rp.generate_plan("TOPAZ")
     rp.plan["OutputName"] = "test"
     assert Integration(rp.plan).expected_structure_factors("sf_peaks") is None
+
+
+def test_structure_factor_prior_scales():
+    import numpy as np
+
+    from garnet.reduction.integration import _MIN_PRIOR_SCALE
+
+    hkls = [[1, 1, 1], [2, 2, 0], [3, 1, 1], [4, 0, 0], [2, 0, 0], [1, 1, 1]]
+    mnps = [[0, 0, 0]] * 5 + [[1, 0, 0]]
+    _peaks_with_hkls("ps_peaks", hkls, mnps)
+
+    integration = Integration(_silicon_plan())
+    F2 = integration.expected_structure_factors("ps_peaks")
+    scales = integration.structure_factor_prior_scales("ps_peaks")
+
+    # the forbidden 200 and the satellite are held tightest
+    assert scales[4] == _MIN_PRIOR_SCALE and scales[5] == _MIN_PRIOR_SCALE
+    # stronger reflections are held less tightly, the strongest not at all
+    allowed = np.arange(4)
+    order = np.argsort(F2[allowed])
+    assert np.all(np.diff(scales[allowed][order]) >= 0)
+    assert scales[allowed].max() == 1
+
+    rp = ReductionPlan()
+    rp.generate_plan("TOPAZ")
+    rp.plan["OutputName"] = "test"
+    assert (
+        Integration(rp.plan).structure_factor_prior_scales("ps_peaks") is None
+    )
+
+
+def test_prune_shape_outliers():
+    import numpy as np
+    from mantid.simpleapi import mtd
+
+    rng = np.random.default_rng(0)
+    n = 40
+    _peaks_with_hkls("po_peaks", [[1, 1, 1]] * n)
+    for i in range(n):
+        mtd["po_peaks"].getPeak(i).setIntensity(100.0)
+        mtd["po_peaks"].getPeak(i).setSigmaIntensity(5.0)
+
+    integration = Integration(_silicon_plan())
+    # the prior a little small for every reflection alike
+    # and every center moved a little alike
+    for i in range(n):
+        L = np.sort(0.2 + 0.05 * rng.standard_normal(3))[::-1]
+        offset = 0.3 + 0.05 * rng.standard_normal()
+        integration.shape_deviations[i] = (L, offset, 100.0, 5.0)
+    # stretched along one direction, grown in every direction, shrunk,
+    # and pulled aside
+    deviations = integration.shape_deviations
+    deviations[3] = (np.array([2.0, 0.2, 0.2]), 0.3, 100, 5)
+    deviations[7] = (np.array([1.5, 1.4, 1.3]), 0.3, 100, 5)
+    deviations[9] = (np.array([-1.0, -1.1, -1.2]), 0.3, 100, 5)
+    deviations[12] = (np.array([0.2, 0.2, 0.2]), 1.5, 100, 5)
+
+    integration.prune_shape_outliers("po_peaks")
+
+    pruned = [
+        i for i in range(n) if mtd["po_peaks"].getPeak(i).getIntensity() == 0
+    ]
+    assert pruned == [3, 7, 12]

@@ -621,3 +621,94 @@ def test_missing_support_fraction_amplitude_invariant():
         scaled_total = amplitude * total1
         assert np.isclose(scaled_total / amplitude, total1)
     assert frac1 > 0.0 and frac1 < 1.0
+
+
+def test_shape_prior_distance_in_scaled_prior_widths():
+    """The distance counts each shape parameter in its (scaled) prior width, ignoring the center."""
+    x = np.linspace(-1, 1, 5)
+    x0, x1, x2 = np.meshgrid(x, x, x, indexing="ij")
+    axes = (np.eye(3)[0], np.eye(3)[1], np.eye(3)[2])
+
+    ellipsoid = PeakEllipsoid()
+    ellipsoid.update_constraints(x0, x1, x2, dx=None)
+    ellipsoid.update_estimate((0, 0, 0, 0.2, 0.3, 0.4, *axes), 0.01)
+    assert ellipsoid.shape_prior_distance() == 0.0
+
+    # one prior width in size and two in orientation; the center, however
+    # far, does not count
+    ellipsoid.params["log_size"].set(value=0.45)
+    ellipsoid.params["domega_z"].set(value=2 * 0.24)
+    ellipsoid.params["c0"].set(value=0.5)
+    assert np.isclose(ellipsoid.shape_prior_distance(), 1 + 4)
+
+    # half the widths: the same change is twice as many of them
+    held = PeakEllipsoid()
+    held.update_constraints(x0, x1, x2, dx=None)
+    held.update_estimate((0, 0, 0, 0.2, 0.3, 0.4, *axes), 0.01, 0.5)
+    held.params["log_size"].set(value=0.45)
+    held.params["domega_z"].set(value=2 * 0.24)
+    assert np.isclose(held.shape_prior_distance(), 4 * (1 + 4))
+
+
+def test_shape_log_variance_ratios():
+    """Uniform growth raises all three ratios alike; stretching one axis raises one."""
+    x = np.linspace(-1, 1, 5)
+    x0, x1, x2 = np.meshgrid(x, x, x, indexing="ij")
+    c, s = np.cos(0.4), np.sin(0.4)
+    axes = (np.array([c, s, 0.0]), np.array([-s, c, 0.0]), np.eye(3)[2])
+
+    ellipsoid = PeakEllipsoid()
+    _make_reference(ellipsoid, x0, x1, x2, 0.2, 0.3, 0.4, axes)
+    assert np.allclose(ellipsoid.shape_log_variance_ratios(), 0, atol=1e-10)
+
+    # radii times exp(0.3): variances times exp(0.6)
+    ellipsoid.params["log_size"].set(value=0.3)
+    assert np.allclose(ellipsoid.shape_log_variance_ratios(), 0.6)
+
+    # any orientation change of the reference leaves the ratios in its frame
+    ellipsoid.params["log_size"].set(value=0.0)
+    ellipsoid.params["shape_1"].set(value=0.2)
+    ratios = ellipsoid.shape_log_variance_ratios()
+    expected = 2 * SHAPE_BASIS @ np.array([0.2, 0.0])
+    assert np.allclose(ratios, np.sort(expected)[::-1])
+
+
+def test_center_prior_offset_in_reference_radii():
+    """The center offset is measured in the reference radii along each axis."""
+    x = np.linspace(-1, 1, 5)
+    x0, x1, x2 = np.meshgrid(x, x, x, indexing="ij")
+    axes = (np.eye(3)[0], np.eye(3)[1], np.eye(3)[2])
+
+    ellipsoid = PeakEllipsoid()
+    _make_reference(ellipsoid, x0, x1, x2, 0.2, 0.3, 0.4, axes)
+    assert ellipsoid.center_prior_offset() == 0.0
+
+    ellipsoid.params["c1"].set(value=0.15)
+    assert np.isclose(ellipsoid.center_prior_offset(), 0.5)
+
+    ellipsoid.params["c1"].set(value=0.0)
+    ellipsoid.params["c2"].set(value=-0.8)
+    assert np.isclose(ellipsoid.center_prior_offset(), 2.0)
+
+
+def test_support_loss_relative_to_reference():
+    """A reference beside a gap loses nothing; a fit grown past the box does."""
+    ellipsoid = PeakEllipsoid()
+    x0, x1, x2 = _grid()
+    n = np.where(x0 > 0, 0.0, 1.0)  # gap beside the peak
+
+    prior = ellipsoid.inv_S_matrix(1.0, 1.0, 1.0, 0.0, 0.0, 0.0)
+    ellipsoid.prior_missing_fraction = ellipsoid.missing_support_fraction(
+        x0, x1, x2, np.zeros(3), prior, n
+    )[0]
+    assert ellipsoid.prior_missing_fraction > 0.2
+
+    ellipsoid.missing_fraction = ellipsoid.prior_missing_fraction
+    assert ellipsoid.support_loss() == 0.0
+
+    # stretched and pulled along the gap, past the box edge
+    grown = ellipsoid.inv_S_matrix(1.0, 10.0, 1.0, 0.0, 0.0, 0.0)
+    ellipsoid.missing_fraction = ellipsoid.missing_support_fraction(
+        x0, x1, x2, (0.0, -2.5, 0.0), grown, n
+    )[0]
+    assert ellipsoid.support_loss() > 0.15

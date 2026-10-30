@@ -2,6 +2,7 @@ import time
 import numpy as np
 
 import scipy.optimize
+import scipy.linalg
 import scipy.spatial.transform
 import scipy.stats
 import scipy.signal
@@ -127,7 +128,7 @@ class PeakEllipsoid:
         """
         self.combine_params = self.params.copy()
 
-    def update_estimate(self, shape, sigma_c=None):
+    def update_estimate(self, shape, sigma_c=None, prior_scale=1.0):
         """
         Seed `self.params` and the resolution-model prior from an initial ellipsoid estimate.
 
@@ -164,6 +165,10 @@ class PeakEllipsoid:
             Center prior width (raw Q units), e.g. from
             `UBModel.get_center_uncertainty`. Defaults to 1.0 if not
             given (e.g. when no UB/lattice information is available).
+        prior_scale : float, optional
+            Factor scaling the size, shape, and orientation prior widths,
+            e.g. less than 1 for a reflection expected to be weak, so its
+            shape is held closer to the reference ellipsoid. Default 1.
         """
         c0, c1, c2, r0, r1, r2, v0, v1, v2 = shape
 
@@ -195,9 +200,73 @@ class PeakEllipsoid:
         self._prior_U = U
 
         self.prior_center_sigma = sigma_c if sigma_c is not None else 1.0
-        self.prior_cov_sigma = 0.45
-        self.prior_distortion_sigma = 0.32
-        self.prior_rot_sigma = 0.24
+        self.prior_cov_sigma = 0.45 * prior_scale
+        self.prior_distortion_sigma = 0.32 * prior_scale
+        self.prior_rot_sigma = 0.24 * prior_scale
+
+    def shape_prior_distance(self):
+        """
+        How far the fitted shape is from the reference ellipsoid, in its
+        prior widths: the sum of the squared size, shape, and orientation
+        prior residuals, chi-squared with 6 degrees of freedom under the
+        prior. The center is left out, as calibration errors move it.
+
+        Returns
+        -------
+        distance : float
+            Squared Mahalanobis distance of the fitted shape parameters
+            from the reference ellipsoid's.
+        """
+        return float(np.sum(self.prior_residual(self.params)[3:] ** 2))
+
+    def shape_log_variance_ratios(self):
+        """
+        The fitted shape's principal variances relative to the reference
+        ellipsoid's, as the logarithms of the generalized eigenvalues of
+        the fitted covariance with respect to the reference's, largest
+        first: all near 0 for the reference shape, one large for a shape
+        stretched along one direction, all large for one grown in every
+        direction. Independent of orientation angles, which are ill
+        defined for nearly round shapes.
+
+        Returns
+        -------
+        log_ratios : ndarray of shape (3,)
+            Log variance ratios, in decreasing order.
+        """
+        S = self.S_matrix(*self.shape_from_params(self.params))
+        ratios = scipy.linalg.eigh(S, self.prior_cov, eigvals_only=True)
+        return np.sort(np.log(ratios))[::-1]
+
+    def center_prior_offset(self):
+        """
+        How far the fitted center moved from the reference ellipsoid's,
+        in its radii: the Mahalanobis distance of the center offset under
+        the reference covariance, 1 at the reference's surface.
+
+        Returns
+        -------
+        offset : float
+            Center offset in reference radii.
+        """
+        c = np.array([self.params[k].value for k in ("c0", "c1", "c2")])
+        return float(np.sqrt(c @ np.linalg.solve(self.prior_cov, c)))
+
+    def support_loss(self):
+        """
+        The fraction of the fitted peak's Gaussian mass outside the valid
+        voxels beyond that of the reference ellipsoid's, as set by
+        `extract_result`: near 0 when the fit stays within the measured
+        region as well as the reference does, even beside a gap or the
+        box edge, large when it grew or moved out of it, so that its size
+        is set by whatever lies at the edge rather than by the peak.
+
+        Returns
+        -------
+        loss : float
+            Missing support fraction of the fit less the reference's.
+        """
+        return float(self.missing_fraction - self.prior_missing_fraction)
 
     def shape_from_params(self, params):
         """
@@ -2411,6 +2480,10 @@ class PeakEllipsoid:
             self.missing_support,
             self.total_support,
         ) = self.missing_support_fraction(x0, x1, x2, c, inv_S, n3d)
+
+        self.prior_missing_fraction = self.missing_support_fraction(
+            x0, x1, x2, np.zeros(3), np.linalg.inv(self.prior_cov), n3d
+        )[0]
 
         def _bkg_norm(bkg_arr, n_arr):
             return np.where(

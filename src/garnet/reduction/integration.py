@@ -37,6 +37,32 @@ from garnet.reduction.resolution import (
 from garnet.reduction.data import DataModel
 from garnet.reduction.projection import PeakProjection
 
+# with a structure in the plan, the percentiles of the log squared
+# structure factors between which a reflection's ellipsoid fit prior is
+# loosened from _MIN_PRIOR_SCALE (weak) to its full widths (strong)
+_F2_PERCENTILES = (25, 90)
+_MIN_PRIOR_SCALE = 0.25
+
+# a fitted shape further than this from its prior (chi-squared, 6 degrees
+# of freedom, at 99.7%) is taken to be consumed by contamination, and the
+# peak discarded
+_CONSUMED_SHAPE_CHI2 = 19.80
+
+# a reflection whose fitted shape, relative to its prior, has any principal
+# log variance ratio, or whose center offset in prior radii is, more than
+# this many robust standard deviations above the run's well-measured
+# reflections is pruned, e.g. one consumed by a
+# powder line from the sample environment; the spread is at least
+# _MIN_SHAPE_SPREAD so that a run of very consistent shapes does not prune
+# small, real differences
+_SHAPE_OUTLIER_Z = 3.5
+_MIN_SHAPE_SPREAD = 0.1
+
+# a fit whose Gaussian mass outside the measured voxels exceeds its prior's
+# by more than this fraction grew or moved out of the data, its size set by
+# whatever lies at the edge (e.g. a powder line), and the peak is discarded
+_MAX_SUPPORT_LOSS = 0.15
+
 # isotropic displacement parameter of sites given without one (A^2)
 _DEFAULT_UISO = 0.005
 
@@ -55,6 +81,9 @@ class Integration(PeakProjection):
 
         self.params = plan["Integration"]
         self.output = plan["OutputName"] + "_integration"
+
+        # each fitted reflection's shape relative to its prior, by peak
+        self.shape_deviations = {}
 
         self.validate_params()
 
@@ -433,6 +462,10 @@ class Integration(PeakProjection):
             self.r_cut = r_cut
 
             if self.params["ProfileFit"]:
+                self.prior_scales = self.structure_factor_prior_scales("peaks")
+
+                self.shape_deviations = {}
+
                 banks = peaks.get_bank_names("peaks")
 
                 ub = UBModel("peaks")
@@ -469,6 +502,8 @@ class Integration(PeakProjection):
 
                     if self.make_plot:
                         self.peak_plot.close()
+
+                self.prune_shape_outliers("peaks")
             else:
                 # the count is of the background-subtracted events, if any
                 self.integrate_peaks_normalized(
@@ -756,6 +791,7 @@ class Integration(PeakProjection):
                 b,
                 m,
                 sigma_c,
+                prior_scale,
             ) = data_info
 
             (
@@ -773,18 +809,36 @@ class Integration(PeakProjection):
 
             ellipsoid = PeakEllipsoid()
             ellipsoid.update_constraints(Q0, Q1, Q2, dQ)
-            ellipsoid.update_estimate(shape, sigma_c)
+            ellipsoid.update_estimate(shape, sigma_c, prior_scale)
 
             args = (Q0, Q1, Q2, d, n, dQ, c, weights)
             fit_params = ellipsoid.fit(*args, b=b, m=m)
 
             intens_params = None
             if fit_params is not None:
+                # a shape far beyond its prior, e.g. grown over
+                # contamination, is not the peak's
+                distance = ellipsoid.shape_prior_distance()
+                if distance > _CONSUMED_SHAPE_CHI2:
+                    result[key] = None
+                    message = "Discarding {}: shape {:.1f} from prior"
+                    print(message.format(hkl, distance))
+                    del ellipsoid
+                    continue
+
                 intens_params = ellipsoid.extract_result(*fit_params, c)
 
                 if intens_params is None:
                     result[key] = None
                     print("Cannot extract fit")
+                    del ellipsoid
+                    continue
+
+                loss = ellipsoid.support_loss()
+                if loss > _MAX_SUPPORT_LOSS:
+                    result[key] = None
+                    message = "Discarding {}: {:.0%} of fit outside data"
+                    print(message.format(hkl, loss))
                     del ellipsoid
                     continue
 
@@ -802,6 +856,13 @@ class Integration(PeakProjection):
                     print("Exception extracting intensity: {}".format(e))
                     print(traceback.format_exc())
                     result[key] = None
+                else:
+                    self.shape_deviations[key] = (
+                        ellipsoid.shape_log_variance_ratios(),
+                        ellipsoid.center_prior_offset(),
+                        intens,
+                        sig,
+                    )
 
                 info = ellipsoid.info
                 best_prof = ellipsoid.best_prof
@@ -924,6 +985,9 @@ class Integration(PeakProjection):
 
             sigma_c = ub.get_center_uncertainty(hkl)
 
+            prior_scales = getattr(self, "prior_scales", None)
+            prior_scale = 1.0 if prior_scales is None else prior_scales[i]
+
             lamda = peak.get_wavelength(i)
 
             angles = peak.get_angles(i)
@@ -1000,6 +1064,7 @@ class Integration(PeakProjection):
                 b,
                 m,
                 sigma_c,
+                prior_scale,
             )
 
             peak_file = self.get_plot_file(peak_name)
@@ -1287,6 +1352,117 @@ class Integration(PeakProjection):
             np.add.at(F2, owners, generator.getFsSquared(hkls))
 
         return F2 / len(twins)
+
+    def prune_shape_outliers(self, peaks_ws):
+        """
+        Prune reflections whose fitted shapes grew, or whose centers moved,
+        far more than the rest of the run's, relative to their priors, e.g.
+        consumed by a powder line from the sample environment, whose rings
+        do not fall at known d-spacings when it is off the sample position.
+
+        Each fitted shape's principal log variance ratios to its prior,
+        largest first, and its center offset in prior radii are compared
+        with the median and robust spread (scaled median absolute
+        deviation, at least _MIN_SHAPE_SPREAD) of those of the run's
+        reflections with I/sigma of at least 10, so a prior off for every
+        reflection alike, or a calibration moving every center alike,
+        prunes none. A reflection with any of these more than
+        _SHAPE_OUTLIER_Z spreads above the median is pruned (its intensity
+        set to zero, as for a failed fit): the largest ratio for a shape
+        stretched along one direction, all for one grown in every
+        direction, the offset for one pulled aside. Only growth and
+        movement are pruned.
+
+        Parameters
+        ----------
+        peaks_ws : str
+            Name of peaks table.
+
+        """
+
+        deviations = self.shape_deviations
+        if len(deviations) < 10:
+            return
+
+        keys = np.array(list(deviations.keys()))
+        L = np.array(
+            [np.append(deviations[k][0], deviations[k][1]) for k in keys]
+        )
+        I = np.array([deviations[k][2] for k in keys], dtype=float)
+        sig = np.array([deviations[k][3] for k in keys], dtype=float)
+
+        with np.errstate(divide="ignore", invalid="ignore"):
+            reference = (sig > 0) & (I / sig >= 10)
+        if reference.sum() < 10:
+            reference = np.ones(len(keys), dtype=bool)
+
+        median = np.median(L[reference], axis=0)
+        spread = 1.4826 * np.median(np.abs(L[reference] - median), axis=0)
+        spread = np.maximum(spread, _MIN_SHAPE_SPREAD)
+
+        z = (L - median) / spread > _SHAPE_OUTLIER_Z
+        grown = np.all(z[:, :3], axis=1)
+        stretched = np.any(z[:, :3], axis=1) & ~grown
+        moved = z[:, 3] & ~grown & ~stretched
+        outlier = grown | stretched | moved
+
+        peak = PeakModel(peaks_ws)
+        for k in keys[outlier]:
+            peak.set_peak_intensity(int(k), 0, 0)
+
+        print(
+            "pruned {} of {} fitted reflections whose shapes grew or "
+            "centers moved beyond the run's: {} grown in every direction, "
+            "{} along fewer, {} moved only".format(
+                outlier.sum(),
+                len(keys),
+                grown.sum(),
+                stretched.sum(),
+                moved.sum(),
+            )
+        )
+
+    def structure_factor_prior_scales(self, peaks_ws):
+        """
+        Factor scaling the widths of each peak's ellipsoid fit prior, from
+        how strong its reflection is expected to be: its log squared
+        structure factor, clipped between the _F2_PERCENTILES of the
+        reflections with any, maps linearly onto _MIN_PRIOR_SCALE to 1.
+        Reflections with none, such as satellites, get _MIN_PRIOR_SCALE.
+
+        Parameters
+        ----------
+        peaks_ws : str
+            Name of peaks table.
+
+        Returns
+        -------
+        scales : ndarray or None
+            Prior scale of each peak; None if the plan has no structure.
+
+        """
+
+        F2 = self.expected_structure_factors(peaks_ws)
+        if F2 is None or not np.any(F2 > 0):
+            return None
+
+        log_F2 = np.log(F2[F2 > 0])
+        low, high = np.percentile(log_F2, _F2_PERCENTILES)
+
+        w = np.zeros_like(F2)
+        if high > low:
+            w[F2 > 0] = np.clip((log_F2 - low) / (high - low), 0, 1)
+        else:
+            w[F2 > 0] = 1
+
+        scales = _MIN_PRIOR_SCALE + (1 - _MIN_PRIOR_SCALE) * w
+
+        print(
+            "structure factor prior: {} of {} reflections held tightest, "
+            "{} loosest".format(np.sum(w == 0), len(w), np.sum(w == 1))
+        )
+
+        return scales
 
     def integrate_peaks_normalized(self, data_ws, peaks_ws, res, r_cut):
         """

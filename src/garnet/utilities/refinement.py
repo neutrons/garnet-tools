@@ -734,9 +734,14 @@ class NuclearStructureRefinement:
 
         hkls = np.column_stack([h, k, l]).round().astype(int)
 
-        mask = np.array(
-            [V3D(*[float(v) for v in val]) in unique for val in hkls]
-        )
+        # keep a reflection if any twin domain allows it, e.g. the reverse
+        # spots of an obverse/reverse twin, forbidden in the obverse model
+        mask = np.zeros(len(hkls), dtype=bool)
+        for T in self.twin_laws:
+            twin_hkls = np.rint(hkls @ T.T).astype(int)
+            mask |= [
+                V3D(*[float(v) for v in hkl]) in unique for hkl in twin_hkls
+            ]
 
         self.hkls = hkls[mask]
 

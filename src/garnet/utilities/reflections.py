@@ -18,6 +18,7 @@ from mantid.simpleapi import (
     LoadIsawUB,
     LoadIsawSpectrum,
     CloneWorkspace,
+    DeleteWorkspace,
     CreateSampleWorkspace,
     LoadCIF,
     SetGoniometer,
@@ -40,7 +41,11 @@ import scipy.stats
 from sklearn.cluster import AgglomerativeClustering
 
 from mantid.kernel import V3D
-from mantid.geometry import CrystalStructure, ReflectionGenerator
+from mantid.geometry import (
+    CrystalStructure,
+    ReflectionGenerator,
+    PointGroupFactory,
+)
 
 from mantid import config
 
@@ -55,6 +60,27 @@ import argparse
 from garnet.reduction.ub import Optimization
 from garnet.reduction.resolution import ResolutionEllipsoid
 from garnet.utilities.absorption import AbsorptionEllipsoid
+
+# powder shells: the log local background per unit normalization of each
+# reflection is compared with a smooth trend in wavelength and scattering
+# angle (a cubic in log wavelength and log 2 sin theta, fitted with Tukey
+# biweights so rings do not pull it); a window of +/- _SHELL_WIDTH in log d
+# (about the relative width of a ring) is a shell if it holds at least
+# _SHELL_MIN_PEAKS reflections more than _SHELL_COUNT_Z robust spreads above
+# the trend, and more than expected from the typical window's fraction of
+# them at a binomial tail probability below _SHELL_ALPHA (3.5 sigma,
+# one-sided); within a shell, reflections more than _SHELL_PEAK_Z spreads
+# above it have the ring in their region
+_SHELL_WIDTH = 0.004
+_SHELL_COUNT_Z = 3.0
+_SHELL_PEAK_Z = 2.0
+_SHELL_MIN_PEAKS = 3
+_SHELL_ALPHA = 2.3e-4
+
+# a raised reflection in a shell is removed unless its intensity agrees,
+# within _SHELL_Z standard errors, with the median of its symmetry
+# equivalents that are not
+_SHELL_Z = 3.5
 
 point_group_dict = {
     "-1": "-1 (Triclinic)",
@@ -747,8 +773,147 @@ class Peaks:
             if not (lo < ratio < hi):
                 peak.setSigmaIntensity(float("-inf"))
 
+    def remove_powder_shells(self):
+        """
+        Remove reflections contaminated by powder lines, e.g. from the
+        sample environment, over all runs.
+
+        Powder raises the local background of every reflection whose region
+        a ring crosses, at the ring's apparent d-spacing, whether or not the
+        intensity follows; rings off the sample position fall at d-spacings
+        that differ from the tabulated ones and from detector to detector,
+        so none are assumed. Each reflection's log background per unit
+        normalization is compared with a smooth trend in wavelength and
+        scattering angle, along which it varies most; shells are
+        d-spacing windows with significantly more reflections far above it
+        than the typical window (binomial test), a systematic rise rather
+        than a few bad peaks.
+
+        Within a shell, a reflection more than _SHELL_PEAK_Z robust spreads
+        above the trend, with the ring in its own region, is compared with the median intensity of its symmetry equivalents
+        without the ring, measured elsewhere on the detector or in other
+        runs; it is kept if it agrees within _SHELL_Z standard errors, and
+        otherwise, or with no such equivalents, flagged for removal.
+
+        """
+
+        run_info = mtd[self.peaks].run()
+        if "peaks_bkg" not in run_info.keys():
+            return
+
+        names = ["run", "h", "k", "l", "m", "n", "p", "bkg"]
+        logs = [run_info.getLogData("peaks_" + n).value for n in names]
+        bkg_lookup = {tuple(row[:7]): row[7] for row in zip(*logs)}
+
+        peaks, b = [], []
+        for peak in mtd[self.peaks]:
+            h, k, l = [int(v) for v in peak.getIntHKL()]
+            m, n, p = [int(v) for v in peak.getIntMNP()]
+            key = (peak.getRunNumber(), h, k, l, m, n, p)
+            bkg = bkg_lookup.get(key)
+            if bkg is not None and bkg > 0 and peak.getDSpacing() > 0:
+                peaks.append(peak)
+                b.append(bkg)
+
+        if len(peaks) < 10 * _SHELL_MIN_PEAKS:
+            return
+
+        x = np.log([peak.getDSpacing() for peak in peaks])
+        y = np.log(b)
+
+        sort = np.argsort(x)
+        x, y = x[sort], y[sort]
+        peaks = [peaks[i] for i in sort]
+
+        u = np.log([peak.getWavelength() for peak in peaks])
+        v = np.log([2 * np.sin(peak.getScattering() / 2) for peak in peaks])
+        A = np.column_stack(
+            [u**i * v**j for i in range(4) for j in range(4 - i)]
+        )
+
+        w = np.ones_like(y)
+        for _ in range(20):
+            coeff = np.linalg.lstsq(A * w[:, None], y * w, rcond=None)[0]
+            e = y - A @ coeff
+            spread = max(1.4826 * np.median(np.abs(e)), 1e-3)
+            t = e / (4.685 * spread)
+            w = np.where(np.abs(t) < 1, 1 - t**2, 0)
+
+        lo = np.searchsorted(x, x - _SHELL_WIDTH, side="left")
+        hi = np.searchsorted(x, x + _SHELL_WIDTH, side="right")
+        cumulative = np.concatenate(
+            [[0], np.cumsum(e > _SHELL_COUNT_Z * spread)]
+        )
+        count, hits = hi - lo, cumulative[hi] - cumulative[lo]
+        # the typical window's, as the rings raise the overall fraction
+        fraction = max(
+            np.median(hits / count), scipy.stats.norm.sf(_SHELL_COUNT_Z)
+        )
+        tail = scipy.stats.binom.sf(hits - 1, count, fraction)
+        shell = (hits >= _SHELL_MIN_PEAKS) & (tail < _SHELL_ALPHA)
+        ringed = shell & (e > _SHELL_PEAK_Z * spread)
+
+        point_group = None
+        if len(self.point_groups) == 1:
+            symbol = point_group_dict[self.point_groups[0]].split(" (")[0]
+            point_group = PointGroupFactory.createPointGroup(symbol)
+
+        def family(peak):
+            hkl = V3D(*[float(v) for v in peak.getIntHKL()])
+            mnp = tuple(int(v) for v in peak.getIntMNP())
+            if point_group is not None and not any(mnp):
+                hkl = point_group.getReflectionFamily(hkl)
+            return (tuple(int(round(v)) for v in hkl), mnp)
+
+        clean = {}
+        for peak, ring in zip(peaks, ringed):
+            if not ring:
+                item = (peak.getIntensity(), peak.getSigmaIntensity())
+                clean.setdefault(family(peak), []).append(item)
+
+        removed, kept = 0, 0
+        for peak in np.array(peaks, dtype=object)[ringed]:
+            reference = clean.get(family(peak))
+            if reference:
+                I, sig = np.array(reference).T
+                med_err = 1.2533 * np.median(sig) / np.sqrt(len(I))
+                err = np.hypot(peak.getSigmaIntensity(), med_err)
+                if abs(peak.getIntensity() - np.median(I)) <= _SHELL_Z * err:
+                    kept += 1
+                    continue
+            peak.setSigmaIntensity(float("-inf"))
+            removed += 1
+
+        filename = os.path.splitext(self.filename)[0]
+
+        fig, ax = plt.subplots(layout="constrained")
+        d = np.exp(x)
+        ax.plot(d, e / spread, ".", color="C0", rasterized=True)
+        ax.plot(
+            d[ringed], e[ringed] / spread, ".", color="C3", rasterized=True
+        )
+        ax.axhline(_SHELL_PEAK_Z, color="k", linestyle="--", linewidth=1)
+        ax.set_xscale("log")
+        ax.set_xlabel("$d$ [$\\AA$]")
+        ax.set_ylabel("background excess [spread]")
+        ax.minorticks_on()
+        fig.savefig(filename + "_powder.pdf")
+        plt.close(fig)
+
+        print(
+            "powder shells: {} of {} reflections with a ring in their "
+            "region; {} removed, {} kept agreeing with equivalents".format(
+                ringed.sum(), len(peaks), removed, kept
+            )
+        )
+
     def _remove_forbidden_reflections(
-        self, crystal_structure, sigma=4.5, weak_frac=0.05, peaks=None
+        self,
+        crystal_structure,
+        sigma=4.5,
+        weak_frac=0.05,
+        peaks=None,
+        twin_laws=None,
     ):
         """
         Shared core for ``remove_forbidden_reflections`` and
@@ -802,8 +967,20 @@ class Peaks:
         if len(fund_idx) == 0:
             return
 
+        # predicted F2 averaged over twin domains (identity first, equal
+        # fractions), so a reflection allowed only in a twin domain, e.g. a
+        # reverse spot of an obverse/reverse twin, is not expected absent
+        laws = [np.eye(3)]
+        if twin_laws is not None:
+            laws += [np.asarray(T, dtype=float) for T in twin_laws]
+
+        fund_hkls = np.array([list(hkls[i]) for i in fund_idx])
+
         F2 = np.zeros(n_peaks)
-        F2[fund_idx] = generator.getFsSquared([hkls[i] for i in fund_idx])
+        for T in laws:
+            twin_hkls = [V3D(*hkl) for hkl in np.rint(fund_hkls @ T.T)]
+            F2[fund_idx] += np.array(generator.getFsSquared(twin_hkls))
+        F2 /= len(laws)
 
         F2_max = F2[fund_idx].max()
         if F2_max <= 0:
@@ -835,7 +1012,14 @@ class Peaks:
                 mtd[peaks].getPeak(int(idx)).setSigmaIntensity(float("-inf"))
 
     def remove_forbidden_reflections(
-        self, cell, space_group, sites, sigma=4.5, weak_frac=0.05, peaks=None
+        self,
+        cell,
+        space_group,
+        sites,
+        sigma=4.5,
+        weak_frac=0.05,
+        peaks=None,
+        twin_laws=None,
     ):
         """
         Flag anomalously strong forbidden/weak reflections using the
@@ -861,7 +1045,11 @@ class Peaks:
         )
 
         self._remove_forbidden_reflections(
-            crystal_structure, sigma=sigma, weak_frac=weak_frac, peaks=peaks
+            crystal_structure,
+            sigma=sigma,
+            weak_frac=weak_frac,
+            peaks=peaks,
+            twin_laws=twin_laws,
         )
 
     def remove_forbidden_reflections_from_cif(
@@ -997,6 +1185,40 @@ class Peaks:
             FindError=False,
         )
 
+    def load_consistent_UB(self, ub_file, tol=0.15, min_frac=0.9):
+        """
+        Load the UB matrix in ``ub_file`` onto the peaks only if it
+        indexes at least ``min_frac`` of them to their current HKL
+        within ``tol``; otherwise keep the UB the peaks carry, e.g. when
+        the file was saved before (or after) an ``HKLTransform``.
+        """
+        check = "_ub_check"
+        CloneWorkspace(InputWorkspace=self.peaks, OutputWorkspace=check)
+        LoadIsawUB(Filename=ub_file, InputWorkspace=check)
+        UB = mtd[check].sample().getOrientedLattice().getUB().copy()
+        DeleteWorkspace(Workspace=check)
+
+        UB_inv = np.linalg.inv(UB)
+
+        hkl, Q = [], []
+        for peak in mtd[self.peaks]:
+            hkl.append(np.array(peak.getHKL()))
+            Q.append(np.array(peak.getQSampleFrame()))
+        hkl, Q = np.array(hkl), np.array(Q)
+
+        indexed = np.abs(hkl).sum(axis=1) > 0
+        if not indexed.any():
+            return
+
+        hkl_UB = Q[indexed] @ UB_inv.T / (2 * np.pi)
+        frac = np.mean(np.all(np.abs(hkl_UB - hkl[indexed]) < tol, axis=1))
+
+        if frac >= min_frac:
+            LoadIsawUB(Filename=ub_file, InputWorkspace=self.peaks)
+        else:
+            message = "Skipping {}: indexes {:.0%} of peaks in current setting"
+            print(message.format(ub_file, frac))
+
     def load_spectrum(self, filename, instrument):
         LoadIsawSpectrum(
             SpectraFile=filename,
@@ -1055,8 +1277,20 @@ class Peaks:
             intens = run_info.getLogData("peaks_intens_raw").value
             sig = run_info.getLogData("peaks_sig_raw").value
 
+            # the radial fit along Q, logged with the 3D integration
+            radial = "peaks_I_rad" in run_keys
+            if radial:
+                I_rad = run_info.getLogData("peaks_I_rad").value
+                s_rad = run_info.getLogData("peaks_s_rad").value
+                rad_cov = run_info.getLogData("peaks_rad_cov").value
+                rad_off = run_info.getLogData("peaks_rad_off").value
+
+            # the logs are indexed as integrated, the peaks as transformed
+            hkl = np.column_stack([h, k, l]).astype(float)
+            hkl = np.rint(hkl @ np.asarray(self.HKLTransform).T).astype(int)
+
             for i in range(len(run)):
-                key = (run[i], h[i], k[i], l[i], m[i], n[i], p[i])
+                key = (run[i], *hkl[i], m[i], n[i], p[i])
                 info_dict[key] = {
                     "n_vox": n_vox[i],
                     "d3x": d3x[i],
@@ -1067,10 +1301,80 @@ class Peaks:
                     "bkg_norm": bkg_norm[i],
                     "ratio": ratio[i],
                 }
+                if radial:
+                    info_dict[key].update(
+                        {
+                            "I_rad": I_rad[i],
+                            "s_rad": s_rad[i],
+                            "rad_cov": rad_cov[i],
+                            "rad_off": rad_off[i],
+                        }
+                    )
                 norm_dict[key] = (intens[i], sig[i])
                 rate_dict[run[i]] = cntrt[i]
 
         return info_dict, norm_dict, rate_dict
+
+    def write_radial_comparison(self, filename):
+        """
+        Tabulate, for every peak with a radial fit along Q, its count
+        integration, the radial fit and their ratio, both normalized by
+        flux and solid angle and not yet scaled or corrected.
+
+        Parameters
+        ----------
+        filename : str
+            Name of the table; nothing is written without radial fits.
+
+        """
+
+        keys = [
+            key
+            for key, info in self.info_dict.items()
+            if np.isfinite(info.get("I_rad", np.nan))
+        ]
+        if not keys:
+            return
+
+        lines = [
+            "{:>8} {:>4} {:>4} {:>4} {:>3} {:>3} {:>3} {:>12} {:>12} "
+            "{:>12} {:>12} {:>8} {:>8} {:>9}".format(
+                "run",
+                "h",
+                "k",
+                "l",
+                "m",
+                "n",
+                "p",
+                "I_count",
+                "s_count",
+                "I_radial",
+                "s_radial",
+                "ratio",
+                "coverage",
+                "offset",
+            )
+        ]
+        for key in sorted(keys):
+            info = self.info_dict[key]
+            I, sig = self.norm_dict[key]
+            I_rad = info["I_rad"]
+            lines.append(
+                "{:8d} {:4d} {:4d} {:4d} {:3d} {:3d} {:3d} {:12.5g} {:12.5g} "
+                "{:12.5g} {:12.5g} {:8.4f} {:8.4f} {:9.5f}".format(
+                    *[int(v) for v in key],
+                    I,
+                    sig,
+                    I_rad,
+                    info["s_rad"],
+                    I_rad / I if I != 0 else np.nan,
+                    info["rad_cov"],
+                    info["rad_off"],
+                )
+            )
+
+        with open(filename, "w") as f:
+            f.write("\n".join(lines) + "\n")
 
     def update_monitor(self):
         stat_dict = {}
@@ -1090,14 +1394,16 @@ class Peaks:
         if os.path.exists(merge):
             LoadNexus(Filename=merge, OutputWorkspace=self.peaks + "_merge")
 
-        ub_file = self.filename.replace(".nxs", ".mat")
-
-        if os.path.exists(ub_file):
-            LoadIsawUB(Filename=ub_file, InputWorkspace=self.peaks)
-
         self.transform_hkl(self.peaks)
         if mtd.doesExist(self.peaks + "_merge"):
             self.transform_hkl(self.peaks + "_merge")
+
+        # the saved UB is written in whatever setting the last run used, so
+        # it is only adopted if it indexes the peaks as they now stand
+        ub_file = self.filename.replace(".nxs", ".mat")
+
+        if os.path.exists(ub_file):
+            self.load_consistent_UB(ub_file)
 
         self.filename = re.sub(
             r"(_\([-+]?\d*\.?\d+,\s*[-+]?\d*\.?\d+,\s*[-+]?\d*\.?\d+\))+",
@@ -1111,6 +1417,8 @@ class Peaks:
 
         self.info_dict = info_dict
         self.norm_dict = norm_dict
+
+        self.write_radial_comparison(filename + "_radial.txt")
 
         x, y = [], []
 
@@ -1230,6 +1538,8 @@ class Peaks:
         )
 
         self.remove_volume_outliers()
+
+        self.remove_powder_shells()
 
         FilterPeaks(
             InputWorkspace=self.peaks,

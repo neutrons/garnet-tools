@@ -55,6 +55,7 @@ class StructureAnalysis:
 
         self.sites = defaults.get("Sites")
         self.twin_laws = defaults.get("TwinLaws")
+        self.hkl_transform = defaults.get("HKLTransform")
         self.ext_model = defaults.get("ExtinctionModel")
 
         self.refine_abs = False
@@ -82,7 +83,10 @@ class StructureAnalysis:
 
         if self.space_group is not None and self.sites is not None:
             self.peaks.remove_forbidden_reflections(
-                self.cell, self.space_group, self.sites
+                self.cell,
+                self.space_group,
+                self.sites,
+                twin_laws=self.twin_laws,
             )
 
         apply_corr = False
@@ -115,7 +119,13 @@ class StructureAnalysis:
             print("Provide space group for MTZ")
 
     def load_peaks(self):
-        self.peaks = Peaks("peaks", self.filename, None, self.point_group)
+        self.peaks = Peaks(
+            "peaks",
+            self.filename,
+            None,
+            self.point_group,
+            HKLTransform=self.hkl_transform,
+        )
         self.peaks.load_peaks()
         self.cell = self.peaks.get_cell()
 

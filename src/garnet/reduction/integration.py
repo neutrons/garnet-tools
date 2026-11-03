@@ -48,16 +48,6 @@ _MIN_PRIOR_SCALE = 0.25
 # peak discarded
 _CONSUMED_SHAPE_CHI2 = 19.80
 
-# a reflection whose fitted shape, relative to its prior, has any principal
-# log variance ratio, or whose center offset in prior radii is, more than
-# this many robust standard deviations above the run's well-measured
-# reflections is pruned, e.g. one consumed by a
-# powder line from the sample environment; the spread is at least
-# _MIN_SHAPE_SPREAD so that a run of very consistent shapes does not prune
-# small, real differences
-_SHAPE_OUTLIER_Z = 3.5
-_MIN_SHAPE_SPREAD = 0.1
-
 # a fit whose Gaussian mass outside the measured voxels exceeds its prior's
 # by more than this fraction grew or moved out of the data, its size set by
 # whatever lies at the edge (e.g. a powder line), and the peak is discarded
@@ -83,7 +73,6 @@ class Integration(PeakProjection):
         self.output = plan["OutputName"] + "_integration"
 
         # each fitted reflection's shape relative to its prior, by peak
-        self.shape_deviations = {}
 
         self.validate_params()
 
@@ -117,8 +106,6 @@ class Integration(PeakProjection):
             self.params["OptimizePeaks"] = False
         if self.params.get("ProfileFit") is None:
             self.params["ProfileFit"] = True
-        if self.params.get("RadialFit") is None:
-            self.params["RadialFit"] = False
 
         self.check(
             self.params["MaxOrder"], ">=", 0, "MaxOrder must be non-negative"
@@ -135,20 +122,6 @@ class Integration(PeakProjection):
             bool,
             "ProfileFit must be a boolean",
         )
-        self.check(
-            type(self.params["RadialFit"]),
-            "is",
-            bool,
-            "RadialFit must be a boolean",
-        )
-        if self.params["RadialFit"]:
-            self.check(
-                self.params["ProfileFit"],
-                "==",
-                False,
-                "RadialFit is only supported with quick integration "
-                "(ProfileFit false)",
-            )
 
     @staticmethod
     def integrate_parallel(plan, runs, proc):
@@ -461,10 +434,14 @@ class Integration(PeakProjection):
             self.peaks, self.data = peaks, data
             self.r_cut = r_cut
 
+            # a diagnostic fit along Q, always made and logged with each
+            # peak's 3D integration so that both are kept side by side; the
+            # intensities are those of the 3D integration. It is made before
+            # the events are masked to each bank
+            radial = self.fit_radial_profiles("data", "peaks", res, r_cut)
+
             if self.params["ProfileFit"]:
                 self.prior_scales = self.structure_factor_prior_scales("peaks")
-
-                self.shape_deviations = {}
 
                 banks = peaks.get_bank_names("peaks")
 
@@ -494,7 +471,7 @@ class Integration(PeakProjection):
 
                     del peak_dict
 
-                    self.update_peak_info("peaks", results)
+                    self.update_peak_info("peaks", results, radial=radial)
 
                     del results
 
@@ -502,17 +479,13 @@ class Integration(PeakProjection):
 
                     if self.make_plot:
                         self.peak_plot.close()
-
-                self.prune_shape_outliers("peaks")
             else:
                 # the count is of the background-subtracted events, if any
                 self.integrate_peaks_normalized(
-                    "data" + app, "peaks", res, r_cut
+                    "data" + app, "peaks", res, r_cut, radial=radial
                 )
-                if self.params["RadialFit"]:
-                    self.integrate_peaks_radial(
-                        "data", "peaks", res, r_cut, run
-                    )
+
+            self.write_radial_diagnostics("peaks", radial, run)
 
             timer.lap("integrate peaks")
 
@@ -856,13 +829,6 @@ class Integration(PeakProjection):
                     print("Exception extracting intensity: {}".format(e))
                     print(traceback.format_exc())
                     result[key] = None
-                else:
-                    self.shape_deviations[key] = (
-                        ellipsoid.shape_log_variance_ratios(),
-                        ellipsoid.center_prior_offset(),
-                        intens,
-                        sig,
-                    )
 
                 info = ellipsoid.info
                 best_prof = ellipsoid.best_prof
@@ -1099,7 +1065,7 @@ class Integration(PeakProjection):
 
                     peak.set_peak_center(i, Q0, Q1, Q2)
 
-    def update_peak_info(self, peaks_ws, peak_dict):
+    def update_peak_info(self, peaks_ws, peak_dict, radial=None):
         peak = PeakModel(peaks_ws)
 
         for i, value in peak_dict.items():
@@ -1115,6 +1081,9 @@ class Integration(PeakProjection):
                 info["Qy"] = Qy
                 info["Qz"] = Qz
                 info["cntrt"] = self.cntrt
+
+                if radial is not None:
+                    info.update(self.radial_info(radial[i]))
 
                 peak.add_diagnostic_info(i, info)
 
@@ -1353,75 +1322,6 @@ class Integration(PeakProjection):
 
         return F2 / len(twins)
 
-    def prune_shape_outliers(self, peaks_ws):
-        """
-        Prune reflections whose fitted shapes grew, or whose centers moved,
-        far more than the rest of the run's, relative to their priors, e.g.
-        consumed by a powder line from the sample environment, whose rings
-        do not fall at known d-spacings when it is off the sample position.
-
-        Each fitted shape's principal log variance ratios to its prior,
-        largest first, and its center offset in prior radii are compared
-        with the median and robust spread (scaled median absolute
-        deviation, at least _MIN_SHAPE_SPREAD) of those of the run's
-        reflections with I/sigma of at least 10, so a prior off for every
-        reflection alike, or a calibration moving every center alike,
-        prunes none. A reflection with any of these more than
-        _SHAPE_OUTLIER_Z spreads above the median is pruned (its intensity
-        set to zero, as for a failed fit): the largest ratio for a shape
-        stretched along one direction, all for one grown in every
-        direction, the offset for one pulled aside. Only growth and
-        movement are pruned.
-
-        Parameters
-        ----------
-        peaks_ws : str
-            Name of peaks table.
-
-        """
-
-        deviations = self.shape_deviations
-        if len(deviations) < 10:
-            return
-
-        keys = np.array(list(deviations.keys()))
-        L = np.array(
-            [np.append(deviations[k][0], deviations[k][1]) for k in keys]
-        )
-        I = np.array([deviations[k][2] for k in keys], dtype=float)
-        sig = np.array([deviations[k][3] for k in keys], dtype=float)
-
-        with np.errstate(divide="ignore", invalid="ignore"):
-            reference = (sig > 0) & (I / sig >= 10)
-        if reference.sum() < 10:
-            reference = np.ones(len(keys), dtype=bool)
-
-        median = np.median(L[reference], axis=0)
-        spread = 1.4826 * np.median(np.abs(L[reference] - median), axis=0)
-        spread = np.maximum(spread, _MIN_SHAPE_SPREAD)
-
-        z = (L - median) / spread > _SHAPE_OUTLIER_Z
-        grown = np.all(z[:, :3], axis=1)
-        stretched = np.any(z[:, :3], axis=1) & ~grown
-        moved = z[:, 3] & ~grown & ~stretched
-        outlier = grown | stretched | moved
-
-        peak = PeakModel(peaks_ws)
-        for k in keys[outlier]:
-            peak.set_peak_intensity(int(k), 0, 0)
-
-        print(
-            "pruned {} of {} fitted reflections whose shapes grew or "
-            "centers moved beyond the run's: {} grown in every direction, "
-            "{} along fewer, {} moved only".format(
-                outlier.sum(),
-                len(keys),
-                grown.sum(),
-                stretched.sum(),
-                moved.sum(),
-            )
-        )
-
     def structure_factor_prior_scales(self, peaks_ws):
         """
         Factor scaling the widths of each peak's ellipsoid fit prior, from
@@ -1464,7 +1364,9 @@ class Integration(PeakProjection):
 
         return scales
 
-    def integrate_peaks_normalized(self, data_ws, peaks_ws, res, r_cut):
+    def integrate_peaks_normalized(
+        self, data_ws, peaks_ws, res, r_cut, radial=None
+    ):
         """
         Quick integration of every peak: the events in its resolution
         ellipsoid less those in the equal-volume shell around it, already
@@ -1482,6 +1384,10 @@ class Integration(PeakProjection):
         r_cut : float
             Radius of the region around each peak, which bounds the
             background shell.
+        radial : list, optional
+            Radial fit of each peak from `fit_radial_profiles`, logged with
+            its diagnostics (``I_rad``, ``s_rad``, ``rad_cov``,
+            ``rad_off``). The default is None, for none.
 
         """
 
@@ -1541,45 +1447,54 @@ class Integration(PeakProjection):
                 "cntrt": self.cntrt,
             }
 
+            # logged in the same call, as each call appends one entry per
+            # key, so that the logs of a peak stay at the same index
+            if radial is not None:
+                info.update(self.radial_info(radial[i]))
+
             peak.add_diagnostic_info(i, info)
 
-    def integrate_peaks_radial(self, data_ws, peaks_ws, res, r_cut, run):
+    def fit_radial_profiles(self, data_ws, peaks_ws, res, r_cut):
         """
-        Replace each peak's intensity with that of a fit of its profile
-        along Q only, summed over a disc across it of six of the
-        resolution model's transverse standard deviations, so that a peak
-        split by misoriented grains (whose parts have the same |Q|) is
-        integrated whole. The events fitted are counts, not
+        Fit each peak's profile along Q only, summed over a disc across it
+        of six of the resolution model's transverse standard deviations, so
+        that a peak split by misoriented grains (whose parts have the same
+        |Q|) is integrated whole. The events fitted are counts, not
         background-subtracted: a reference background, if loaded, is
-        instead a known part of the expected counts. The intensities from
-        `integrate_peaks_normalized` are written with them, for comparison,
-        to a diagnostic table.
+        instead a known part of the expected counts. The peaks' intensities
+        are left unchanged; the fits are logged with the 3D integration, by
+        `integrate_peaks_normalized` or `update_peak_info`.
 
         Parameters
         ----------
         data_ws : str
             Name of the events, cropped for normalization.
         peaks_ws : str
-            Name of peaks table, already integrated.
+            Name of peaks table.
         res : ResolutionEllipsoid
-            Resolution model giving each peak's shape; without a model the
-            intensities are left unchanged.
+            Resolution model giving each peak's shape.
         r_cut : float
             Radius of the region around each peak, which bounds the
             half-length and disc radius.
-        run : int
-            Run number, for the diagnostic table.
+
+        Returns
+        -------
+        results : list
+            Radial fit of each peak from `integrate_radial_profiles`, or
+            None for every peak without a resolution model, so that every
+            run logs the same keys.
 
         """
 
-        if res is None or res.model is None:
-            print("no resolution model, radial fit skipped")
-            return
-
         peak = PeakModel(peaks_ws)
         n_peaks = peak.get_number_peaks()
+
+        if res is None or res.model is None:
+            print("no resolution model, radial fit skipped")
+            return [None] * n_peaks
+
         if n_peaks == 0:
-            return
+            return []
 
         with self.timer.section("radial profile fits"):
             centers = [np.array(peak.get_sample_Q(i)) for i in range(n_peaks)]
@@ -1605,6 +1520,68 @@ class Integration(PeakProjection):
                 background="bkg" if scale is not None else None,
                 background_scale=scale if scale is not None else 1.0,
             )
+
+        return results
+
+    @staticmethod
+    def radial_info(result):
+        """
+        Diagnostic entries of a radial fit, NaN where there is none or it
+        failed, so that every peak logs the same keys.
+
+        Parameters
+        ----------
+        result : dict or None
+            Radial fit of a peak from `integrate_radial_profiles`.
+
+        Returns
+        -------
+        info : dict
+            ``I_rad`` and ``s_rad``, the intensity and its uncertainty,
+            ``rad_cov``, the coverage, and ``rad_off``, the offset in |Q|.
+
+        """
+
+        info = {
+            "I_rad": np.nan,
+            "s_rad": np.nan,
+            "rad_cov": np.nan,
+            "rad_off": np.nan,
+        }
+
+        if result is None:
+            return info
+
+        I, sigma = result["intensity"], result["sigma"]
+        if np.isfinite(I) and np.isfinite(sigma) and sigma > 0:
+            info["I_rad"] = float(I)
+            info["s_rad"] = float(sigma)
+            info["rad_cov"] = float(result["coverage"])
+            info["rad_off"] = float(result["offset"])
+
+        return info
+
+    def write_radial_diagnostics(self, peaks_ws, results, run):
+        """
+        Write the radial fits with the 3D integration (the count or the
+        profile fit), for comparison, to a diagnostic table, and plot the
+        strongest.
+
+        Parameters
+        ----------
+        peaks_ws : str
+            Name of peaks table, already integrated.
+        results : list
+            Radial fit of each peak from `fit_radial_profiles`.
+        run : int
+            Run number, for the diagnostic table.
+
+        """
+
+        if all(result is None for result in results):
+            return
+
+        peak = PeakModel(peaks_ws)
 
         table = self.get_diagnostic_file("run#{}_radial".format(run), ".txt")
         lines = [
@@ -1653,10 +1630,6 @@ class Integration(PeakProjection):
                     result["pixels"],
                 )
             )
-            if np.isfinite(I) and np.isfinite(sigma) and sigma > 0:
-                peak.set_peak_intensity(i, I, sigma)
-            else:
-                peak.set_peak_intensity(i, 0, 0)
 
         with open(table, "w") as f:
             f.write("\n".join(lines) + "\n")

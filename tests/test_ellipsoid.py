@@ -650,47 +650,6 @@ def test_shape_prior_distance_in_scaled_prior_widths():
     assert np.isclose(held.shape_prior_distance(), 4 * (1 + 4))
 
 
-def test_shape_log_variance_ratios():
-    """Uniform growth raises all three ratios alike; stretching one axis raises one."""
-    x = np.linspace(-1, 1, 5)
-    x0, x1, x2 = np.meshgrid(x, x, x, indexing="ij")
-    c, s = np.cos(0.4), np.sin(0.4)
-    axes = (np.array([c, s, 0.0]), np.array([-s, c, 0.0]), np.eye(3)[2])
-
-    ellipsoid = PeakEllipsoid()
-    _make_reference(ellipsoid, x0, x1, x2, 0.2, 0.3, 0.4, axes)
-    assert np.allclose(ellipsoid.shape_log_variance_ratios(), 0, atol=1e-10)
-
-    # radii times exp(0.3): variances times exp(0.6)
-    ellipsoid.params["log_size"].set(value=0.3)
-    assert np.allclose(ellipsoid.shape_log_variance_ratios(), 0.6)
-
-    # any orientation change of the reference leaves the ratios in its frame
-    ellipsoid.params["log_size"].set(value=0.0)
-    ellipsoid.params["shape_1"].set(value=0.2)
-    ratios = ellipsoid.shape_log_variance_ratios()
-    expected = 2 * SHAPE_BASIS @ np.array([0.2, 0.0])
-    assert np.allclose(ratios, np.sort(expected)[::-1])
-
-
-def test_center_prior_offset_in_reference_radii():
-    """The center offset is measured in the reference radii along each axis."""
-    x = np.linspace(-1, 1, 5)
-    x0, x1, x2 = np.meshgrid(x, x, x, indexing="ij")
-    axes = (np.eye(3)[0], np.eye(3)[1], np.eye(3)[2])
-
-    ellipsoid = PeakEllipsoid()
-    _make_reference(ellipsoid, x0, x1, x2, 0.2, 0.3, 0.4, axes)
-    assert ellipsoid.center_prior_offset() == 0.0
-
-    ellipsoid.params["c1"].set(value=0.15)
-    assert np.isclose(ellipsoid.center_prior_offset(), 0.5)
-
-    ellipsoid.params["c1"].set(value=0.0)
-    ellipsoid.params["c2"].set(value=-0.8)
-    assert np.isclose(ellipsoid.center_prior_offset(), 2.0)
-
-
 def test_support_loss_relative_to_reference():
     """A reference beside a gap loses nothing; a fit grown past the box does."""
     ellipsoid = PeakEllipsoid()

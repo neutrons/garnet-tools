@@ -219,39 +219,6 @@ class PeakEllipsoid:
         """
         return float(np.sum(self.prior_residual(self.params)[3:] ** 2))
 
-    def shape_log_variance_ratios(self):
-        """
-        The fitted shape's principal variances relative to the reference
-        ellipsoid's, as the logarithms of the generalized eigenvalues of
-        the fitted covariance with respect to the reference's, largest
-        first: all near 0 for the reference shape, one large for a shape
-        stretched along one direction, all large for one grown in every
-        direction. Independent of orientation angles, which are ill
-        defined for nearly round shapes.
-
-        Returns
-        -------
-        log_ratios : ndarray of shape (3,)
-            Log variance ratios, in decreasing order.
-        """
-        S = self.S_matrix(*self.shape_from_params(self.params))
-        ratios = scipy.linalg.eigh(S, self.prior_cov, eigvals_only=True)
-        return np.sort(np.log(ratios))[::-1]
-
-    def center_prior_offset(self):
-        """
-        How far the fitted center moved from the reference ellipsoid's,
-        in its radii: the Mahalanobis distance of the center offset under
-        the reference covariance, 1 at the reference's surface.
-
-        Returns
-        -------
-        offset : float
-            Center offset in reference radii.
-        """
-        c = np.array([self.params[k].value for k in ("c0", "c1", "c2")])
-        return float(np.sqrt(c @ np.linalg.solve(self.prior_cov, c)))
-
     def support_loss(self):
         """
         The fraction of the fitted peak's Gaussian mass outside the valid

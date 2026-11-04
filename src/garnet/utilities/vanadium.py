@@ -55,7 +55,6 @@ from mantid.simpleapi import (
     CopyInstrumentParameters,
     GenerateGoniometerIndependentBackground,
     SaveDetectorsGrouping,
-    FilterBadPulses,
     CloneWorkspace,
     DeleteWorkspace,
     RenameWorkspace,
@@ -318,7 +317,11 @@ class Vanadium:
             LoadNexusInstrumentXML=False,
         )
 
-        FilterBadPulses(InputWorkspace=workspace, OutputWorkspace=workspace)
+        # FilterBadPulses(InputWorkspace=workspace, OutputWorkspace=workspace)
+
+        CompressEvents(
+            InputWorkspace=workspace, Tolerance=1e1, OutputWorkspace=workspace
+        )
 
         NormaliseByCurrent(InputWorkspace=workspace, OutputWorkspace=workspace)
 

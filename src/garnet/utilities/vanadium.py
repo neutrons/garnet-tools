@@ -374,7 +374,7 @@ class Vanadium:
                 vals.append(float(val))
 
                 CompressEvents(
-                    InputWorkspace=ws, Tolerance=1e-3, OutputWorkspace=ws
+                    InputWorkspace=ws, Tolerance=1e-2, OutputWorkspace=ws
                 )
 
             GenerateGoniometerIndependentBackground(
@@ -413,7 +413,7 @@ class Vanadium:
         MaskDetectors(Workspace=workspace, MaskedWorkspace="mask")
 
         CompressEvents(
-            InputWorkspace=workspace, Tolerance=1e-3, OutputWorkspace=workspace
+            InputWorkspace=workspace, Tolerance=1e-2, OutputWorkspace=workspace
         )
 
         pc = mtd[workspace].run().getProperty("gd_prtn_chrg")
@@ -439,6 +439,10 @@ class Vanadium:
             LHSWorkspace="vanadium",
             RHSWorkspace="background",
             OutputWorkspace="vanadium",
+        )
+
+        CompressEvents(
+            InputWorkspace="vanadium", Tolerance=1e-2, OutputWorkspace="vanadium"
         )
 
     def _vanadium_niobium_lattice_constant(self, x):

@@ -57,6 +57,8 @@ from mantid.simpleapi import (
     SaveDetectorsGrouping,
     FilterBadPulses,
     CloneWorkspace,
+    DeleteWorkspace,
+    RenameWorkspace,
     mtd,
 )
 
@@ -348,18 +350,20 @@ class Vanadium:
         if mtd[workspace].isGroup():
             vals = []
 
-            for ws in mtd[workspace].getNames():
+            members = mtd[workspace].getNames()
+
+            for ws in members:
                 pc = mtd[ws].run().getProperty("gd_prtn_chrg")
 
                 val = pc.valueAsStr
                 uni = pc.units
 
-                RemoveLogs(Workspace=workspace)
+                RemoveLogs(Workspace=ws)
 
                 logs = ["gd_prtn_chrg", "NormalizationFactor"]
                 for log in logs:
                     AddSampleLog(
-                        Workspace=workspace,
+                        Workspace=ws,
                         LogName=log,
                         LogText="1.0",
                         LogUnit=uni,
@@ -369,12 +373,22 @@ class Vanadium:
 
                 vals.append(float(val))
 
+                CompressEvents(
+                    InputWorkspace=ws, Tolerance=1e-3, OutputWorkspace=ws
+                )
+
             GenerateGoniometerIndependentBackground(
                 InputWorkspaces=workspace,
-                OutputWorkspace=workspace,
+                OutputWorkspace=workspace + "_ggib",
                 GroupingFile=self.grouping,
                 PercentMin=0,
                 PercentMax=75,
+            )
+
+            # overwriting the group name would leave its members in the ADS
+            DeleteWorkspace(Workspace=workspace)
+            RenameWorkspace(
+                InputWorkspace=workspace + "_ggib", OutputWorkspace=workspace
             )
 
             logs = ["gd_prtn_chrg", "NormalizationFactor"]

@@ -1284,6 +1284,14 @@ class Peaks:
                 s_rad = run_info.getLogData("peaks_s_rad").value
                 rad_cov = run_info.getLogData("peaks_rad_cov").value
                 rad_off = run_info.getLogData("peaks_rad_off").value
+                # compared with the reported 3D intensity, normalized: the
+                # profile fit's, or else the normalized count's; the raw
+                # intensity of the profile fit is in counts
+                if "peaks_I_fit" in run_keys:
+                    I_ref = run_info.getLogData("peaks_I_fit").value
+                    s_ref = run_info.getLogData("peaks_s_fit").value
+                else:
+                    I_ref, s_ref = intens, sig
 
             # the logs are indexed as integrated, the peaks as transformed
             hkl = np.column_stack([h, k, l]).astype(float)
@@ -1308,6 +1316,8 @@ class Peaks:
                             "s_rad": s_rad[i],
                             "rad_cov": rad_cov[i],
                             "rad_off": rad_off[i],
+                            "I_ref": I_ref[i],
+                            "s_ref": s_ref[i],
                         }
                     )
                 norm_dict[key] = (intens[i], sig[i])
@@ -1317,9 +1327,10 @@ class Peaks:
 
     def write_radial_comparison(self, filename):
         """
-        Tabulate, for every peak with a radial fit along Q, its count
-        integration, the radial fit and their ratio, both normalized by
-        flux and solid angle and not yet scaled or corrected.
+        Tabulate, for every peak with a radial fit along Q, its 3D
+        integration (the profile fit or the count), the radial fit and their
+        ratio, both normalized by flux and solid angle and not yet scaled or
+        corrected.
 
         Parameters
         ----------
@@ -1357,7 +1368,7 @@ class Peaks:
         ]
         for key in sorted(keys):
             info = self.info_dict[key]
-            I, sig = self.norm_dict[key]
+            I, sig = info["I_ref"], info["s_ref"]
             I_rad = info["I_rad"]
             lines.append(
                 "{:8d} {:4d} {:4d} {:4d} {:3d} {:3d} {:3d} {:12.5g} {:12.5g} "

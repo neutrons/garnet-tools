@@ -1,6 +1,7 @@
 import itertools
 
 import numpy as np
+import pytest
 
 from mantid.simpleapi import (
     CloneWorkspace,
@@ -112,8 +113,13 @@ def test_load_consistent_UB_after_transform(tmp_path):
     )
 
 
-def test_radial_comparison_from_logs(tmp_path):
-    """The radial fit logged with each peak is tabulated with its count."""
+@pytest.mark.parametrize("profile_fit", [False, True])
+def test_radial_comparison_from_logs(tmp_path, profile_fit):
+    """
+    The radial fit logged with each peak is tabulated with its reported 3D
+    intensity: the normalized count, or the profile fit, whose raw
+    intensity is in counts.
+    """
     from garnet.reduction.peaks import PeakModel
 
     CreatePeaksWorkspace(
@@ -136,7 +142,7 @@ def test_radial_comparison_from_logs(tmp_path):
             "d3x": 0.0,
             "n_vox": 0,
             "vol_frac": 1.0,
-            "intens_raw": I,
+            "intens_raw": 1000 * I if profile_fit else I,
             "sig_raw": np.sqrt(I),
             "pk_data": I,
             "pk_norm": 1.0,
@@ -149,6 +155,8 @@ def test_radial_comparison_from_logs(tmp_path):
             "rad_cov": 0.95,
             "rad_off": 0.0,
         }
+        if profile_fit:
+            info.update({"I_fit": I, "s_fit": np.sqrt(I)})
         model.add_diagnostic_info(i, info)
 
     # the logs are keyed in the setting the peaks are transformed to

@@ -24,7 +24,8 @@ from mantid.simpleapi import (
     SetGoniometer,
     SetSample,
     LoadSampleShape,
-    TransformHKL,
+    FindUBUsingIndexedPeaks,
+    IndexPeaks,
     mtd,
 )
 
@@ -1174,16 +1175,14 @@ class Peaks:
         if np.allclose(self.HKLTransform, np.eye(3)):
             return
 
-        hkl_trans = ",".join(
-            "{},{},{}".format(*row) for row in self.HKLTransform
-        )
+        T = np.asarray(self.HKLTransform, dtype=float)
 
-        TransformHKL(
-            PeaksWorkspace=peaks,
-            Tolerance=tol,
-            HKLTransform=hkl_trans,
-            FindError=False,
-        )
+        for peak in mtd[peaks]:
+            hkl = T @ np.array(peak.getHKL())
+            peak.setHKL(*hkl)
+
+        FindUBUsingIndexedPeaks(PeaksWorkspace=peaks, Tolerance=tol)
+        IndexPeaks(PeaksWorkspace=peaks, Tolerance=tol, RoundHKLs=False)
 
     def load_consistent_UB(self, ub_file, tol=0.15, min_frac=0.9):
         """

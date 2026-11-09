@@ -96,8 +96,19 @@ def test_load_consistent_UB_after_transform(tmp_path):
 
     T = [[0, -1, 0], [-1, 0, 0], [0, 0, -1]]
     peaks = Peaks("ub", str(tmp_path / "ub.nxs"), HKLTransform=T)
+    UB_original = ws.sample().getOrientedLattice().getUB().copy()
+    hkl_before = np.array([ws.getPeak(i).getIntHKL() for i in range(6)])
     peaks.transform_hkl()
     UB_transformed = ws.sample().getOrientedLattice().getUB().copy()
+
+    # relabeling hkl -> T hkl at fixed Q refits UB -> UB T^-1
+    assert np.allclose(UB_transformed, UB_original @ np.linalg.inv(T))
+
+    # IndexPeaks drops some synthetic LeanElasticPeaks; check those kept
+    hkl_after = np.array([ws.getPeak(i).getIntHKL() for i in range(6)])
+    kept = np.abs(hkl_after).sum(axis=1) > 0
+    assert kept.any()
+    assert np.allclose(hkl_after[kept], (hkl_before @ np.array(T).T)[kept])
 
     peaks.load_consistent_UB(str(original))
     assert np.allclose(ws.sample().getOrientedLattice().getUB(), UB_transformed)

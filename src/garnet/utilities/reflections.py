@@ -1177,12 +1177,18 @@ class Peaks:
 
         T = np.asarray(self.HKLTransform, dtype=float)
 
+        # FindUBUsingIndexedPeaks fits to the integer HKL, so set both
         for peak in mtd[peaks]:
-            hkl = T @ np.array(peak.getHKL())
-            peak.setHKL(*hkl)
+            peak.setHKL(*(T @ np.array(peak.getHKL())))
+            peak.setIntHKL(V3D(*(T @ np.array(peak.getIntHKL()))))
 
         FindUBUsingIndexedPeaks(PeaksWorkspace=peaks, Tolerance=tol)
-        IndexPeaks(PeaksWorkspace=peaks, Tolerance=tol, RoundHKLs=False)
+        IndexPeaks(
+            PeaksWorkspace=peaks,
+            Tolerance=tol,
+            RoundHKLs=False,
+            CommonUBForAll=True,
+        )
 
     def load_consistent_UB(self, ub_file, tol=0.15, min_frac=0.9):
         """

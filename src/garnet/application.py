@@ -1994,6 +1994,13 @@ class FormView(QWidget):
             QDoubleValidator(0.01, 100, 3, notation=notation)
         )
 
+        single_crystal_box = QCheckBox("Single Crystal Vanadium", self)
+        single_crystal_box.setChecked(True)
+        single_crystal_box.setToolTip(
+            "Checked: goniometer-independent background over the runs. "
+            "Unchecked (polycrystal): runs are summed."
+        )
+
         mom_validator = QDoubleValidator(0.01, 100, 4, notation=notation)
         mom_min_line = QLineEdit("1.8")
         mom_min_line.setValidator(mom_validator)
@@ -2077,6 +2084,7 @@ class FormView(QWidget):
         grid.addWidget(van_time_stop_line, 3, 1)
         grid.addWidget(QLabel("No-Sample Time Stop:"), 3, 2)
         grid.addWidget(bkg_time_stop_line, 3, 3)
+        grid.addWidget(single_crystal_box, 3, 4, 1, 2)
 
         limits_widget = QWidget()
         limits_layout = QHBoxLayout()
@@ -2155,6 +2163,7 @@ class FormView(QWidget):
                     int(group_x_line.text()),
                     int(group_y_line.text()),
                 ],
+                "SingleCrystal": single_crystal_box.isChecked(),
             }
             if van_ipts_line.text():
                 params["VanadiumIPTS"] = int(van_ipts_line.text())
@@ -2242,6 +2251,8 @@ class FormView(QWidget):
             mom_limits = params.get("MomentumLimits", [1.8, 18])
             mom_min_line.setText(str(mom_limits[0]))
             mom_max_line.setText(str(mom_limits[1]))
+
+            single_crystal_box.setChecked(params.get("SingleCrystal", True))
 
             grouping = params.get("Grouping", [4, 4])
             group_x_line.setText(str(grouping[0]))

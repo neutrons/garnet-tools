@@ -84,6 +84,7 @@ class Vanadium:
             "VanadiumTimeStop": None,
             "NoSampleTimeStop": None,
             "CountRateStep": 0.01,
+            "SingleCrystal": True,
         }
 
         defaults.update(config)
@@ -115,6 +116,10 @@ class Vanadium:
         self.x_bins, self.y_bins = defaults.get("Grouping")
 
         self.count_rate_step = defaults.get("CountRateStep")
+
+        # single crystal: goniometer-independent background over the runs
+        # polycrystal: runs are summed on load
+        self.single_crystal = defaults.get("SingleCrystal")
 
         self.file_folder = "/SNS/{}/IPTS-{}/nexus/"
         self.file_name = "{}_{}.nxs.h5"
@@ -293,11 +298,13 @@ class Vanadium:
 
         return runs
 
-    def load_runs(self, workspace, ipts, run_nos, time_stop=None):
+    def load_runs(
+        self, workspace, ipts, run_nos, time_stop=None, single_crystal=True
+    ):
         if not isinstance(run_nos, list):
             run_nos = self._runs_string_to_list(run_nos)
 
-        files_to_load = ",".join(
+        files_to_load = ("," if single_crystal else "+").join(
             [
                 os.path.join(
                     self.file_folder.format(self.instrument, ipts),
@@ -987,7 +994,11 @@ class Vanadium:
         self.apply_masks()
         self.apply_calibration()
         self.load_runs(
-            "vanadium", self.van_ipts, self.van_nos, self.van_time_stop
+            "vanadium",
+            self.van_ipts,
+            self.van_nos,
+            self.van_time_stop,
+            self.single_crystal,
         )
         self.load_runs(
             "background", self.bkg_ipts, self.bkg_nos, self.bkg_time_stop

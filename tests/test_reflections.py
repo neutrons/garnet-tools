@@ -124,6 +124,23 @@ def test_load_consistent_UB_after_transform(tmp_path):
     )
 
 
+@pytest.mark.parametrize(
+    "T",
+    [
+        [[1, 0, 0], [0, 1, 0], [0, 0, -1]],
+        [[0, 1, 0], [1, 0, 0], [0, 0, 1]],
+        np.zeros((3, 3)),
+    ],
+)
+def test_improper_transform_rejected(tmp_path, T):
+    """A transform with det <= 0 would make the UB left-handed."""
+    CreatePeaksWorkspace(
+        NumberOfPeaks=0, OutputType="LeanElasticPeak", OutputWorkspace="det"
+    )
+    with pytest.raises(ValueError, match="positive determinant"):
+        Peaks("det", str(tmp_path / "det.nxs"), HKLTransform=T)
+
+
 @pytest.mark.parametrize("profile_fit", [False, True])
 def test_radial_comparison_from_logs(tmp_path, profile_fit):
     """
@@ -188,3 +205,66 @@ def test_radial_comparison_from_logs(tmp_path, profile_fit):
     rows = [line.split() for line in lines[1:]]
     ratios = {tuple(map(int, row[1:4])): float(row[11]) for row in rows}
     assert ratios == {(1, 1, -1): 1.1, (1, 3, -1): 0.8}
+
+
+def test_radial_intensities_replace_3D(tmp_path):
+    """
+    With Intensity: Radial, each peak reports its logged radial fit, and a
+    peak whose fit failed is flagged for removal.
+    """
+    from garnet.reduction.peaks import PeakModel
+
+    CreatePeaksWorkspace(
+        NumberOfPeaks=0, OutputType="LeanElasticPeak", OutputWorkspace="ri"
+    )
+    SetUB(Workspace="ri", a=5.431, b=5.431, c=5.431)
+    ws = mtd["ri"]
+    hkls = [[1, 1, 1], [2, 2, 0], [3, 1, 1]]
+    for hkl in hkls:
+        peak = ws.createPeakHKL([float(v) for v in hkl])
+        peak.setIntHKL(V3D(*hkl))
+        peak.setRunNumber(7)
+        peak.setIntensity(100.0)
+        peak.setSigmaIntensity(10.0)
+        ws.addPeak(peak)
+
+    I_rads = [110.0, np.nan, 20.0]
+    model = PeakModel("ri")
+    for i, I_rad in enumerate(I_rads):
+        info = {
+            "d3x": 0.0,
+            "n_vox": 0,
+            "vol_frac": 1.0,
+            "intens_raw": 100.0,
+            "sig_raw": 10.0,
+            "pk_data": 100.0,
+            "pk_norm": 1.0,
+            "bkg_data": 0.0,
+            "bkg_norm": 1.0,
+            "ratio": 1.0,
+            "cntrt": 1.0,
+            "I_rad": I_rad,
+            "s_rad": 2.0,
+            "rad_cov": 0.95 if i == 0 else 0.3,
+            "rad_off": 0.0,
+        }
+        model.add_diagnostic_info(i, info)
+
+    peaks = Peaks("ri", str(tmp_path / "ri.nxs"), intensity="Radial")
+    peaks.info_dict, peaks.norm_dict, _ = peaks.peak_info()
+    peaks.use_radial_intensities("ri")
+
+    assert ws.getPeak(0).getIntensity() == 110.0
+    assert ws.getPeak(0).getSigmaIntensity() == 2.0
+    assert ws.getPeak(1).getSigmaIntensity() == float("-inf")
+    assert ws.getPeak(2).getIntensity() == 20.0
+
+    # the radial coverage, not the 3D volume fraction, gates removal
+    peaks.remove_low_volume_fraction()
+    assert ws.getPeak(0).getSigmaIntensity() == 2.0
+    assert ws.getPeak(2).getSigmaIntensity() == float("-inf")
+
+
+def test_invalid_intensity_rejected(tmp_path):
+    with pytest.raises(ValueError, match="Intensity"):
+        Peaks("x", str(tmp_path / "x.nxs"), intensity="2D")

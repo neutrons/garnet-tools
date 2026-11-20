@@ -35,6 +35,7 @@ class StructureAnalysis:
             "ThicknessWidthHeight": [0, 0, 0],
             "Refine": True,
             "ControlSoftware": "EPICS",
+            "Intensity": "3D",
         }
 
         defaults.update(config)
@@ -57,6 +58,7 @@ class StructureAnalysis:
         self.twin_laws = defaults.get("TwinLaws")
         self.hkl_transform = defaults.get("HKLTransform")
         self.ext_model = defaults.get("ExtinctionModel")
+        self.intensity = defaults.get("Intensity")
 
         self.refine_abs = False
         if self.space_group is not None and self.sites is not None:
@@ -125,6 +127,7 @@ class StructureAnalysis:
             None,
             self.point_group,
             HKLTransform=self.hkl_transform,
+            intensity=self.intensity,
         )
         self.peaks.load_peaks()
         self.cell = self.peaks.get_cell()

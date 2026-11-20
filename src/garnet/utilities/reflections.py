@@ -559,8 +559,18 @@ class Peaks:
         scale=None,
         point_group=None,
         HKLTransform=None,
+        intensity="3D",
     ):
         self.peaks = peaks
+
+        # which logged integration is reported: the 3D one, or the fit
+        # along Q, which sums a peak split by misoriented grains whole
+        intensity = str(intensity).lower()
+        if intensity not in ("3d", "radial"):
+            raise ValueError(
+                "Intensity must be '3D' or 'Radial' (got {})".format(intensity)
+            )
+        self.intensity = intensity
 
         if filename is not None:
             assert type(filename) is str
@@ -579,6 +589,14 @@ class Peaks:
         else:
             HKLTransform = np.asarray(HKLTransform, dtype=float)
             assert HKLTransform.shape == (3, 3)
+            # an improper transform makes UB left-handed, i.e. relabels the
+            # data as its mirror image; with -1 in the Laue group, use -T
+            det = np.linalg.det(HKLTransform)
+            if not det > 0:
+                raise ValueError(
+                    "HKLTransform must have a positive determinant "
+                    "(got {:.4g}); use -T for the same intensities".format(det)
+                )
 
         self.HKLTransform = HKLTransform
 
@@ -1160,8 +1178,55 @@ class Peaks:
             if info is None:
                 continue
 
-            if info["vol_frac"] < cutoff:
+            # the radial fit's own measured fraction replaces the 3D one
+            frac = info["vol_frac"]
+            if self.intensity == "radial":
+                frac = info.get("rad_cov", np.nan)
+
+            if not frac >= cutoff:
                 peak.setSigmaIntensity(float("-inf"))
+
+    def use_radial_intensities(self, peaks):
+        """
+        Report the radial fit along Q, logged with each peak, as its
+        intensity in place of the 3D integration. Both are normalized by
+        flux and solid angle and not yet scaled or corrected. A peak
+        without a successful radial fit is flagged for removal.
+
+        Parameters
+        ----------
+        peaks : str
+            Name of peaks table, keyed as `info_dict` is.
+
+        """
+
+        if not any("I_rad" in info for info in self.info_dict.values()):
+            raise ValueError(
+                "Intensity: Radial requested, but the peaks have no radial "
+                "fits logged; reintegrate with a resolution model"
+            )
+
+        n_used, n_flagged = 0, 0
+        for peak in mtd[peaks]:
+            h, k, l = [int(v) for v in peak.getIntHKL()]
+            m, n, p = [int(v) for v in peak.getIntMNP()]
+            key = (peak.getRunNumber(), h, k, l, m, n, p)
+
+            info = self.info_dict.get(key, {})
+            I, sigma = info.get("I_rad", np.nan), info.get("s_rad", np.nan)
+
+            if np.isfinite(I) and np.isfinite(sigma) and sigma > 0:
+                peak.setIntensity(float(I))
+                peak.setSigmaIntensity(float(sigma))
+                n_used += 1
+            else:
+                peak.setSigmaIntensity(float("-inf"))
+                n_flagged += 1
+
+        print(
+            "{}: radial intensities for {} peaks, {} without a fit "
+            "flagged".format(peaks, n_used, n_flagged)
+        )
 
     def transform_hkl(self, peaks=None, tol=0.15):
         """
@@ -1435,6 +1500,11 @@ class Peaks:
         self.norm_dict = norm_dict
 
         self.write_radial_comparison(filename + "_radial.txt")
+
+        if self.intensity == "radial":
+            self.use_radial_intensities(self.peaks)
+            if mtd.doesExist(self.peaks + "_merge"):
+                self.use_radial_intensities(self.peaks + "_merge")
 
         x, y = [], []
 
